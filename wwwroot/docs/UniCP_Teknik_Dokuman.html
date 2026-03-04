@@ -1,0 +1,411 @@
+<!DOCTYPE html>
+<html lang="tr">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Univera Connect (UniCP) - Kapsamlı Teknik Dokümantasyon</title>
+    <style>
+        :root {
+            --primary: #2563eb;
+            --secondary: #475569;
+            --bg-light: #f8fafc;
+            --text-dark: #1e293b;
+            --border: #e2e8f0;
+        }
+
+        body {
+            font-family: 'Segoe UI', system-ui, sans-serif;
+            line-height: 1.7;
+            color: var(--text-dark);
+            background: var(--bg-light);
+            margin: 0;
+            padding: 40px;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 60px;
+            border-radius: 12px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.05);
+        }
+
+        /* Typography */
+        h1 {
+            color: #0f172a;
+            font-size: 2.5rem;
+            margin-bottom: 10px;
+            border-bottom: 4px solid var(--primary);
+            padding-bottom: 20px;
+        }
+
+        h2 {
+            color: #1e293b;
+            font-size: 1.8rem;
+            margin-top: 50px;
+            border-bottom: 2px solid var(--border);
+            padding-bottom: 10px;
+        }
+
+        h3 {
+            color: #334155;
+            font-size: 1.4rem;
+            margin-top: 30px;
+        }
+
+        h4 {
+            color: #475569;
+            font-size: 1.1rem;
+            margin-top: 20px;
+            font-weight: 600;
+        }
+
+        /* Components */
+        code {
+            background: #f1f5f9;
+            color: #ef4444;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: 'Consolas', monospace;
+            font-size: 0.9em;
+        }
+
+        pre {
+            background: #1e293b;
+            color: #f8fafc;
+            padding: 20px;
+            border-radius: 8px;
+            overflow-x: auto;
+        }
+
+        pre code {
+            color: inherit;
+            background: none;
+            padding: 0;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 25px 0;
+            border: 1px solid var(--border);
+        }
+
+        th {
+            background: #f1f5f9;
+            color: #334155;
+            font-weight: 600;
+            text-align: left;
+            padding: 12px 16px;
+            border-bottom: 2px solid var(--border);
+        }
+
+        td {
+            padding: 12px 16px;
+            border-bottom: 1px solid var(--border);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        blockquote {
+            border-left: 4px solid var(--primary);
+            margin: 25px 0;
+            padding: 15px 25px;
+            background: #eff6ff;
+            color: #1e40af;
+            border-radius: 0 8px 8px 0;
+        }
+
+        .badge {
+            display: inline-block;
+            padding: 4px 8px;
+            border-radius: 4px;
+            font-size: 0.8em;
+            font-weight: 600;
+        }
+
+        .badge-admin {
+            background: #fee2e2;
+            color: #991b1b;
+        }
+
+        .badge-user {
+            background: #dcfce7;
+            color: #166534;
+        }
+
+        .badge-uni {
+            background: #dbeafe;
+            color: #1e40af;
+        }
+
+        .toc {
+            background: #f8fafc;
+            padding: 20px;
+            border-radius: 8px;
+            border: 1px solid var(--border);
+            margin-bottom: 40px;
+        }
+
+        .toc ul {
+            list-style: none;
+            padding-left: 0;
+            column-count: 2;
+        }
+
+        .toc a {
+            text-decoration: none;
+            color: var(--primary);
+            font-weight: 500;
+        }
+
+        .toc a:hover {
+            text-decoration: underline;
+        }
+
+        .footer {
+            margin-top: 80px;
+            text-align: center;
+            color: #94a3b8;
+            font-size: 0.9rem;
+            border-top: 1px solid var(--border);
+            padding-top: 40px;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>Univera Connect (UniCP) Teknik Dokümantasyon</h1>
+        <p class="lead">Bu doküman, Univera Connect (Müşteri Portalı) projesinin mimarisini, veri akışını, modüllerini
+            ve güvenlik kurallarını "sıfırdan başlayan" bir geliştirici için en ince detayına kadar açıklar.</p>
+
+        <div class="toc">
+            <h3>İçindekiler</h3>
+            <ul>
+                <li><a href="#genel-bakis">1. Genel Bakış ve Teknoloji Yığını</a></li>
+                <li><a href="#mimari">2. Sistem Mimarisi ve Entegrasyonlar</a></li>
+                <li><a href="#guvenlik">3. Kimlik Doğrulama ve Rol Yönetimi</a></li>
+                <li><a href="#veri-yapisi">4. Veritabanı ve Kritik Tablolar</a></li>
+                <li><a href="#moduller">5. Modül Detayları (Finans, Talep, Rapor)</a></li>
+                <li><a href="#is-akislari">6. İş Akışları (Workflow)</a></li>
+                <li><a href="#kurulum">7. Kurulum ve Deployment</a></li>
+            </ul>
+        </div>
+
+        <h2 id="genel-bakis">1. Genel Bakış ve Teknoloji Yığını</h2>
+        <p>Univera Connect (UniCP), Univera müşterilerinin finansal durumlarını, destek taleplerini, geliştirme
+            isteklerini ve sistem performanslarını tek bir yerden izleyebilecekleri, B2B odaklı bir web portalıdır.</p>
+
+        <h3>Teknoloji Stack'i</h3>
+        <table>
+            <tr>
+                <th>Katman</th>
+                <th>Teknoloji</th>
+                <th>Detaylar</th>
+            </tr>
+            <tr>
+                <td><strong>Framework</strong></td>
+                <td>.NET 9.0 (ASP.NET Core MVC)</td>
+                <td>High-performance, cross-platform backend.</td>
+            </tr>
+            <tr>
+                <td><strong>Veritabanı (ORM)</strong></td>
+                <td>Entity Framework Core 9</td>
+                <td>Code-first ve DB-first hibrit yaklaşım (Stored Proc yoğunluklu).</td>
+            </tr>
+            <tr>
+                <td><strong>Frontend</strong></td>
+                <td>Razor Views + Tailwind CSS</td>
+                <td>Sunucu taraflı render (SSR). Tailwind CDN üzerinden yüklenir (Prod ortamında build pipeline
+                    önerilir).</td>
+            </tr>
+            <tr>
+                <td><strong>UI Kütüphaneleri</strong></td>
+                <td>Bootstrap 5 (Legacy), Chart.js</td>
+                <td>Eski bileşenler Bootstrap kullanırken, yeni modern arayüzler Tailwind tabanlıdır.</td>
+            </tr>
+            <tr>
+                <td><strong>Servisler</strong></td>
+                <td>SmtpEmail, ZabbixService, AIService</td>
+                <td>Dış sistemlerle haberleşme katmanı.</td>
+            </tr>
+        </table>
+
+        <h2 id="mimari">2. Sistem Mimarisi ve Entegrasyonlar</h2>
+        <p>Proje Monolitik MVC mimarisine sahiptir ancak servis tabanlı bir yaklaşım izler. Veri erişimi ağırlıklı
+            olarak Stored Procedure'ler üzerinden yürütülür, bu da iş mantığının bir kısmının veritabanında olduğu
+            anlamına gelir.</p>
+
+        <h3>Dış Sistem Entegrasyonları</h3>
+        <ul>
+            <li><strong>TFS (Azure DevOps):</strong> Geliştirme talepleri <code>SP_TFS_GELISTIRME</code> prosedürü ile
+                TFS veritabanından çekilir. Portal üzerinde yapılan durum güncellemeleri de TFS ile senkronize çalışır.
+            </li>
+            <li><strong>ERP (Logo/Netsis):</strong> Fatura ve sipariş verileri <code>SP_VARUNA_SIPARIS</code> ile ERP
+                sisteminden beslenen ara tablolardan okunur.</li>
+            <li><strong>Zabbix:</strong> Sunucu performans verileri (CPU, RAM, Disk) Zabbix API üzerinden JSON-RPC
+                protokolü ile çekilir. (Bkz: <code>ZabbixService.cs</code>).</li>
+            <li><strong>AI (Gemini/Ollama):</strong> Proje içinde yapay zeka destekli analizler için entegrasyon
+                altyapısı mevcuttur.</li>
+        </ul>
+
+        <h2 id="guvenlik">3. Kimlik Doğrulama ve Rol Yönetimi</h2>
+        <p>Sistem, ASP.NET Core Identity üzerine inşa edilmiş ancak özelleştirilmiş bir claim (hak) yapısı kullanır.</p>
+
+        <h3>Kullanıcı Tipleri (UserType Claim)</h3>
+        <p>Kullanıcı giriş yaptığında <code>CustomUserClaimsPrincipalFactory</code> devreye girer ve
+            <code>TBL_KULLANICI</code> tablosundan kullanıcının tipini okuyarak <code>UserType</code> claim'i oluşturur.
+        </p>
+
+        <table>
+            <thead>
+                <tr>
+                    <th>Tip ID</th>
+                    <th>Rol Adı</th>
+                    <th>Badge</th>
+                    <th>Tanım</th>
+                </tr>
+            </thead>
+            <tbody>
+                <tr>
+                    <td>1</td>
+                    <td>Admin</td>
+                    <td><span class="badge badge-admin">Yönetici</span></td>
+                    <td>Tüm firmalara ve tüm verilere erişebilir. Global filtreleme yapabilir.</td>
+                </tr>
+                <tr>
+                    <td>2</td>
+                    <td>Müşteri</td>
+                    <td><span class="badge badge-user">Müşteri</span></td>
+                    <td>Sadece kendi firmasına (veya atandığı projelere) ait verileri görür. Filtreleme kısıtlıdır.</td>
+                </tr>
+                <tr>
+                    <td>3</td>
+                    <td>Univera</td>
+                    <td><span class="badge badge-uni">Personel</span></td>
+                    <td>Univera iç çalışanlarıdır. Birden fazla firmaya destek verebilirler. Yetkili oldukları firmalar
+                        arasında geçiş yapabilirler.</td>
+                </tr>
+            </tbody>
+        </table>
+
+        <blockquote style="border-left-color: #ef4444; background: #fef2f2; color: #991b1b;">
+            <strong>Önemli:</strong> View tarafında yetki kontrolleri genellikle <code>User.FindFirst("UserType")</code>
+            veya <code>User.IsInRole("Admin")</code> ile yapılır.
+        </blockquote>
+
+        <h2 id="veri-yapisi">4. Veritabanı ve Kritik Tablolar</h2>
+        <p>Proje iki ana DbContext kullanır: <code>DataContext</code> (Identity tabloları için) ve
+            <code>MskDbContext</code> (İş verileri için).</p>
+
+        <h3>Kritik Tablolar</h3>
+        <ul>
+            <li><code>TBL_KULLANICI</code>: Kullanıcı profilleri, tipleri ve firma kodları.</li>
+            <li><code>TBL_KULLANICI_FIRMA</code>: Univera (Tip 3) kullanıcılarının hangi firmalara bakabileceğini tutan
+                eşleşme tablosu.</li>
+            <li><code>TBL_VARUNA_SOZLESME</code>: Lisans ve sözleşme başlıkları.</li>
+            <li><code>VIEW_ORTAK_PROJE_ISIMLERI</code>: Sistemdeki tüm müşteri/proje isimlerinin listesi. (Şirket
+                dropdown'ı burayı kullanır).</li>
+            <li><code>TBL_TALEP</code>: Portal üzerinden açılan veya TFS'den gelen taleplerin portal tarafındaki takibi.
+            </li>
+            <li><code>TBL_TALEP_AKIS_LOG</code>: Taleplerin durum geçmişini tutar (Analiz -> Bütçe -> Geliştirme
+                logları).</li>
+            <li><code>TBL_FINANS_ONAY</code>: Müşterinin sipariş onay/ret durumlarını tutar.</li>
+        </ul>
+
+        <h2 id="moduller">5. Modül Detayları</h2>
+
+        <h3>A. Finans Modülü (FinansController)</h3>
+        <p>Müşterilerin bekleyen siparişlerini, faturalarını ve bakiyelerini gösterir.</p>
+        <ul>
+            <li><strong>Paralel İşleme:</strong> Admin veya Univera kullanıcıları için, çoklu firma sorguları
+                <code>Parallel.ForEachAsync</code> ile optimize edilmiştir.</li>
+            <li><strong>Onay Mekanizması:</strong> Müşteri "Onayla" dediğinde <code>TBL_FINANS_ONAY</code> tablosuna
+                kayıt atılır ve arayüzde sipariş "Onaylandı" olarak görünür.</li>
+        </ul>
+
+        <h3>B. Geliştirme Talepleri (TaleplerController)</h3>
+        <p>En karmaşık iş akışına sahip modüldür. TFS (DevOps) ile entegre çalışır. Müşteri buradan yeni geliştirme
+            ister, bütçe onaylar veya UAT (Kullanıcı Testi) yapar.</p>
+
+        <h3>C. Sistem Performansı (SystemPerformanceController)</h3>
+        <p>Zabbix API'den sunucu sağlık verilerini çeker. RAM, CPU ve Disk kullanımı anlık olarak gösterilir.</p>
+
+        <h2 id="is-akislari">6. İş Akışları (Workflows)</h2>
+
+        <h3>Geliştirme Talebi Süreci (Status Flow)</h3>
+        <p>Bir talep açıldığında aşağıdaki yaşam döngüsünden geçer. Her aşamada görünen butonlar kullanıcı tipine göre
+            değişir:</p>
+
+        <div style="background: white; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
+            <ol style="position: relative; padding-left: 20px;">
+                <li style="margin-bottom: 20px;">
+                    <strong>1. Analiz</strong>
+                    <br><small>Talep açıldı, analiz yapılıyor.</small>
+                    <br>➔ <strong>Univera:</strong> <em>Analizi Tamamla</em> butonunu görür. (Hedef: Analiz Onayı)
+                </li>
+                <li style="margin-bottom: 20px;">
+                    <strong>2. Analiz Onayı</strong> <span class="badge badge-uni">YENİ</span>
+                    <br><small>Analiz bitti, Univera içi onay/kontrol aşaması.</small>
+                    <br>➔ <strong>Univera:</strong> <em>Analizi Onayla</em> butonunu görür. (Hedef: Bütçe Onayı)
+                </li>
+                <li style="margin-bottom: 20px;">
+                    <strong>3. Bütçe Onayı</strong>
+                    <br><small>Müşteriye maliyet sunuldu.</small>
+                    <br>➔ <strong>Müşteri:</strong> <em>Bütçeyi Onayla</em> veya <em>Reddet</em> butonlarını görür.
+                </li>
+                <li style="margin-bottom: 20px;">
+                    <strong>4. Geliştirme</strong>
+                    <br><small>Kodlama yapılıyor.</small>
+                    <br>➔ <strong>Univera:</strong> <em>Geliştirmeyi Bitir</em> butonunu görür. (Hedef: Proje Testi)
+                </li>
+                <li style="margin-bottom: 20px;">
+                    <strong>5. Proje Testi</strong>
+                    <br><small>İç testler yapılıyor.</small>
+                    <br>➔ <strong>Univera:</strong> <em>UAT'e Gönder</em> (Başarılı) veya <em>Test Başarısız</em> (Geri
+                    Dön) butonlarını görür.
+                </li>
+                <li style="margin-bottom: 20px;">
+                    <strong>6. Müşteri UAT</strong>
+                    <br><small>Müşteri kendi testini yapıyor.</small>
+                    <br>➔ <strong>Müşteri:</strong> <em>Canlıya Al</em> (Onay) veya <em>Revize İste</em> (Hata var)
+                    butonlarını görür.
+                </li>
+                <li>
+                    <strong>7. Canlıya Geçiş (Production)</strong>
+                    <br><small>Talep tamamlandı.</small>
+                </li>
+            </ol>
+        </div>
+
+        <h2 id="kurulum">7. Kurulum ve Deployment</h2>
+        <h3>Gereksinimler</h3>
+        <ul>
+            <li>Windows Server / IIS</li>
+            <li>SQL Server (Veritabanı erişimi)</li>
+            <li>.NET 9 Hosting Bundle</li>
+        </ul>
+
+        <h3>IIS Kurulumu</h3>
+        <ol>
+            <li>Projeyi <code>dotnet publish -c Release</code> ile derleyin.</li>
+            <li>IIS'de yeni bir Website oluşturun.</li>
+            <li>Application Pool ayarlarından ".NET CLR Version" kısmını "No Managed Code" olarak seçin (Kestrel
+                kullanıldığı için).</li>
+            <li><code>appsettings.json</code> dosyasındaki DB Connection String'leri ve Zabbix IP'lerini sunucuya göre
+                düzenleyin.</li>
+        </ol>
+
+        <div class="footer">
+            <p><strong>Univera Connect (UniCP)</strong> - 2026</p>
+            <p>Bu doküman sistemin güncel kod altyapısına göre otomatik olarak zenginleştirilmiştir.</p>
+        </div>
+    </div>
+</body>
+
+</html>

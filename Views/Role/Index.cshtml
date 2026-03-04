@@ -1,0 +1,41 @@
+@model IEnumerable<Microsoft.AspNetCore.Identity.IdentityRole<int>>
+
+@{
+    ViewData["Title"] = "Rol Listesi";
+}
+
+<div class="glass-panel p-6 rounded-2xl">
+    <div class="flex justify-between items-center mb-6">
+        <h2 class="text-xl font-bold text-white">@ViewData["Title"]</h2>
+        <a asp-action="Create" class="px-4 py-2 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-colors text-sm font-medium">
+            <i class="bi bi-plus-lg mr-2"></i>Yeni Rol
+        </a>
+    </div>
+
+    <div class="overflow-x-auto">
+        <table class="w-full text-sm text-left text-slate-300">
+            <thead class="text-xs text-slate-400 uppercase bg-slate-800/50">
+                <tr>
+                    <th class="px-6 py-3 rounded-l-xl">Rol Adı</th>
+                    <th class="px-6 py-3 rounded-r-xl">İşlemler</th>
+                </tr>
+            </thead>
+            <tbody class="divide-y divide-slate-700/50">
+                @foreach (var item in Model)
+                {
+                    <tr class="hover:bg-slate-800/30 transition-colors">
+                        <td class="px-6 py-4 font-medium text-white">@item.Name</td>
+                        <td class="px-6 py-4 flex gap-2">
+                            <a asp-action="Edit" asp-route-id="@item.Id" class="text-indigo-400 hover:text-indigo-300 transition-colors">
+                                <i class="bi bi-pencil-square text-lg"></i>
+                            </a>
+                            <a asp-action="Delete" asp-route-id="@item.Id" class="text-red-400 hover:text-red-300 transition-colors">
+                                <i class="bi bi-trash text-lg"></i>
+                            </a>
+                        </td>
+                    </tr>
+                }
+            </tbody>
+        </table>
+    </div>
+</div>

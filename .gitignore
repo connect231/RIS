@@ -1,0 +1,41 @@
+# .NET Core
+bin/
+obj/
+*.user
+*.pdb
+*.cache
+
+# Node.js
+node_modules/
+npm-debug.log
+
+# macOS
+.DS_Store
+
+# IDEs
+.vscode/
+.idea/
+
+# Database (SQLite)
+*.db
+*.db-shm
+*.db-wal
+
+# Build results
+[Dd]ebug/
+[Dd]ebugPublic/
+[Rr]elease/
+[Rr]eleases/
+x64/
+x86/
+build/
+bld/
+[Bb]in/
+[Oo]bj/
+
+# Debug and diagnostic files
+debug_*.txt
+build_*.txt
+zabbix_keys_dump.txt
+run_log.txt
+diagnostic_script_placeholder.txt

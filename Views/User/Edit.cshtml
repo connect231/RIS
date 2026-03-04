@@ -1,0 +1,166 @@
+@model UniCP.Models.Kullanici.User.UserEditModel
+@using Microsoft.AspNetCore.Mvc.Rendering
+
+@{
+    ViewData["Title"] = "Kullanıcı Düzenle";
+    var roles = ViewBag.Roles as List<string>;
+    var selectedFirma = ViewBag.SelectedFirma as int?;
+    var selectedTip = ViewBag.SelectedTip as int?;
+}
+
+<div class="max-w-2xl mx-auto glass-panel p-8 rounded-2xl">
+    <h2 class="text-2xl font-bold text-white mb-6">@ViewData["Title"]</h2>
+
+    <form asp-action="Edit" method="post" class="space-y-6">
+        <div asp-validation-summary="ModelOnly" class="text-red-400 text-sm bg-red-500/10 p-3 rounded-lg"></div>
+
+        <div class="space-y-2">
+            <label asp-for="Email" class="text-sm font-medium text-slate-300">Email Adresi</label>
+            <input asp-for="Email" class="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500 transition-colors" />
+            <span asp-validation-for="Email" class="text-xs text-red-400"></span>
+        </div>
+
+        <div class="space-y-2">
+            <label asp-for="AdSoyad" class="text-sm font-medium text-slate-300">Ad Soyad</label>
+            <input asp-for="AdSoyad" class="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500 transition-colors" />
+            <span asp-validation-for="AdSoyad" class="text-xs text-red-400"></span>
+        </div>
+
+        <div class="space-y-2">
+            <label asp-for="Password" class="text-sm font-medium text-slate-300">Yeni Parola (Değiştirmek isterseniz)</label>
+            <input asp-for="Password" type="password" autocomplete="new-password" class="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500 transition-colors" />
+            <span asp-validation-for="Password" class="text-xs text-red-400"></span>
+        </div>
+        
+        <div class="space-y-2">
+            <label asp-for="ConfirmPassword" class="text-sm font-medium text-slate-300">Parola Tekrar</label>
+            <input asp-for="ConfirmPassword" type="password" autocomplete="new-password" class="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500 transition-colors" />
+            <span asp-validation-for="ConfirmPassword" class="text-xs text-red-400"></span>
+        </div>
+
+        <div class="h-px bg-slate-700/50 my-6"></div>
+        <h3 class="text-lg font-semibold text-white mb-4">Organizasyon</h3>
+
+        <div class="space-y-2" id="SingleCompanySelectContainer">
+             <label asp-for="LNGORTAKFIRMAKOD" class="text-sm font-medium text-slate-300">Firma / Proje</label>
+            <select asp-for="LNGORTAKFIRMAKOD" class="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500 transition-colors" asp-items="ViewBag.FirmaKod">
+                <option value="">Seçiniz...</option>
+            </select>
+        </div>
+
+        <div class="space-y-2">
+            <label asp-for="LNGKULLANICITIPI" class="text-sm font-medium text-slate-300">Kullanıcı Tipi</label>
+            <select asp-for="LNGKULLANICITIPI" id="UserTypeSelect" class="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500 transition-colors">
+                <option value="2">Müşteri</option>
+                <option value="1">Yönetici (Admin/Internal)</option>
+                <option value="3">Univera</option>
+                <option value="4">Univera Müşteri</option>
+            </select>
+        </div>
+
+        <div id="MultiCompanySelect" class="space-y-2 hidden">
+             <label class="text-sm font-medium text-slate-300">Firmalar (Univera Kullanıcıları İçin)</label>
+             
+             <!-- Search Input -->
+             <div class="relative">
+                 <i class="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"></i>
+                 <input type="text" id="companySearch" placeholder="Firma ara..." class="w-full bg-slate-900/50 border border-slate-700 rounded-xl pl-10 pr-4 py-2 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors mb-2" />
+             </div>
+
+             <div class="max-h-64 overflow-y-auto border border-slate-700 rounded-xl p-2 bg-slate-900/50 space-y-1 custom-scrollbar" id="companyList">
+                 @if (ViewBag.FirmaKod != null)
+                 {
+                     foreach (var item in (IEnumerable<SelectListItem>)ViewBag.FirmaKod)
+                     {
+                         var isChecked = Model.SelectedCompanyIds != null && Model.SelectedCompanyIds.Contains(int.Parse(item.Value));
+                         <label class="flex items-center space-x-3 cursor-pointer group hover:bg-slate-800 p-2 rounded-lg transition-colors select-none company-item">
+                             <input type="checkbox" name="SelectedCompanyIds" value="@item.Value" @(isChecked ? "checked" : "")
+                                    class="w-4 h-4 text-indigo-600 bg-slate-800 border-slate-600 rounded focus:ring-indigo-600 focus:ring-offset-slate-900 focus:ring-2 transition-all" />
+                             <span class="text-sm text-slate-300 group-hover:text-white transition-colors company-name">@item.Text</span>
+                         </label>
+                     }
+                 }
+             </div>
+             <p class="text-xs text-slate-400 mt-1"><span id="selectedCount">0</span> firma seçildi.</p>
+        </div>
+
+        <div class="h-px bg-slate-700/50 my-6"></div>
+        <h3 class="text-lg font-semibold text-white mb-4">Roller</h3>
+
+        <div class="grid grid-cols-2 gap-4">
+             @if (roles != null)
+            {
+                foreach (var role in roles)
+                {
+                    <label class="flex items-center space-x-3 p-3 rounded-lg border border-slate-700 bg-slate-800/50 hover:bg-slate-700/50 cursor-pointer transition-colors">
+                        <input type="checkbox" name="SelectedRoles" value="@role" 
+                               checked="@(Model.SelectedRoles != null && Model.SelectedRoles.Contains(role))"
+                               class="w-4 h-4 text-indigo-600 bg-slate-900 border-slate-600 rounded focus:ring-indigo-600 focus:ring-2" />
+                        <span class="text-sm text-slate-300">@role</span>
+                    </label>
+                }
+            }
+        </div>
+
+        <div class="flex items-center gap-4 pt-6 mt-6 border-t border-slate-700/50">
+            <button type="submit" class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-colors font-medium">Güncelle</button>
+            <a asp-action="Index" class="px-6 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl transition-colors font-medium">İptal</a>
+        </div>
+    </form>
+</div>
+
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            var userType = document.getElementById('UserTypeSelect');
+            var multiSelect = document.getElementById('MultiCompanySelect');
+            var singleSelect = document.getElementById('SingleCompanySelectContainer');
+            var companySearch = document.getElementById('companySearch');
+            var companyList = document.getElementById('companyList');
+            var companyItems = companyList ? companyList.querySelectorAll('.company-item') : [];
+            var selectedCountSpan = document.getElementById('selectedCount');
+
+            function toggleUI() {
+                if (userType.value == '3' || userType.value == '4') { // Univera or Univera Customer
+                    multiSelect.classList.remove('hidden');
+                    singleSelect.classList.add('hidden');
+                } else {
+                    multiSelect.classList.add('hidden');
+                    singleSelect.classList.remove('hidden');
+                }
+            }
+
+            // Search Filter
+            if (companySearch) {
+                companySearch.addEventListener('input', function(e) {
+                    var filter = e.target.value.toLowerCase();
+                    companyItems.forEach(function(item) {
+                        var text = item.querySelector('.company-name').textContent.toLowerCase();
+                        if (text.includes(filter)) {
+                            item.classList.remove('hidden');
+                        } else {
+                            item.classList.add('hidden');
+                        }
+                    });
+                });
+            }
+
+            // Update Selected Count
+            function updateCount() {
+               if (companyList && selectedCountSpan) {
+                   var checked = companyList.querySelectorAll('input[type="checkbox"]:checked').length;
+                   selectedCountSpan.textContent = checked;
+               }
+            }
+
+            if (companyList) {
+                companyList.addEventListener('change', updateCount);
+                updateCount(); // Initial count
+            }
+
+            userType.addEventListener('change', toggleUI);
+            toggleUI(); // Initial check
+        });
+    </script>
+}

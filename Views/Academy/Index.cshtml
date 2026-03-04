@@ -1,0 +1,104 @@
+@{
+    Layout = "_LayoutMusteri";
+}
+
+<div class="space-y-6">
+    <!-- Header -->
+    <div>
+        <h1 class="text-3xl font-bold text-white tracking-tight">Univera Akademi</h1>
+        <p class="text-slate-400 mt-2">Öğrenme yolculuğunuz burada başlıyor</p>
+    </div>
+
+    <!-- Hero Card -->
+    <div class="glass-panel p-8 rounded-2xl relative overflow-hidden group">
+        <div class="absolute top-0 right-0 w-64 h-64 bg-indigo-500/20 rounded-full blur-3xl -translate-y-1/2 translate-x-1/2 transition-all group-hover:bg-indigo-500/30"></div>
+        <div class="relative z-10 flex items-start justify-between">
+            <div class="max-w-2xl">
+                <h2 class="text-2xl font-bold text-white mb-4">Your Learning Journey</h2>
+                <p class="text-slate-400 mb-8 leading-relaxed">
+                    Master your Univera products with our curated video courses. Earn certificates and optimize your workflows.
+                </p>
+                <div class="flex gap-4">
+                    <button class="px-5 py-2.5 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-medium transition-all shadow-lg shadow-indigo-500/20 active:scale-95 flex items-center gap-2">
+                        <i class="bi bi-play-circle-fill"></i>
+                        <span>Resume Learning</span>
+                    </button>
+                    <button class="px-5 py-2.5 bg-slate-800 hover:bg-slate-700 text-white rounded-xl font-medium transition-all border border-slate-700 active:scale-95 flex items-center gap-2">
+                        <i class="bi bi-award"></i>
+                        <span>2 Certificates Earned</span>
+                    </button>
+                </div>
+            </div>
+            <div class="hidden lg:block">
+                <i class="bi bi-graduation-cap text-9xl text-indigo-500/20"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- Course List -->
+    <div class="space-y-4">
+        <h3 class="text-lg font-semibold text-white">My Courses</h3>
+        
+        <!-- Course Item 1: Completed -->
+        <div class="glass-panel p-4 rounded-xl flex items-center gap-4 hover:bg-slate-800/50 transition-all cursor-pointer group">
+            <div class="w-16 h-16 rounded-lg bg-slate-800 flex items-center justify-center flex-shrink-0 relative overflow-hidden">
+                <img src="https://ui-avatars.com/api/?name=UC&background=6366f1&color=fff" class="w-full h-full object-cover opacity-50" alt="Course">
+                <i class="bi bi-play-circle-fill absolute text-2xl text-white opacity-0 group-hover:opacity-100 transition-opacity scale-90 group-hover:scale-100"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+                <h4 class="text-white font-medium truncate">Getting Started with Univera Connect</h4>
+                <div class="flex items-center gap-4 mt-2">
+                    <div class="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div class="h-full bg-emerald-500 w-full rounded-full"></div>
+                    </div>
+                    <span class="text-xs text-emerald-400 font-medium whitespace-nowrap">Completed</span>
+                </div>
+            </div>
+            <div class="w-8 h-8 rounded-full bg-emerald-500/20 flex items-center justify-center text-emerald-500">
+                <i class="bi bi-check-lg"></i>
+            </div>
+        </div>
+
+        <!-- Course Item 2: In Progress -->
+        <div class="glass-panel p-4 rounded-xl flex items-center gap-4 hover:bg-slate-800/50 transition-all cursor-pointer group">
+            <div class="w-16 h-16 rounded-lg bg-slate-800 flex items-center justify-center flex-shrink-0 relative overflow-hidden">
+                <img src="https://ui-avatars.com/api/?name=WM&background=8b5cf6&color=fff" class="w-full h-full object-cover opacity-50" alt="Course">
+                <i class="bi bi-play-circle-fill absolute text-2xl text-white opacity-0 group-hover:opacity-100 transition-opacity scale-90 group-hover:scale-100"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+                <h4 class="text-white font-medium truncate">Advanced Warehouse Management</h4>
+                <div class="flex items-center gap-4 mt-2">
+                    <div class="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div class="h-full bg-indigo-500 w-[65%] rounded-full relative overflow-hidden">
+                             <div class="absolute top-0 left-0 w-full h-full animate-shimmer bg-gradient-to-r from-transparent via-white/20 to-transparent"></div>
+                        </div>
+                    </div>
+                    <span class="text-xs text-slate-400 font-medium whitespace-nowrap">45 min left</span>
+                </div>
+            </div>
+            <button class="w-8 h-8 rounded-full bg-indigo-500/20 flex items-center justify-center text-indigo-500 hover:bg-indigo-500 hover:text-white transition-all">
+                <i class="bi bi-play-fill"></i>
+            </button>
+        </div>
+        
+         <!-- Course Item 3: Not Started -->
+        <div class="glass-panel p-4 rounded-xl flex items-center gap-4 hover:bg-slate-800/50 transition-all cursor-pointer group">
+            <div class="w-16 h-16 rounded-lg bg-slate-800 flex items-center justify-center flex-shrink-0 relative overflow-hidden">
+                 <img src="https://ui-avatars.com/api/?name=BI&background=ec4899&color=fff" class="w-full h-full object-cover opacity-50" alt="Course">
+                <i class="bi bi-play-circle-fill absolute text-2xl text-white opacity-0 group-hover:opacity-100 transition-opacity scale-90 group-hover:scale-100"></i>
+            </div>
+            <div class="flex-1 min-w-0">
+                <h4 class="text-white font-medium truncate">BI Reporting Masterclass</h4>
+                 <div class="flex items-center gap-4 mt-2">
+                    <div class="flex-1 h-1.5 bg-slate-800 rounded-full overflow-hidden">
+                        <div class="h-full bg-slate-600 w-0 rounded-full"></div>
+                    </div>
+                    <span class="text-xs text-slate-500 font-medium whitespace-nowrap">Not Started</span>
+                </div>
+            </div>
+             <button class="w-8 h-8 rounded-full bg-slate-700/50 flex items-center justify-center text-slate-400 group-hover:text-white transition-all">
+                <i class="bi bi-lock-fill text-xs"></i>
+            </button>
+        </div>
+    </div>
+</div>

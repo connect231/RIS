@@ -1,0 +1,50 @@
+@using Microsoft.AspNetCore.Identity
+@using UniCP.Models.Kullanici
+@inject UserManager<AppUser> UserManager
+
+@{
+    var appUser = await UserManager.GetUserAsync(User);
+    var tokenBalance = appUser?.TokenBalance ?? 0;
+}
+
+<header class="h-20 flex items-center justify-between px-8 sticky top-0 z-10 bg-white/70 backdrop-blur-xl border-b border-gray-100">
+    <!-- Search Bar -->
+    <div class="flex-1 max-w-xl">
+        <div class="relative group">
+            <div class="absolute inset-y-0 left-0 pl-4 flex items-center pointer-events-none">
+                <i class="bi bi-search text-gray-400 group-focus-within:text-[#DD2F42] transition-colors"></i>
+            </div>
+            <input type="text" 
+                   class="block w-full pl-11 pr-4 py-2.5 bg-gray-100/50 border-none rounded-2xl text-sm placeholder-gray-500 focus:bg-white focus:ring-2 focus:ring-[#DD2F42]/10 transition-all outline-none" 
+                   placeholder="Talep, Fatura veya Döküman ara...">
+        </div>
+    </div>
+
+    <!-- Right Side Actions -->
+    <div class="flex items-center space-x-6">
+        
+        <!-- Token Balance Badge Removed -->
+
+        <!-- Notifications -->
+        <button class="relative p-2 text-gray-400 hover:text-gray-600 transition-colors">
+            <i class="bi bi-bell text-xl"></i>
+            <span class="absolute top-2 right-2 flex h-2 w-2">
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-red-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-2 w-2 bg-[#DD2F42]"></span>
+            </span>
+        </button>
+
+        <!-- User Info -->
+        <div class="flex items-center space-x-3 pl-4 border-l border-gray-200">
+            <div class="text-right hidden sm:block">
+                <p class="text-sm font-medium text-gray-900 leading-none">@User.Identity.Name</p>
+                <p class="text-[10px] text-gray-500 font-medium uppercase mt-1">
+                    @(User.Claims.FirstOrDefault(c => c.Type == "FirmaAdi")?.Value ?? "FİRMA BİLGİSİ YOK")
+                </p>
+            </div>
+            <div class="w-10 h-10 rounded-xl bg-slate-900 flex items-center justify-center text-white font-medium shadow-lg shadow-slate-900/20">
+                @User.Identity.Name?[..2].ToUpper()
+            </div>
+        </div>
+    </div>
+</header>

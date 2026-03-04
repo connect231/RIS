@@ -1,0 +1,277 @@
+﻿@model UniCP.Models.MsK.VIEW_N4BISSUE
+@{
+    ViewData["Title"] = "Talep Detayı - " + Model.Bildirim_No;
+    Layout = "~/Views/Shared/_LayoutMusteri.cshtml";
+    var history = ViewBag.History as List<UniCP.Models.MsK.VIEW_N4BISSUESLIFECYCLE>;
+}
+
+<div class="space-y-6 animate-in fade-in slide-in-from-bottom-4 duration-500">
+    <!-- Header -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+            <div class="flex items-center gap-3 mb-1">
+                <a href="/N4B/Index" class="p-1.5 rounded-lg hover:bg-slate-800 text-slate-400 transition-colors">
+                    <i class="bi bi-arrow-left text-lg"></i>
+                </a>
+                <h1 class="text-2xl font-semibold text-white tracking-tight">Talep Detayı</h1>
+                <span class="px-3 py-1 rounded-full bg-indigo-500/10 text-indigo-400 border border-indigo-500/20 text-[11px] font-medium tracking-wide capitalize">N4B-@Model.Bildirim_No</span>
+            </div>
+            <p class="text-sm text-slate-400 font-medium ml-10">
+                Oluşturulma: @(Model.Bildirim_Tarihi?.ToString("dd.MM.yyyy HH:mm:ss") ?? "-") 
+                @if(Model.Olusturulma_Tarihi != null && Model.Olusturulma_Tarihi != Model.Bildirim_Tarihi)
+                {
+                    <span class="ml-2 opacity-60">| Kayıt: @(Model.Olusturulma_Tarihi.HasValue ? Model.Olusturulma_Tarihi.Value.ToString("HH:mm:ss") : "-")</span>
+                }
+            </p>
+        </div>
+
+        <div class="flex items-center gap-3">
+            <div class="px-4 py-2 rounded-2xl glass-panel bg-slate-800/50 border border-white/5 shadow-sm flex items-center gap-3">
+                <div class="w-2 h-2 rounded-full @(Model.Bildirim_Durumu?.Contains("Açık") == true ? "bg-blue-500 animate-pulse" : "bg-slate-500")"></div>
+                <span class="text-xs font-medium text-white capitalize tracking-normal">@Model.Bildirim_Durumu</span>
+            </div>
+            
+            <div class="px-4 py-2 rounded-2xl glass-panel bg-slate-800/50 border border-white/5 shadow-sm flex items-center gap-3">
+                <i class="bi bi-hourglass-split text-orange-400"></i>
+                <span class="text-xs font-medium text-white capitalize tracking-normal">
+                    @(string.IsNullOrWhiteSpace(Model.Bildirim_Bekletme_Neden) ? "İşlemde" : Model.Bildirim_Bekletme_Neden)
+                </span>
+            </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+        <!-- Main Content -->
+        <div class="lg:col-span-2 space-y-6">
+            <!-- Ticket Info Card -->
+            <div class="glass-panel bg-slate-800/50 rounded-3xl border border-white/5 shadow-sm overflow-hidden">
+                <div class="p-6 border-b border-white/5 bg-slate-800/30">
+                    <h3 class="text-sm font-semibold text-white flex items-center gap-2">
+                        <i class="bi bi-info-circle text-[#DD2F42]"></i>
+                        Talep Bilgileri
+                    </h3>
+                </div>
+                <div class="p-8 space-y-8">
+                    <!-- Title & Description -->
+                    <div class="space-y-4">
+                        <div class="p-4 rounded-2xl bg-slate-900/50 border border-white/5">
+                            <h4 class="text-[11px] font-medium text-slate-500 capitalize tracking-wide mb-2">Talep özeti</h4>
+                            <p class="text-sm font-normal text-slate-300 leading-relaxed">
+                                "@(string.IsNullOrWhiteSpace(Model.Bildirim_Aciklamasi) ? "Açıklama girilmemiş" : Model.Bildirim_Aciklamasi)"
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Meta Grid -->
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-8 pt-4">
+                        <div class="space-y-6">
+                            <div>
+                                <h4 class="text-[10px] font-medium text-slate-500 capitalize tracking-wide mb-2">Kategori</h4>
+                                <div class="flex items-center gap-2">
+                                    <div class="w-8 h-8 rounded-lg bg-indigo-500/10 flex items-center justify-center border border-indigo-500/20">
+                                        <i class="bi bi-folder2-open text-indigo-400"></i>
+                                    </div>
+                                    <span class="text-sm font-medium text-slate-300">@(string.IsNullOrWhiteSpace(Model.Kategori_Adi) ? "-" : Model.Kategori_Adi)</span>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 class="text-[10px] font-medium text-slate-500 capitalize tracking-wide mb-2">Firma / Müşteri</h4>
+                                <div class="flex items-center gap-2">
+                                    <div class="w-8 h-8 rounded-lg bg-blue-500/10 flex items-center justify-center border border-blue-500/20">
+                                        <i class="bi bi-building text-blue-400"></i>
+                                    </div>
+                                    <span class="text-sm font-medium text-slate-300">@(string.IsNullOrWhiteSpace(Model.Musteri_Adi) ? "-" : Model.Musteri_Adi)</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="space-y-6">
+                            <div>
+                                <h4 class="text-[10px] font-medium text-slate-500 capitalize tracking-wide mb-2">Oluşturan</h4>
+                                <div class="flex items-center gap-2">
+                                    <div class="w-8 h-8 rounded-full bg-orange-500/10 flex items-center justify-center border border-orange-500/20">
+                                        <span class="text-[10px] font-semibold text-orange-400">@((!string.IsNullOrEmpty(Model.Bildirim_Sahibi) && Model.Bildirim_Sahibi.Length > 0) ? Model.Bildirim_Sahibi.Substring(0, 1) : "U")</span>
+                                    </div>
+                                    <div>
+                                        <div class="text-sm font-medium text-slate-300 leading-none">@(string.IsNullOrWhiteSpace(Model.Bildirim_Sahibi) ? "Bilinmiyor" : Model.Bildirim_Sahibi)</div>
+                                        @if(!string.IsNullOrEmpty(Model.Bildirim_Sahibi_Kullanici_Adi) && Model.Bildirim_Sahibi_Kullanici_Adi != Model.Bildirim_Sahibi)
+                                        {
+                                            <div class="text-[9px] font-normal text-slate-500 mt-0.5">@Model.Bildirim_Sahibi_Kullanici_Adi</div>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                            <div>
+                                <h4 class="text-[10px] font-medium text-slate-500 capitalize tracking-wide mb-2">Üstlenen temsilci</h4>
+                                <div class="flex items-center gap-2">
+                                    <div class="w-8 h-8 rounded-full bg-emerald-500/10 flex items-center justify-center border border-emerald-500/20">
+                                        <i class="bi bi-person-check text-emerald-400"></i>
+                                    </div>
+                                    <div>
+                                        <div class="text-sm font-medium text-slate-300 leading-none">@(Model.Bildirim_Ustlenen ?? "Atanmamış")</div>
+                                        @if(!string.IsNullOrEmpty(Model.Bildirim_Ustlenen_Kullanici_Adi) && Model.Bildirim_Ustlenen_Kullanici_Adi != Model.Bildirim_Ustlenen)
+                                        {
+                                            <div class="text-[9px] font-normal text-slate-500 mt-0.5">@Model.Bildirim_Ustlenen_Kullanici_Adi</div>
+                                        }
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    
+                    <!-- Waiting Reason Section -->
+                    <div class="p-4 rounded-2xl bg-orange-500/5 border border-orange-500/20 flex items-center gap-4">
+                        <div class="w-10 h-10 rounded-xl bg-orange-500/10 flex items-center justify-center text-orange-400">
+                            <i class="bi bi-hourglass-split text-xl"></i>
+                        </div>
+                        <div>
+                            <h4 class="text-[10px] font-normal text-slate-400 capitalize tracking-wide mb-1">Bekleme durumu / Nedeni</h4>
+                            <p class="text-sm font-medium text-slate-200">
+                                @(string.IsNullOrWhiteSpace(Model.Bildirim_Bekletme_Neden) ? "İşlemde" : Model.Bildirim_Bekletme_Neden)
+                            </p>
+                        </div>
+                    </div>
+
+                    <!-- Description Area -->
+                    @if (!string.IsNullOrEmpty(Model.Cozum_Aciklamasi))
+                    {
+                        <div class="pt-6 border-t border-white/5">
+                            <div class="flex justify-between items-center mb-4">
+                                <h4 class="text-[11px] font-medium text-emerald-400 capitalize tracking-wide flex items-center gap-2">
+                                    <i class="bi bi-check2-circle text-lg"></i> Sonuç / Çözüm notu
+                                </h4>
+                                @if(Model.Sonislemtarih != null)
+                                {
+                                    <span class="text-[10px] font-normal text-slate-500">Çözüm saati: @(Model.Sonislemtarih.HasValue ? Model.Sonislemtarih.Value.ToString("HH:mm:ss") : "-")</span>
+                                }
+                            </div>
+                            <div class="p-6 rounded-3xl bg-emerald-500/5 border border-emerald-500/20 text-sm text-slate-300 leading-relaxed">
+                                @(string.IsNullOrWhiteSpace(Model.Cozum_Aciklamasi) ? "Çözüm açıklaması girilmemiş" : Model.Cozum_Aciklamasi)
+                            </div>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+
+        <!-- Sidebar: History Accordion -->
+        <div class="space-y-6">
+            <div class="glass-panel bg-slate-800/50 rounded-3xl border border-white/5 shadow-sm overflow-hidden">
+                <div class="p-6 border-b border-white/5 bg-slate-800/30 flex items-center justify-between">
+                    <h3 class="text-sm font-semibold text-white flex items-center gap-2">
+                        <i class="bi bi-clock-history text-[#DD2F42]"></i>
+                        Talep Geçmişi
+                    </h3>
+                    <span class="px-2 py-0.5 rounded-lg bg-slate-700 text-slate-300 text-[10px] font-medium capitalize">@(history?.Count ?? 0) adım</span>
+                </div>
+                
+                <div class="p-4 overflow-y-auto max-h-[700px]">
+                    @if (history != null && history.Any())
+                    {
+                        <div class="space-y-3">
+                            @for (int i = 0; i < history.Count; i++)
+                            {
+                                var item = history[i];
+                                var isLast = i == history.Count - 1;
+                                var isFirst = i == 0;
+                                
+                                <div class="relative pl-6 group">
+                                    <!-- Timeline Line -->
+                                    @if (!isLast)
+                                    {
+                                        <div class="absolute left-2.5 top-6 bottom-[-12px] w-0.5 bg-slate-700 group-hover:bg-slate-600 transition-colors"></div>
+                                    }
+                                    
+                                    <!-- Accordion Item -->
+                                    <div class="glass-panel bg-slate-800/30 border border-white/5 rounded-2xl overflow-hidden shadow-sm hover:bg-slate-800 transition-all duration-300">
+                                        <button class="w-full p-4 flex items-center justify-between hover:bg-white/5 transition-colors text-left" 
+                                                onclick="toggleHistory(@i)">
+                                            <div class="flex items-center gap-3">
+                                                <div class="w-5 h-5 rounded-full flex items-center justify-center border-2 @(isFirst ? "bg-emerald-500 border-emerald-500" : "bg-slate-800 border-slate-600")">
+                                                    @if (isFirst) { <i class="bi bi-check text-white text-[10px]"></i> }
+                                                    else { <div class="w-1.5 h-1.5 rounded-full bg-slate-500"></div> }
+                                                </div>
+                                                <div>
+                                                    <p class="text-[11px] font-medium text-white truncate capitalize tracking-normal">@item.ResolutionStatusName</p>
+                                                    <p class="text-[9px] font-normal text-slate-500">@(item.Sonislemtarih.HasValue ? item.Sonislemtarih.Value.ToString("dd.MM.yyyy HH:mm") : "-")</p>
+                                                </div>
+                                            </div>
+                                            <i id="icon-@i" class="bi bi-chevron-down text-[10px] text-slate-500 transition-transform duration-300"></i>
+                                        </button>
+                                        
+                                        <div id="content-@i" class="hidden border-t border-white/5 bg-slate-900/30">
+                                            <div class="p-4 space-y-3">
+                                                @if (!string.IsNullOrEmpty(item.IssuerDescription))
+                                                {
+                                                    <div>
+                                                        <h5 class="text-[9px] font-normal text-slate-500 capitalize tracking-wide mb-1">İşlem notu</h5>
+                                                        <p class="text-xs text-slate-400 font-medium leading-relaxed">
+                                                            @item.IssuerDescription
+                                                        </p>
+                                                    </div>
+                                                }
+                                                <div class="grid grid-cols-2 gap-4">
+                                                    <div>
+                                                        <h5 class="text-[9px] font-normal text-slate-500 capitalize tracking-wide mb-1">Sorumlu birim</h5>
+                                                        <p class="text-[10px] font-normal text-slate-300">@(item.UserGroupName ?? item.UnitName ?? "-")</p>
+                                                    </div>
+                                                    <div>
+                                                        <h5 class="text-[9px] font-normal text-slate-500 capitalize tracking-wide mb-1">Sorumlu kişi</h5>
+                                                        <p class="text-[10px] font-normal text-slate-300">@(string.IsNullOrWhiteSpace(item.UserName) ? "Sistem / Otomatik" : item.UserName)</p>
+                                                    </div>
+                                                </div>
+                                                @if (!string.IsNullOrWhiteSpace(item.StartDate) || !string.IsNullOrWhiteSpace(item.EndDate))
+                                                {
+                                                    <div class="pt-2 border-t border-white/5 flex justify-between text-[9px] font-normal text-slate-500">
+                                                        <span>Başlangıç: @(item.StartDate ?? "-")</span>
+                                                        <span>Bitiş: @(item.EndDate ?? "-")</span>
+                                                    </div>
+                                                }
+                                                else if (item.ActionStartDate != null || item.ActionEndDate != null)
+                                                {
+                                                    <div class="pt-2 border-t border-white/5 flex justify-between text-[9px] font-normal text-slate-500">
+                                                        <span>Başlangıç: @(item.ActionStartDate?.ToString("HH:mm:ss") ?? "-")</span>
+                                                        <span>Bitiş: @(item.ActionEndDate?.ToString("HH:mm:ss") ?? "-")</span>
+                                                    </div>
+                                                }
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            }
+                        </div>
+                    }
+                    else
+                    {
+                        <div class="flex flex-col items-center justify-center py-12 text-center">
+                            <i class="bi bi-clock text-3xl text-slate-600 mb-2"></i>
+                            <p class="text-xs font-normal text-slate-500">Geçmiş verisi bulunamadı</p>
+                        </div>
+                    }
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    function toggleHistory(index) {
+        const content = document.getElementById('content-' + index);
+        const icon = document.getElementById('icon-' + index);
+        
+        if (content.classList.contains('hidden')) {
+            content.classList.remove('hidden');
+            content.classList.add('animate-in', 'fade-in', 'slide-in-from-top-2');
+            icon.classList.add('rotate-180');
+        } else {
+            content.classList.add('hidden');
+            icon.classList.remove('rotate-180');
+        }
+    }
+    
+    // Auto-expand the first item
+    document.addEventListener('DOMContentLoaded', () => {
+        const first = document.getElementById('content-0');
+        if (first) toggleHistory(0);
+    });
+</script>

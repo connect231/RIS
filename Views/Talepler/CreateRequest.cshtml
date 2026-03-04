@@ -1,0 +1,255 @@
+@{
+    ViewData["Title"] = "Yeni Talep Oluştur";
+    Layout = "~/Views/Shared/_LayoutMusteri.cshtml";
+}
+
+<div class="min-h-screen py-10 px-4 animate-in fade-in duration-500">
+    <div class="max-w-4xl mx-auto">
+        
+        <!-- Header -->
+        <div class="flex items-center justify-between mb-8">
+            <div class="flex items-center gap-4">
+                <a href="/Talepler" class="p-2 rounded-xl bg-slate-800/50 text-slate-400 hover:text-white hover:bg-slate-800 transition-all">
+                    <i class="bi bi-arrow-left text-xl"></i>
+                </a>
+                <div>
+                    <h1 class="text-2xl font-semibold text-white tracking-tight">Yeni Geliştirme Talebi</h1>
+                    <p class="text-sm text-slate-400 font-normal mt-1">Projeniz için yeni bir özellik veya değişiklik talep edin</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Form Card -->
+        <div class="bg-[#1e293b] rounded-[2rem] border border-slate-700/50 shadow-2xl overflow-hidden relative">
+            <!-- Decorative Top Line -->
+            <div class="absolute top-0 left-0 right-0 h-1 bg-gradient-to-r from-red-500 via-purple-500 to-blue-500"></div>
+
+            <div class="p-8 md:p-12 space-y-8">
+                @Html.AntiForgeryToken()
+                
+                <!-- Title Row -->
+                <div class="space-y-2">
+                     <label class="text-xs font-medium text-slate-400 uppercase tracking-widest pl-1">Talep Başlığı <span class="text-red-500">*</span></label>
+                     <input type="text" id="reqTitle" class="w-full bg-slate-900/50 border border-slate-700 focus:border-red-500 rounded-xl px-4 py-3.5 text-white placeholder-slate-600 outline-none transition-all shadow-inner text-base" placeholder="Örn: Raporlama ekranına Excel çıktı butonu eklenmesi" />
+                </div>
+
+                <!-- Users Helpers -->
+                <div class="hidden" id="usersDataContainer"></div>
+
+                <!-- Assignees (Optional for now, user requested simplification or mostly text area focus, but lets keep it functional) -->
+                 <div class="space-y-2">
+                    <label class="text-xs font-medium text-slate-400 uppercase tracking-widest pl-1">İlgili Kişiler (Opsiyonel)</label>
+                    <div class="relative group">
+                         <div class="flex flex-wrap gap-2 p-3 bg-slate-900/50 border border-slate-700 rounded-xl min-h-[50px] cursor-text transition-all focus-within:border-slate-500" onclick="document.getElementById('userSearchInput').focus()">
+                             <div id="selectedUsers" class="flex flex-wrap gap-2"></div>
+                             <input type="text" id="userSearchInput" class="bg-transparent border-none outline-none text-white text-sm min-w-[150px] flex-1 placeholder-slate-600" placeholder="Kişi adı yazın..." oninput="searchUsers(this.value)" />
+                         </div>
+                         
+                         <!-- Dropdown -->
+                         <div id="userDropdown" class="hidden absolute top-full left-0 right-0 mt-2 max-h-60 overflow-y-auto bg-slate-800 border border-slate-700 rounded-xl shadow-2xl z-50 p-2 space-y-1">
+                             <!-- Results -->
+                         </div>
+                    </div>
+                    <p class="text-[10px] text-slate-500 pl-1">Talebinizle ilgili bilgilendirilmesini istediğiniz kişileri ekleyebilirsiniz.</p>
+                </div>
+
+                <!-- Description -->
+                <div class="space-y-2">
+                    <div class="flex items-center justify-between pl-1">
+                        <label class="text-xs font-medium text-slate-400 uppercase tracking-widest">Talep Detayları <span class="text-red-500">*</span></label>
+                        <span class="text-[10px] text-slate-500 bg-slate-800 px-2 py-0.5 rounded-full border border-slate-700">Markdown Destekler</span>
+                    </div>
+                    <div class="relative">
+                        <textarea id="reqDescription" class="w-full h-80 bg-slate-900/50 border border-slate-700 focus:border-red-500 rounded-xl px-5 py-4 text-base text-white placeholder-slate-600 outline-none transition-all shadow-inner resize-none leading-relaxed" placeholder="Talebinizin detaylarını, beklentilerinizi ve varsa örnek senaryoları buraya detaylıca yazabilirsiniz..."></textarea>
+                        <div class="absolute bottom-4 right-4 text-xs text-slate-600 pointer-events-none">En az 20 karakter</div>
+                    </div>
+                </div>
+
+                <!-- Action Bar -->
+                <div class="flex items-center justify-end gap-4 pt-4 border-t border-slate-800">
+                    <a href="/Talepler" class="px-6 py-3 text-slate-400 hover:text-white text-sm font-medium transition-colors">Vazgeç</a>
+                    <button onclick="submitRequest()" id="btnSubmit" class="group relative px-8 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl shadow-lg shadow-red-900/20 transition-all hover:-translate-y-0.5 active:scale-95 overflow-hidden">
+                        <span class="relative z-10 flex items-center gap-2 font-medium tracking-wide">
+                            <i class="bi bi-send"></i>
+                            Talebi Oluştur
+                        </span>
+                        <div class="absolute inset-0 bg-gradient-to-r from-red-600 via-red-500 to-red-600 opacity-0 group-hover:opacity-100 transition-opacity duration-300"></div>
+                    </button>
+                </div>
+
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let selectedUserIds = [];
+
+    // Search Users Logic
+    function searchUsers(query) {
+        const dropdown = document.getElementById('userDropdown');
+        if (!query) {
+            dropdown.classList.add('hidden');
+            return;
+        }
+
+        fetch(`/Talepler/GetUsers?q=${encodeURIComponent(query)}`)
+        .then(res => res.json())
+        .then(users => {
+            renderDropdown(users);
+        });
+    }
+
+    function renderDropdown(users) {
+        const dropdown = document.getElementById('userDropdown');
+        dropdown.innerHTML = '';
+        
+        if (users.length === 0) {
+            dropdown.innerHTML = '<div class="p-3 text-slate-500 text-xs text-center">Kullanıcı bulunamadı</div>';
+        } else {
+            users.forEach(user => {
+                if(selectedUserIds.some(u => u.id === user.id)) return;
+
+                const div = document.createElement('div');
+                div.className = 'flex items-center gap-3 p-3 rounded-lg hover:bg-slate-700/50 cursor-pointer transition-colors group';
+                div.innerHTML = `
+                    <div class="w-8 h-8 rounded-full bg-slate-700 flex items-center justify-center text-xs text-white border border-slate-600 group-hover:border-slate-500">
+                        ${getInitials(user.name)}
+                    </div>
+                    <div class="flex flex-col">
+                        <span class="text-sm text-slate-200 group-hover:text-white">${user.name}</span>
+                        <span class="text-[10px] text-slate-500 group-hover:text-slate-400">${user.email || ''}</span>
+                    </div>
+                `;
+                div.onclick = () => selectUser(user);
+                dropdown.appendChild(div);
+            });
+        }
+        dropdown.classList.remove('hidden');
+    }
+
+    function selectUser(user) {
+        selectedUserIds.push(user);
+        renderSelectedTags();
+        document.getElementById('userSearchInput').value = '';
+        document.getElementById('userDropdown').classList.add('hidden');
+    }
+
+    function removeUser(id) {
+        selectedUserIds = selectedUserIds.filter(u => u.id !== id);
+        renderSelectedTags();
+    }
+
+    function renderSelectedTags() {
+        const container = document.getElementById('selectedUsers');
+        container.innerHTML = '';
+        selectedUserIds.forEach(user => {
+            const tag = document.createElement('div');
+            tag.className = 'flex items-center gap-2 bg-slate-800 text-slate-200 text-xs pl-3 pr-2 py-1.5 rounded-lg border border-slate-700 animate-in zoom-in-95 duration-200';
+            tag.innerHTML = `
+                <span>${user.name}</span>
+                <button onclick="removeUser(${user.id})" class="text-slate-500 hover:text-red-400 p-0.5 rounded transition-colors">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            `;
+            container.appendChild(tag);
+        });
+    }
+
+    function getInitials(name) {
+        if (!name) return "";
+        return name.split(' ').map(n => n[0]).join('').toUpperCase().substring(0, 2);
+    }
+
+    // Submit Logic
+    function submitRequest() {
+        const title = document.getElementById('reqTitle').value.trim();
+        const description = document.getElementById('reqDescription').value.trim();
+        const po = document.getElementById('reqPo') ? document.getElementById('reqPo').value.trim() : "";
+        const assignees = selectedUserIds.map(u => u.id).join(',');
+
+        if (!title) {
+            showToast('Lütfen talep başlığını giriniz.', 'error');
+            document.getElementById('reqTitle').focus();
+            return;
+        }
+        if (!description) {
+            showToast('Lütfen talep detaylarını giriniz.', 'error');
+            document.getElementById('reqDescription').focus();
+            return;
+        }
+
+        const btn = document.getElementById('btnSubmit');
+        const originalContent = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<span class="animate-spin mr-2"><i class="bi bi-arrow-repeat"></i></span> İşleniyor...';
+
+        // Reuse existing Create endpoint
+        const verificationToken = document.querySelector('input[name="__RequestVerificationToken"]').value;
+
+        fetch('/Talepler/Create', {
+            method: 'POST',
+            headers: { 
+                'Content-Type': 'application/x-www-form-urlencoded',
+                'RequestVerificationToken': verificationToken 
+            },
+            body: `title=${encodeURIComponent(title)}&description=${encodeURIComponent(description)}&effort=0&assignees=${assignees}&po=${encodeURIComponent(po)}&__RequestVerificationToken=${encodeURIComponent(verificationToken)}`
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                showToast('Talep başarıyla oluşturuldu! Yönlendiriliyorsunuz...', 'success');
+                setTimeout(() => {
+                    window.location.href = '/Talepler/Index';
+                }, 1500);
+            } else {
+                showToast('Hata: ' + data.message, 'error');
+                btn.disabled = false;
+                btn.innerHTML = originalContent;
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            showToast('Bir hata oluştu.', 'error');
+            btn.disabled = false;
+            btn.innerHTML = originalContent;
+        });
+    }
+
+    // Toast Helper (Simple Implementation or use existing if visible)
+    function showToast(message, type) {
+        // Check for existing toast container or create one
+        let container = document.getElementById('toast-container');
+        if (!container) {
+            container = document.createElement('div');
+            container.id = 'toast-container';
+            container.className = 'fixed top-6 right-6 z-[100] flex flex-col gap-3';
+            document.body.appendChild(container);
+        }
+
+        const toast = document.createElement('div');
+        const colors = type === 'success' ? 'bg-emerald-500/10 border-emerald-500/20 text-emerald-400' : 'bg-red-500/10 border-red-500/20 text-red-500';
+        const icon = type === 'success' ? 'bi-check-circle-fill' : 'bi-exclamation-triangle-fill';
+        
+        toast.className = `flex items-center gap-3 px-4 py-3 rounded-xl border backdrop-blur-md shadow-xl animate-in slide-in-from-right-full duration-300 ${colors}`;
+        toast.innerHTML = `
+            <i class="bi ${icon}"></i>
+            <span class="text-sm font-medium">${message}</span>
+        `;
+
+        container.appendChild(toast);
+
+        setTimeout(() => {
+            toast.classList.add('animate-out', 'fade-out', 'slide-out-to-right');
+            setTimeout(() => toast.remove(), 300);
+        }, 3000);
+    }
+
+    // Click outside to close dropdown
+    document.addEventListener('click', function(e) {
+        const wrapper = document.getElementById('userDropdown').parentElement;
+        if (!wrapper.contains(e.target)) {
+            document.getElementById('userDropdown').classList.add('hidden');
+        }
+    });
+</script>

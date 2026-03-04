@@ -1,0 +1,39 @@
+@using UniCP.Models.MsK
+@using UniCP.Services
+@inject IUrlEncryptionService UrlEncryption
+@if (ViewBag.AuthorizedCompanies != null && ((List<VIEW_ORTAK_PROJE_ISIMLERI>)ViewBag.AuthorizedCompanies).Count > 1)
+{
+    var authorizedCompanies = (List<VIEW_ORTAK_PROJE_ISIMLERI>)ViewBag.AuthorizedCompanies;
+    var selectedCompanyId = ViewBag.SelectedCompanyId as int?;
+
+    <div class="relative inline-block text-left z-20">
+        <select id="companyFilterSelect" onchange="updateCompanyFilter(this)" 
+                class="appearance-none bg-slate-800 text-slate-300 text-xs rounded-xl border border-white/10 px-3 py-2.5 pr-8 focus:outline-none focus:border-red-500 transition-colors cursor-pointer">
+            <option value="@UrlEncryption.EncryptId(-1)">Tüm Firmalar</option>
+            @foreach (var company in authorizedCompanies)
+            {
+                if (selectedCompanyId.HasValue && selectedCompanyId.Value == company.LNGKOD)
+                {
+                    <option value="@UrlEncryption.EncryptId(company.LNGKOD)" selected="@(company.LNGKOD == (int?)ViewBag.SelectedCompanyId)">@company.TXTORTAKPROJEADI</option>
+                }
+                else
+                {
+                    <option value="@UrlEncryption.EncryptId(company.LNGKOD)">@company.TXTORTAKPROJEADI</option>
+                }
+            }
+        </select>
+        <div class="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 text-slate-500">
+            <i class="bi bi-chevron-down text-xs"></i>
+        </div>
+    </div>
+
+    <script>
+        function updateCompanyFilter(select) {
+            var url = new URL(window.location.href);
+            // Update or add the filteredCompanyId parameter
+            url.searchParams.set('filteredCompanyId', select.value);
+            // Navigate to the new URL
+            window.location.href = url.toString();
+        }
+    </script>
+}

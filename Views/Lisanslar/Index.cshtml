@@ -1,0 +1,161 @@
+@model IEnumerable<UniCP.Models.Lisans.LisansContractVm>
+@{
+    ViewData["Title"] = "Lisans & Sözleşme";
+
+    // Dynamic Stats Calculation
+    var uniqueContracts = Model.DistinctBy(x => x.ContractNo).ToList();
+    var totalContracts = uniqueContracts.Count;
+    var activeContracts = uniqueContracts.Count(x => !string.Equals(x.ContractStatus, "Archieved", StringComparison.OrdinalIgnoreCase));
+    var pendingRenewal = uniqueContracts.Count(x => x.RenewalDate.HasValue && x.RenewalDate.Value.Date < DateTime.Now.Date);
+}
+
+<div class="space-y-6 animate-in fade-in duration-500">
+    <!-- Header Section -->
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+            <h1 class="text-2xl font-medium text-white tracking-tight">Lisans & Sözleşme</h1>
+            <p class="text-sm text-slate-400 font-medium">Sahip olduğunuz tüm Univera ürün lisanslarını ve sözleşmelerini buradan takip edebilirsiniz.</p>
+        </div>
+        <div class="flex items-center space-x-3">
+            <div class="relative">
+                <i class="bi bi-search absolute left-3 top-1/2 -translate-y-1/2 text-slate-500"></i>
+                <input type="text" id="licenseSearch" placeholder="Ara..." 
+                    class="pl-10 pr-4 py-2 bg-slate-800 border border-white/5 rounded-xl text-sm focus:ring-2 focus:ring-[#DD2F42] focus:border-transparent outline-none w-64 transition-all text-white placeholder:text-slate-600" />
+            </div>
+            <button onclick="openGlobalCompanyModal()" class="p-2 bg-slate-800 border border-white/5 rounded-xl text-slate-400 hover:bg-slate-700 transition-colors">
+                <i class="bi bi-funnel"></i>
+            </button>
+        </div>
+    </div>
+
+    <!-- Stats Row -->
+    <div class="grid grid-cols-1 md:grid-cols-5 gap-4">
+        <div class="glass-panel p-5 rounded-2xl group hover:bg-slate-800/50 transition-colors border border-white/5">
+            <p class="text-[10px] font-normal text-slate-400 tracking-wide mb-1" style="text-transform: none;">Toplam Sözleşme</p>
+            <h3 class="text-2xl font-semibold text-white">@Model.Count()</h3>
+        </div>
+        <div class="glass-panel p-5 rounded-2xl group hover:bg-slate-800/50 transition-colors border border-white/5">
+            <p class="text-[10px] font-normal text-slate-400 tracking-wide mb-1" style="text-transform: none;">Aktif / Süresi Dolmadı</p>
+            <h3 class="text-2xl font-semibold text-emerald-400">@Model.Count(x => x.ContractStatus == "Süresi Dolmadı" || x.ContractStatus == "Aktif")</h3>
+        </div>
+        <div class="glass-panel p-5 rounded-2xl group hover:bg-slate-800/50 transition-colors border border-white/5">
+            <p class="text-[10px] font-normal text-slate-400 tracking-wide mb-1" style="text-transform: none;">Univera İmzasında</p>
+            <h3 class="text-2xl font-semibold text-amber-400">@Model.Count(x => x.ContractStatus == "Univera İmzasında")</h3>
+        </div>
+        <div class="glass-panel p-5 rounded-2xl group hover:bg-slate-800/50 transition-colors border border-white/5">
+            <p class="text-[10px] font-normal text-slate-400 tracking-wide mb-1" style="text-transform: none;">Arşivlenmiş</p>
+            <h3 class="text-2xl font-semibold text-slate-400">@Model.Count(x => x.ContractStatus == "Arşivlendi")</h3>
+        </div>
+        <div class="glass-panel p-5 rounded-2xl group hover:bg-slate-800/50 transition-colors border border-white/5">
+            <p class="text-[10px] font-normal text-slate-400 tracking-wide mb-1" style="text-transform: none;">Toplam Tutar</p>
+            <h3 class="text-xl font-semibold text-blue-400">@(Model.Sum(x => x.TotalAmount ?? 0).ToString("N2")) TL</h3>
+        </div>
+    </div>
+
+    <!-- Table Section -->
+    <div class="glass-panel bg-slate-800/50 rounded-[2rem] shadow-sm border border-white/5 overflow-hidden">
+        <div class="overflow-x-auto">
+            <table class="w-full text-left" id="licenseTable">
+                <thead>
+                    <tr class="bg-slate-800/50 border-b border-white/5">
+                        <th class="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Sözleşme No</th>
+                        <th class="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Sözleşme Adı</th>
+                        <th class="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Firma</th>
+                        <th class="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Tür</th>
+                        <th class="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Durum</th>
+                        <th class="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Başlangıç</th>
+                        <th class="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest">Bitiş</th>
+                        <th class="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">Tutar</th>
+                        <th class="px-6 py-4 text-[10px] font-black text-slate-400 uppercase tracking-widest text-right">İşlem</th>
+                    </tr>
+                </thead>
+                <tbody class="divide-y divide-white/5">
+                    @foreach (var item in Model)
+                    {
+                        var statusColor = "bg-slate-500/10 text-slate-400 border-slate-500/20"; // Default (Arşivlendi, Unknown etc.)
+                        
+                        // Green - Active/Good
+                        if (item.ContractStatus == "Süresi Dolmadı" || item.ContractStatus == "Aktif") 
+                        {
+                            statusColor = "bg-emerald-500/10 text-emerald-400 border-emerald-500/20";
+                        }
+                        // Amber - Pending/Negotiation
+                        else if (item.ContractStatus == "Hazırlık Aşamasında" || 
+                                 item.ContractStatus == "Fiyat Müzakere" || 
+                                 item.ContractStatus == "Metin Müzakere" ||
+                                 item.ContractStatus == "Satışta - Bilgi Bekliyor" ||
+                                 item.ContractStatus == "Univera İmzasında" ||
+                                 item.ContractStatus == "Müşteri İmzasında")
+                        {
+                            statusColor = "bg-amber-500/10 text-amber-400 border-amber-500/20";
+                        }
+                        // Blue - Maintenance/Info
+                        else if (item.ContractStatus == "Bakıma Devir Olmadı" || item.ContractStatus == "Yenilendi / Süresi Doldu")
+                        {
+                            statusColor = "bg-blue-500/10 text-blue-400 border-blue-500/20";
+                        }
+                        // Red - Termination
+                        else if (item.ContractStatus == "Fesih / İptal")
+                        {
+                            statusColor = "bg-red-500/10 text-red-400 border-red-500/20";
+                        }
+
+                        var statusText = item.ContractStatus;
+
+                        <tr class="hover:bg-slate-700/50 transition-colors group">
+                            <td class="px-6 py-4">
+                                <span class="text-sm font-bold text-white">@item.ContractNo</span>
+                            </td>
+                            <td class="px-6 py-4">
+                                <span class="text-xs text-slate-300">@(item.ContractName ?? "-")</span>
+                            </td>
+                            <td class="px-6 py-4">
+                                <span class="text-xs font-bold text-slate-300">@item.AccountTitle</span>
+                            </td>
+                            <td class="px-6 py-4">
+                                <span class="text-xs text-slate-300">@(item.ContractType ?? "-")</span>
+                            </td>
+                            <td class="px-6 py-4">
+                                <span class="inline-flex items-center px-2.5 py-1 rounded-full text-[10px] font-medium border @statusColor">
+                                    @statusText
+                                </span>
+                            </td>
+                            <td class="px-6 py-4">
+                                <span class="text-xs text-slate-400">@item.StartDate?.ToString("dd.MM.yyyy")</span>
+                            </td>
+                            <td class="px-6 py-4">
+                                <span class="text-xs text-slate-400">@item.FinishDate?.ToString("dd.MM.yyyy")</span>
+                            </td>
+                            <td class="px-6 py-4 text-right">
+                                <span class="text-xs font-medium text-slate-300">@(item.TotalAmount.HasValue ? item.TotalAmount.Value.ToString("N2") + " TL" : "-")</span>
+                            </td>
+                            <td class="px-6 py-4 text-right">
+                                @if (item.HasFiles)
+                                {
+                                    <a href="@Url.Action("ViewFile", "Lisanslar", new { contractGuidId = item.ContractGuidId })" target="_blank" class="p-2 rounded-lg text-slate-400 hover:text-white hover:bg-white/5 transition-colors" title="Sözleşmeyi Görüntüle">
+                                        <i class="bi bi-file-earmark-pdf"></i>
+                                    </a>
+                                }
+                            </td>
+                        </tr>
+                    }
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+
+
+@section Scripts {
+    <script>
+        $(document).ready(function() {
+            $("#licenseSearch").on("keyup", function() {
+                var value = $(this).val().toLowerCase();
+                $("#licenseTable tbody tr").filter(function() {
+                    $(this).toggle($(this).text().toLowerCase().indexOf(value) > -1)
+                });
+            });
+        });
+    </script>
+}

@@ -1,0 +1,692 @@
+﻿
+@{
+    ViewData["Title"] = "Create";
+    Layout = "~/Views/Shared/_LayoutMusteri.cshtml";
+}
+
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Yeni Tiket Oluştur - Müşteri Portalı</title>
+
+    <!-- Bootstrap 5.3 CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+
+    <!-- Bootstrap Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+
+    <style>
+        :root {
+            --primary-color: #1e3a8a;
+            --secondary-color: #0ea5e9;
+            --accent-color: #f59e0b;
+            --text-dark: #1f2937;
+            --text-light: #6b7280;
+            --bg-light: #f8fafc;
+            --bg-lighter: #f1f5f9;
+            --border-color: #e2e8f0;
+            --navbar-height: 70px;
+            --success-color: #10b981;
+            --warning-color: #f59e0b;
+            --danger-color: #ef4444;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+            color: var(--text-dark);
+            background: linear-gradient(135deg, var(--bg-lighter) 0%, #e0f2fe 100%);
+            min-height: 100vh;
+            overflow-x: hidden;
+        }
+
+        /* Navbar Styles */
+        .client-navbar {
+            background: white;
+            border-bottom: 1px solid var(--border-color);
+            height: var(--navbar-height);
+            display: flex;
+            align-items: center;
+            padding: 0 2rem;
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+        }
+
+        .navbar-brand-client {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            font-weight: 700;
+            font-size: 1.25rem;
+            color: var(--primary-color);
+            text-decoration: none;
+            margin-right: auto;
+        }
+
+            .navbar-brand-client i {
+                font-size: 1.75rem;
+                color: var(--secondary-color);
+            }
+
+        .navbar-actions {
+            display: flex;
+            align-items: center;
+            gap: 1.5rem;
+            margin-left: auto;
+        }
+
+        .navbar-icon-btn {
+            background: none;
+            border: none;
+            cursor: pointer;
+            color: var(--text-light);
+            font-size: 1.25rem;
+            transition: all 0.3s ease;
+            position: relative;
+        }
+
+            .navbar-icon-btn:hover {
+                color: var(--secondary-color);
+                transform: scale(1.1);
+            }
+
+        .navbar-badge {
+            position: absolute;
+            top: -8px;
+            right: -8px;
+            background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
+            color: white;
+            border-radius: 50%;
+            width: 24px;
+            height: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.7rem;
+            font-weight: 700;
+        }
+
+        .navbar-user {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            padding: 0.5rem 1rem;
+            border-radius: 10px;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+
+            .navbar-user:hover {
+                background-color: var(--bg-light);
+            }
+
+        .navbar-user-avatar {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            font-weight: 700;
+            font-size: 0.9rem;
+        }
+
+        .navbar-user-info {
+            display: flex;
+            flex-direction: column;
+            gap: 0.2rem;
+        }
+
+        .navbar-user-name {
+            font-weight: 600;
+            font-size: 0.9rem;
+            color: var(--text-dark);
+        }
+
+        .navbar-user-role {
+            font-size: 0.75rem;
+            color: var(--text-light);
+        }
+
+        /* Form Page Container */
+        .form-page-container {
+            padding: 2rem;
+            background: linear-gradient(135deg, var(--bg-lighter) 0%, #e0f2fe 100%);
+            min-height: calc(100vh - 70px);
+        }
+
+        .form-card {
+            max-width: 900px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 15px;
+            padding: 2rem;
+            box-shadow: 0 2px 12px rgba(0, 0, 0, 0.08);
+            border: 1px solid var(--border-color);
+        }
+
+        /* Form Header */
+        .form-header {
+            margin-bottom: 2rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 2px solid var(--border-color);
+        }
+
+        .form-title {
+            font-size: 1.75rem;
+            font-weight: 700;
+            color: var(--text-dark);
+            margin-bottom: 0.5rem;
+        }
+
+        .form-subtitle {
+            font-size: 0.95rem;
+            color: var(--text-light);
+        }
+
+        /* Form Sections */
+        .form-section {
+            margin-bottom: 2rem;
+            padding-bottom: 1.5rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+
+            .form-section:last-of-type {
+                border-bottom: none;
+            }
+
+        .section-title {
+            font-size: 1.1rem;
+            font-weight: 700;
+            color: var(--text-dark);
+            margin-bottom: 1.5rem;
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+            .section-title i {
+                color: var(--secondary-color);
+                font-size: 1.3rem;
+            }
+
+        /* Form Row */
+        .form-row {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+            gap: 1.5rem;
+        }
+
+        /* Form Group */
+        .form-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .form-label {
+            font-weight: 600;
+            color: var(--text-dark);
+            font-size: 0.95rem;
+        }
+
+        .required {
+            color: var(--danger-color);
+            font-weight: 700;
+        }
+
+        .form-control {
+            padding: 0.75rem 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 8px;
+            font-size: 0.95rem;
+            font-family: 'Inter', sans-serif;
+            transition: all 0.3s ease;
+            background-color: white;
+            color: var(--text-dark);
+        }
+
+            .form-control:focus {
+                border-color: var(--secondary-color);
+                box-shadow: 0 0 0 3px rgba(14, 165, 233, 0.1);
+                outline: none;
+            }
+
+            .form-control::placeholder {
+                color: var(--text-light);
+            }
+
+        textarea.form-control {
+            resize: vertical;
+            min-height: 100px;
+        }
+
+        .form-text {
+            font-size: 0.8rem;
+            color: var(--text-light);
+        }
+
+        /* Input Group */
+        .input-group {
+            display: flex;
+            gap: 0;
+        }
+
+            .input-group .form-control {
+                border-radius: 8px 0 0 8px;
+            }
+
+        .input-group-text {
+            padding: 0.75rem 1rem;
+            background-color: var(--bg-light);
+            border: 1px solid var(--border-color);
+            border-left: none;
+            border-radius: 0 8px 8px 0;
+            font-weight: 600;
+            color: var(--text-dark);
+        }
+
+        /* File Upload Area */
+        .file-upload-area {
+            border: 2px dashed var(--secondary-color);
+            border-radius: 12px;
+            padding: 2rem;
+            text-align: center;
+            background: rgba(14, 165, 233, 0.05);
+            transition: all 0.3s ease;
+            cursor: pointer;
+        }
+
+            .file-upload-area:hover {
+                background: rgba(14, 165, 233, 0.1);
+                border-color: var(--primary-color);
+            }
+
+        .file-input {
+            display: none;
+        }
+
+        .file-upload-content {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 0.75rem;
+        }
+
+            .file-upload-content i {
+                font-size: 2.5rem;
+                color: var(--secondary-color);
+            }
+
+        .file-upload-text {
+            font-size: 0.95rem;
+            color: var(--text-dark);
+            margin: 0;
+        }
+
+        .file-upload-link {
+            color: var(--secondary-color);
+            font-weight: 600;
+            text-decoration: underline;
+            cursor: pointer;
+        }
+
+        .file-upload-hint {
+            font-size: 0.8rem;
+            color: var(--text-light);
+            margin-top: 0.5rem;
+        }
+
+        .file-list {
+            margin-top: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.5rem;
+        }
+
+        .file-item {
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            padding: 0.75rem 1rem;
+            background: var(--bg-light);
+            border-radius: 8px;
+            border: 1px solid var(--border-color);
+        }
+
+        .file-item-name {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            flex: 1;
+        }
+
+            .file-item-name i {
+                color: var(--secondary-color);
+                font-size: 1.1rem;
+            }
+
+        .file-item-remove {
+            background: none;
+            border: none;
+            color: var(--danger-color);
+            cursor: pointer;
+            font-size: 1.1rem;
+            transition: all 0.3s ease;
+        }
+
+            .file-item-remove:hover {
+                color: var(--primary-color);
+            }
+
+        /* Form Actions */
+        .form-actions {
+            display: flex;
+            gap: 1rem;
+            justify-content: flex-end;
+            margin-top: 2rem;
+            padding-top: 1.5rem;
+            border-top: 1px solid var(--border-color);
+        }
+
+        .btn {
+            padding: 0.75rem 1.5rem;
+            border-radius: 8px;
+            border: none;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            font-size: 0.95rem;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--secondary-color), var(--primary-color));
+            color: white;
+        }
+
+            .btn-primary:hover {
+                transform: translateY(-2px);
+                box-shadow: 0 5px 15px rgba(14, 165, 233, 0.3);
+                color: white;
+            }
+
+        .btn-secondary {
+            background: var(--bg-light);
+            color: var(--text-dark);
+            border: 1px solid var(--border-color);
+        }
+
+            .btn-secondary:hover {
+                background: white;
+                border-color: var(--secondary-color);
+                color: var(--secondary-color);
+            }
+
+        /* Responsive */
+        @@media (max-width: 768px) {
+            .form-page-container {
+                padding: 1.5rem;
+            }
+
+            .form-card {
+                padding: 1.5rem;
+            }
+
+            .form-title {
+                font-size: 1.5rem;
+            }
+
+            .form-row {
+                grid-template-columns: 1fr;
+            }
+
+            .form-actions {
+                flex-direction: column-reverse;
+            }
+
+            .btn {
+                width: 100%;
+                justify-content: center;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <!-- Form Container -->
+    <div class="form-page-container">
+        <div class="form-card">
+            <!-- Form Header -->
+            <div class="form-header">
+                <h1 class="form-title">Yeni Ticket Oluştur</h1>
+                <p class="form-subtitle">Lütfen aşağıdaki bilgileri doldurup formu gönderin. Tüm alanlar zorunludur.</p>
+            </div>
+
+            <!-- Form Content -->
+            <form class="client-form" onsubmit="handleSubmit(event)">
+                <!-- Section 1: Personal Information -->
+                <div class="form-section">
+                    <h2 class="section-title">
+                        <i class="bi bi-person-fill"></i>
+                        Kişisel Bilgiler
+                    </h2>
+
+                    <div class="form-row">
+                        <!-- Full Name -->
+                        <div class="form-group">
+                            <label for="fullName" class="form-label">Ad Soyad <span class="required">*</span></label>
+                            <input type="text" class="form-control" id="fullName" placeholder="Adınız ve soyadınız" required>
+                            <small class="form-text">Lütfen tam adınızı giriniz</small>
+                        </div>
+
+                        <!-- Email -->
+                        <div class="form-group">
+                            <label for="email" class="form-label">E-posta Adresi <span class="required">*</span></label>
+                            <input type="email" class="form-control" id="email" placeholder="ornek@email.com" required>
+                            <small class="form-text">Geçerli bir e-posta adresi giriniz</small>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Section 2: Ticket Information -->
+                <div class="form-section">
+                    <h2 class="section-title">
+                        <i class="bi bi-ticket-detailed"></i>
+                        Tiket Bilgileri
+                    </h2>
+
+                    <!-- Ticket Title -->
+                    <div class="form-group">
+                        <label for="ticketTitle" class="form-label">Tiket Başlığı <span class="required">*</span></label>
+                        <input type="text" class="form-control" id="ticketTitle" placeholder="Tiketin konusunu kısaca açıklayın" required>
+                        <small class="form-text">Maksimum 100 karakter</small>
+                    </div>
+
+                    <!-- Ticket Description -->
+                    <div class="form-group">
+                        <label for="ticketDescription" class="form-label">Tiket Açıklaması <span class="required">*</span></label>
+                        <textarea class="form-control" id="ticketDescription" rows="5" placeholder="Sorununuzu detaylı bir şekilde açıklayın..." required></textarea>
+                        <small class="form-text">Lütfen sorununuzu mümkün olduğunca detaylı açıklayın</small>
+                    </div>
+
+                    <div class="form-row">
+                        <!-- User Type Selection -->
+                        <div class="form-group">
+                            <label for="userType" class="form-label">Ticket Tipi <span class="required">*</span></label>
+                            <select class="form-control" id="userType" required>
+                                <option value="">-- Seçiniz --</option>
+                                <option value="admin">Soru</option>
+                                <option value="user">Hata</option>
+                               
+                            </select>
+                        </div>
+
+                        <!-- Priority Selection -->
+                        <div class="form-group">
+                            <label for="priority" class="form-label">Öncelik <span class="required">*</span></label>
+                            <select class="form-control" id="priority" required>
+                                <option value="">-- Seçiniz --</option>
+                                <option value="low">Düşük</option>
+                                <option value="normal">Normal</option>
+                                <option value="high">Yüksek</option>
+                                <option value="critical">Kritik</option>
+                            </select>
+                        </div>
+                    </div>
+                </div>
+              <div class="form-section">
+                    <h2 class="section-title">
+                        <i class="bi bi-file-earmark-arrow-up"></i>
+                        Dosya Yükleme
+                    </h2>
+                    <div class="form-group">
+                        <label for="fileUpload" class="form-label">Dosya Yükle (İsteğe Bağlı)</label>
+                        <div class="input-group mb-3">
+                            <input type="file" id="fileInput" class="form-control" />
+
+                            <!-- Ekle butonu -->
+                            <button type="button" id="addFileBtn" class="btn btn-secondary">
+                                Ekle
+                            </button>
+                        </div>
+
+                        <ul id="fileList"></ul>
+                        <!-- Controller’a gidecek gizli alan -->
+                        <input type="hidden" id="UploadedFiles" name="UploadedFiles" />
+                    </div>
+                    <div id="filePreviewArea" class="row"></div>
+               </div>
+                               <!-- Form Actions -->
+                <div class="form-actions">
+                    <button type="reset" class="btn btn-secondary">
+                        <i class="bi bi-arrow-counterclockwise"></i>
+                        Temizle
+                    </button>
+                    <button type="submit" class="btn btn-primary">
+                        <i class="bi bi-check-lg"></i>
+                        Formu Gönder
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Bootstrap 5.3 JS Bundle -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+
+    <!-- Custom Scripts -->
+  
+    <script>
+        let selectedFiles = [];
+
+        document.getElementById("addFileBtn").addEventListener("click", function () {
+            let input = document.getElementById("fileInput");
+
+            if (input.files.length === 0) {
+                alert("Lütfen bir dosya seçin.");
+                return;
+            }
+
+            let file = input.files[0];
+            let reader = new FileReader();
+
+            reader.onload = function (e) {
+                let base64 = e.target.result.split(',')[1];
+
+                selectedFiles.push({
+                    FileName: file.name,
+                    FileContent: base64,
+                    FileType: file.type
+                });
+
+                refreshPreview();
+                input.value = "";
+            };
+
+            reader.readAsDataURL(file);
+        });
+
+        function refreshPreview() {
+            let area = document.getElementById("filePreviewArea");
+            area.innerHTML = "";
+
+            selectedFiles.forEach((f, index) => {
+                let isImage = f.FileType.startsWith("image/");
+
+                let html = `
+                    <div class="col-md-3 mb-3">
+                        <div class="card p-2 shadow-sm">
+
+                            <div class="text-center">
+                                ${isImage
+                        ? `<img src="data:${f.FileType};base64,${f.FileContent}" class="img-fluid rounded" style="max-height:150px;" />`
+                        : `<i class="fa fa-file fa-3x text-secondary"></i><br/><small>${f.FileName}</small>`
+                    }
+                            </div>
+
+                            <button type="button"
+                                    class="btn btn-sm btn-danger mt-2"
+                                    onclick="removeFile(${index})">Sil</button>
+                        </div>
+                    </div>
+                `;
+
+                area.insertAdjacentHTML("beforeend", html);
+            });
+
+            document.getElementById("UploadedFiles").value = JSON.stringify(selectedFiles);
+        }
+
+        function removeFile(index) {
+            selectedFiles.splice(index, 1);
+            refreshPreview();
+        }
+    </script>
+
+    <script>
+        function previewFiles(files) {
+            const preview = document.getElementById('filePreview');
+            preview.innerHTML = '';
+            Array.from(files).forEach(file => {
+                const fileItem = document.createElement('div');
+                fileItem.classList.add('file-item');
+
+                if (file.type.startsWith('image')) {
+                    const img = document.createElement('img');
+                    img.src = URL.createObjectURL(file);
+                    fileItem.appendChild(img);
+                }
+
+                const label = document.createElement('span');
+                label.textContent = file.name;
+                fileItem.appendChild(label);
+
+                preview.appendChild(fileItem);
+            });
+        }
+    </script>
+
+
+</body>
+</html>
+
+

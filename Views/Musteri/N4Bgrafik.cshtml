@@ -1,0 +1,26 @@
+﻿@model List<BildirimChartVm>
+@using System.Text.Json
+
+@{
+    var labels = JsonSerializer.Serialize(Model.Select(x => x.Durum).ToList());
+    var values = JsonSerializer.Serialize(Model.Select(x => x.Sayi).ToList());
+
+    var colors = Model.Select(x =>
+        x.Durum == "Açık/Email" ? "#f23535" :
+        x.Durum == "Kapatıldı/Email" ? "#69f56e" :
+        x.Durum == "İptal Edildi/Email" ? "#f5e569" :
+        x.Durum == "Kapatıldı/Telefon" ? "#5b35f2" :
+        x.Durum == "Açık/Telefon" ? "#f235a6" :
+                               "#fd7e14"
+    ).ToList();
+
+    var colorJson = JsonSerializer.Serialize(colors);
+}
+
+<div style="width:300px; height:300px">
+    <canvas id="bildirimDonut" width="300" height="300"></canvas>
+</div>
+
+<input type="hidden" id="lblData" value='@Html.Raw(labels)' />
+<input type="hidden" id="valData" value='@Html.Raw(values)' />
+<input type="hidden" id="clrData" value='@Html.Raw(colorJson)' />

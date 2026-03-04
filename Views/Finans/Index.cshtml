@@ -1,0 +1,1074 @@
+@model IEnumerable<UniCP.Models.MsK.SpModels.SpVarunaSiparisResult>
+@using UniCP.Services
+@inject IUrlEncryptionService UrlEncryption
+@{
+    ViewData["Title"] = "Finansal Özet";
+    ViewData["HidePageHeader"] = true;
+    Layout = "~/Views/Shared/_LayoutMusteri.cshtml";
+    string? encryptedCompanyId = null;
+    if (ViewBag.SelectedCompanyId != null)
+    {
+        encryptedCompanyId = UrlEncryption.EncryptId((int)ViewBag.SelectedCompanyId);
+    }
+}
+
+<div class="space-y-6 animate-in fade-in duration-500">
+    <!-- Header Section -->
+    <div class="flex items-center justify-between">
+        <div>
+            <h1 class="text-2xl font-medium text-white tracking-tight">Finansal Özet</h1>
+        </div>
+        <div class="flex items-center space-x-2">
+            <!-- Company Filter -->
+
+
+            <!-- Filter Buttons -->
+            <div class="flex bg-slate-800/50 p-1 rounded-xl border border-white/5 space-x-1">
+                <a href="@Url.Action("Index", new { filter = "month", filteredCompanyId = encryptedCompanyId })" 
+                   class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all @(ViewBag.ActiveFilter == "month" ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20" : "text-slate-400 hover:text-white hover:bg-white/5")">
+                    Aylık
+                </a>
+                <a href="@Url.Action("Index", new { filter = "3months", filteredCompanyId = encryptedCompanyId })" 
+                   class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all whitespace-nowrap @(ViewBag.ActiveFilter == "3months" ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20" : "text-slate-400 hover:text-white hover:bg-white/5")">
+                    3 Aylık
+                </a>
+                <a href="@Url.Action("Index", new { filter = "year", filteredCompanyId = encryptedCompanyId })" 
+                   class="px-3 py-1.5 rounded-lg text-xs font-bold transition-all @(ViewBag.ActiveFilter == "year" ? "bg-blue-600 text-white shadow-lg shadow-blue-500/20" : "text-slate-400 hover:text-white hover:bg-white/5")">
+                    Yıllık
+                </a>
+            </div>
+
+            <!-- Custom Date Filter -->
+            <form method="get" action="@Url.Action("Index")" class="flex items-center gap-1.5 bg-slate-800/50 p-1 rounded-xl border border-white/5 ml-auto">
+                <input type="hidden" name="filteredCompanyId" value="@encryptedCompanyId" />
+                <div class="relative group">
+                    <input type="@(ViewBag.StartDate != null ? "date" : "text")" 
+                           name="startDate" 
+                           value="@ViewBag.StartDate" 
+                           class="bg-slate-900/50 border border-white/10 text-white text-[10px] rounded-lg w-24 px-2 py-1 focus:ring-1 focus:ring-blue-500/50 focus:border-blue-500 transition-all outline-none placeholder-slate-500" 
+                           style="color-scheme: dark;" 
+                           placeholder="Başlangıç"
+                           onfocus="(this.type='date');this.showPicker()"
+                           onclick="this.showPicker()"
+                           onblur="(this.value ? this.type='date' : this.type='text')">
+                </div>
+                <span class="text-slate-500 font-bold text-[10px]">-</span>
+                <div class="relative group">
+                    <input type="@(ViewBag.EndDate != null ? "date" : "text")" 
+                           name="endDate" 
+                           value="@ViewBag.EndDate" 
+                           class="bg-slate-900/50 border border-white/10 text-white text-[10px] rounded-lg w-24 px-2 py-1 focus:ring-1 focus:ring-blue-500/50 focus:border-blue-500 transition-all outline-none placeholder-slate-500" 
+                           style="color-scheme: dark;" 
+                           placeholder="Bitiş"
+                           onfocus="(this.type='date');this.showPicker()"
+                           onclick="this.showPicker()"
+                           onblur="(this.value ? this.type='date' : this.type='text')">
+                </div>
+                <button type="submit" class="px-2 py-1 bg-blue-600 hover:bg-blue-500 rounded-lg text-white text-[10px] font-bold transition-all shadow-lg shadow-blue-600/20 flex items-center gap-1">
+                    <i class="bi bi-filter"></i>
+                    <span>Filtrele</span>
+                </button>
+            </form>
+
+            <!-- Payment Button -->
+            <button onclick="openPaymentModal()" class="px-2 py-1 bg-emerald-600 hover:bg-emerald-500 rounded-lg text-[10px] font-bold text-white transition-all flex items-center space-x-1 shadow-lg shadow-emerald-600/20 mr-2 whitespace-nowrap">
+                <i class="bi bi-credit-card-fill text-xs"></i>
+                <span>Ödeme Yap</span>
+            </button>
+
+            <!-- Actions Dropdown -->
+            <div class="relative">
+                <button onclick="toggleActionMenu()" class="px-2 py-1 bg-indigo-600 hover:bg-indigo-500 rounded-lg text-[10px] font-bold text-white transition-all flex items-center space-x-1 shadow-lg shadow-indigo-600/20">
+                    <i class="bi bi-lightning-charge-fill text-xs"></i>
+                    <span>İşlemler</span>
+                    <i class="bi bi-chevron-down ml-1 text-indigo-200"></i>
+                </button>
+                
+                <!-- Dropdown Menu -->
+                <div id="actionMenu" class="hidden absolute right-0 top-full mt-2 w-56 bg-slate-800 rounded-xl shadow-2xl border border-slate-700 overflow-hidden z-50 animate-in fade-in slide-in-from-top-2 duration-200">
+                    <div class="p-1">
+                        <div class="px-3 py-2 text-[10px] font-bold text-slate-500 tracking-widest">Finansal işlemler</div>
+                        
+                        <a href="@Url.Action("ExportExcel", new { filter = ViewBag.ActiveFilter, startDate = ViewBag.StartDate, endDate = ViewBag.EndDate, filteredCompanyId = encryptedCompanyId })" class="flex items-center gap-3 px-3 py-2.5 text-sm text-slate-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors group">
+                            <span class="w-8 h-8 rounded-lg bg-emerald-500/10 text-emerald-400 flex items-center justify-center group-hover:bg-emerald-500/20 border border-emerald-500/20">
+                                <i class="bi bi-file-earmark-spreadsheet-fill"></i>
+                            </span>
+                            Ekstre İndir (Excel)
+                        </a>
+
+
+                        
+                        <a href="javascript:void(0)" onclick="sendReconciliation()" class="flex items-center gap-3 px-3 py-2.5 text-sm text-slate-300 hover:text-white hover:bg-white/5 rounded-lg transition-colors group">
+                            <span class="w-8 h-8 rounded-lg bg-amber-500/10 text-amber-400 flex items-center justify-center group-hover:bg-amber-500/20 border border-amber-500/20">
+                                <i class="bi bi-envelope-paper-fill"></i>
+                            </span>
+                            Mutabakat Gönder
+                        </a>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Financial Cards -->
+    <!-- Stats & Chart Section -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Left: Stats Grid (7 cols) -->
+        <div class="lg:col-span-7 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Row 1 Left: Total Amount Card -->
+            <div class="glass-panel bg-slate-800/50 p-6 rounded-2xl shadow-sm border border-white/5 flex-1 flex flex-col justify-center">
+                <p class="text-xs font-bold text-slate-400 mb-2 tracking-widest">Toplam Tutar</p>
+                <h3 class="text-3xl font-medium text-white">@(((decimal)ViewBag.TotalFilteredAmount).ToString("C2"))</h3>
+                <div class="mt-4 flex items-center text-[10px] font-bold @((double)ViewBag.PercentageChange >= 0 ? "text-emerald-400" : "text-red-400")">
+                    <i class="bi @((double)ViewBag.PercentageChange >= 0 ? "bi-graph-up-arrow" : "bi-graph-down-arrow") me-1"></i> 
+                    %@Math.Abs((double)ViewBag.PercentageChange).ToString("N0") @((double)ViewBag.PercentageChange >= 0 ? "artış" : "azalış") (@ViewBag.ComparisonLabel)
+                </div>
+            </div>
+
+            <!-- Row 1 Right: Overdue Invoice Amount (Formerly Pending Payment) -->
+            <div class="glass-panel bg-slate-800/50 p-6 rounded-2xl shadow-sm border border-white/5 flex-1 flex flex-col justify-center">
+                <p class="text-xs font-bold text-slate-400 mb-2 tracking-widest">Vadesi Gelmemiş Fatura Tutarı</p>
+                <h3 class="text-3xl font-medium text-amber-400">@(((decimal)ViewBag.PendingPayment).ToString("C2"))</h3>
+                @if (ViewBag.OverdueCount > 0)
+                {
+                    <div class="mt-4 flex items-center text-[10px] text-red-400 font-bold">
+                        <i class="bi bi-exclamation-circle me-1"></i> @ViewBag.OverdueCount adet gecikmiş fatura
+                    </div>
+                }
+                else if (ViewBag.WaitingForMaturityCount > 0)
+                {
+                    <div class="mt-4 flex items-center text-[10px] text-blue-400 font-bold">
+                        <i class="bi bi-hourglass-split me-1"></i> @ViewBag.WaitingForMaturityCount adet vadesi gelmemiş fatura
+                    </div>
+                }
+                else
+                {
+                    <div class="mt-4 flex items-center text-[10px] text-emerald-400 font-bold">
+                        <i class="bi bi-check-circle me-1"></i> Ödeme bekleyen yok
+                    </div>
+                }
+            </div>
+
+            <!-- Row 2 Left: Geciken Fatura Tutarı (Late Invoice Amount) -->
+            <div class="glass-panel bg-slate-800/50 p-6 rounded-2xl shadow-sm border border-white/5 flex-1 flex flex-col justify-center">
+                <p class="text-xs font-bold text-slate-400 mb-2 tracking-widest">Geciken Fatura Tutarı</p>
+                <h3 class="text-3xl font-medium text-red-500">
+                    @(ViewBag.LateInvoiceAmount != null ? ((decimal)ViewBag.LateInvoiceAmount).ToString("C2") : "₺0,00")
+                </h3>
+                <div class="mt-4 flex items-center text-[10px] text-red-400 font-bold">
+                    <i class="bi bi-exclamation-triangle me-1"></i>
+                    Ödeme Gecikmesi
+                </div>
+            </div>
+
+            <!-- Row 2 Right: Late Fee Amount -->
+            <div class="glass-panel bg-slate-800/50 p-6 rounded-2xl shadow-sm border border-white/5 flex-1 flex flex-col justify-center">
+                <p class="text-xs font-bold text-slate-400 mb-2 tracking-widest">Gecikme Faiz Tutarı</p>
+                <h3 class="text-3xl font-medium text-white">₺0,00</h3>
+                <div class="mt-4 flex items-center text-[10px] text-slate-500 font-bold">
+                    <i class="bi bi-percent me-1"></i>
+                    Tahmini Yasal Faiz
+                </div>
+            </div>
+        </div>
+
+        <!-- Right: Chart (5 cols) -->
+        <div class="lg:col-span-5 glass-panel bg-slate-800/50 p-4 rounded-[2rem] shadow-sm border border-white/5 flex items-center justify-between relative overflow-hidden min-h-[350px]">
+             <!-- Left Side: Title & Legend -->
+             <div class="w-1/2 h-full flex flex-col border-r border-white/5 pr-3">
+                 <h4 class="text-lg font-medium text-white tracking-widest mb-4">Dağılım</h4>
+                 <div class="space-y-2 overflow-y-auto custom-scrollbar flex-1" id="chartLegend">
+                     <!-- Legend populated by JS -->
+                 </div>
+             </div>
+
+             <!-- Right Side: Chart -->
+             <div class="w-1/2 h-full relative flex items-center justify-center pl-3">
+                @if (ViewBag.ChartData != null)
+                {
+                    <div class="relative w-full h-full">
+                         <canvas id="productGroupChart"></canvas>
+                         <!-- Center Text -->
+                         <div class="absolute inset-0 flex flex-col items-center justify-center pointer-events-none">
+                             <span class="text-[10px] text-slate-400 font-medium tracking-widest">TOPLAM</span>
+                             <span class="text-xl font-black text-white">@(((decimal)ViewBag.TotalFilteredAmount).ToString("C0"))</span>
+                         </div>
+                    </div>
+                }
+                else
+                {
+                    <div class="text-center text-slate-500">
+                        <i class="bi bi-pie-chart text-4xl mb-2 block"></i>
+                        <span class="text-sm">Görüntülenecek veri bulunamadı</span>
+                    </div>
+                }
+             </div>
+        </div>
+    </div>
+
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <!-- Sipariş Listesi (Full width) -->
+        <div class="lg:col-span-12 glass-panel bg-slate-800/50 rounded-[2rem] shadow-sm border border-white/5 overflow-hidden">
+            <div class="px-6 py-4 border-b border-white/5 flex items-center justify-between">
+                <h4 class="text-sm font-medium text-white tracking-widest">Sipariş Listesi</h4>
+                <span class="text-[10px] text-slate-500 font-bold italic">Varuna CRM</span>
+            </div>
+            <div class="overflow-x-auto max-h-[600px] overflow-y-auto">
+                <table class="w-full text-left">
+                    <thead>
+                        <tr class="bg-slate-800/50 border-b border-white/5">
+                            <th class="px-6 py-3 text-[10px] font-black text-slate-400 tracking-widest">Fatura No</th>
+                            <th class="px-6 py-3 text-[10px] font-black text-slate-400 tracking-widest">Müşteri</th>
+                            <th class="px-6 py-3 text-[10px] font-black text-slate-400 tracking-widest">Tarih</th>
+                            <th class="px-6 py-3 text-[10px] font-black text-slate-400 tracking-widest">Tutar</th>
+                            <th class="px-6 py-3 text-[10px] font-black text-slate-400 tracking-widest">Gecikme Gün</th>
+                            <th class="px-6 py-3 text-[10px] font-black text-slate-400 tracking-widest">Gecikme Faizi</th>
+                            <th class="px-6 py-3 text-[10px] font-black text-slate-400 tracking-widest">Durum</th>
+                            <th class="px-6 py-3 text-[10px] font-black text-slate-400 tracking-widest">Detay</th>
+                        </tr>
+                    </thead>
+                    <tbody class="divide-y divide-white/5">
+                        @if (Model != null && Model.Any())
+                        {
+                            @foreach (var siparis in Model)
+                            {
+                                <tr class="hover:bg-slate-700/50 transition-colors">
+                                    @{
+                                        UniCP.Models.MsK.TBL_FINANS_ONAY approvalRecord = null;
+                                        bool isApproval = false;
+                                        if (ViewBag.ApprovalMap != null)
+                                        {
+                                            var map = ViewBag.ApprovalMap as Dictionary<string, UniCP.Models.MsK.TBL_FINANS_ONAY>;
+                                            if (map != null && !string.IsNullOrEmpty(siparis.OrderId) && map.ContainsKey(siparis.OrderId.Trim()))
+                                            {
+                                                approvalRecord = map[siparis.OrderId.Trim()];
+                                                isApproval = !approvalRecord.IsRevoked;
+                                            }
+                                        }
+
+                                        // Determine Status
+                                        bool isApproved = string.Equals(siparis.Durum, "Onaylandı", StringComparison.OrdinalIgnoreCase) || isApproval;
+                                        bool isUnInvoiced = string.IsNullOrEmpty(siparis.SerialNumber);
+
+                                        string statusColor = "bg-blue-500/10 text-white border-blue-500/20"; // Default
+                                        string displayStatus = siparis.Durum ?? "Ödeme Bekleniyor";
+
+                                        if (isUnInvoiced && !isApproved)
+                                        {
+                                            // Uninvoiced and Not Approved -> Force "Onay Bekliyor"
+                                            displayStatus = "Onay Bekliyor";
+                                            statusColor = "bg-amber-500/10 text-white border-amber-500/20";
+                                        }
+                                        else if (isApproved)
+                                        {
+                                            // Approved (either from DB or Override)
+                                            displayStatus = "Onaylandı";
+                                            statusColor = "bg-emerald-500/10 text-white border-emerald-500/20";
+                                        }
+                                        else if ((siparis.Durum ?? "").Contains("Tahsil"))
+                                        {
+                                            statusColor = "bg-indigo-500/10 text-white border-indigo-500/20";
+                                        }
+
+                                        // Override for "Ödeme Bekleniyor" -> Red
+                                        if (displayStatus == "Ödeme Bekleniyor")
+                                        {
+                                            statusColor = "bg-red-500/10 text-white border-red-500/20";
+                                        }
+                                        
+                                        // Assign Back for UI Logic downstream if needed
+                                        siparis.Durum = displayStatus;
+
+                                        var culture = new System.Globalization.CultureInfo("tr-TR");
+                                        var formattedStatus = culture.TextInfo.ToTitleCase(displayStatus.ToLower(culture));
+                                    }
+                                    <td class="px-6 py-4">
+                                        <span class="text-[11px] text-white">@siparis.SerialNumber</span>
+                                    </td>
+                                    <td class="px-6 py-4">
+                                        <span class="text-[10px] text-slate-300">@siparis.AccountTitle</span>
+                                    </td>
+                                    <td class="px-6 py-4">
+                                        <span class="text-[10px] text-slate-400">@siparis.CreateOrderDate?.ToString("dd.MM.yyyy")</span>
+                                    </td>
+                                    <td class="px-6 py-4">
+                                        <span class="text-[11px] font-bold text-emerald-400">@((siparis.TotalNetAmount ?? 0).ToString("C2"))</span>
+                                    </td>
+                                    <td class="px-6 py-4">
+                                        <span class="text-[11px] text-slate-300">-</span>
+                                    </td>
+                                    <td class="px-6 py-4">
+                                        <span class="text-[11px] text-slate-300">-</span>
+                                    </td>
+                                    <td class="px-6 py-4 whitespace-nowrap">
+                                        <span class="js-status-badge px-2.5 py-1 rounded-lg text-xs font-medium border @statusColor backdrop-blur-md shadow-sm">
+                                            @formattedStatus
+                                        </span>
+                                    </td>
+                                    <td class="px-6 py-4">
+                                        <div class="flex items-center gap-2">
+                                            <button onclick="viewOrderDetails('@siparis.OrderId')" class="px-3 py-1 bg-indigo-500/10 text-indigo-400 text-[10px] font-bold rounded-lg border border-indigo-500/20 hover:bg-indigo-500/20 transition-all">
+                                                <i class="bi bi-eye"></i> Görüntüle
+                                            </button>
+                                            @if (isUnInvoiced || isApproved)
+                                            {
+                                                var btnAction = isApproved ? "revoke" : "approve";
+                                                var btnText = isApproved ? "Geri Al" : "Onayla";
+                                                var btnIcon = isApproved ? "bi-arrow-counterclockwise" : "bi-check-lg";
+                                                var btnClasses = isApproved 
+                                                    ? "bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/20 shadow-rose-500/10" 
+                                                    : "bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20 shadow-emerald-500/10";
+
+                                                <button onclick="toggleApproval(this, '@siparis.OrderId', '@btnAction')" 
+                                                        class="js-approval-btn px-3 py-1 @btnClasses text-[10px] font-bold rounded-lg border transition-all shadow-lg">
+                                                    <i class="bi @btnIcon"></i> @btnText
+                                                </button>
+                                            }
+                                        </div>
+                                    </td>
+                                </tr>
+                            }
+                        }
+                        else
+                        {
+                            <tr>
+                                <td colspan="6" class="px-6 py-12 text-center">
+                                    <div class="flex flex-col items-center justify-center space-y-3">
+                                        <div class="w-16 h-16 bg-slate-800 rounded-full flex items-center justify-center">
+                                            <i class="bi bi-cart-x text-3xl text-slate-600"></i>
+                                        </div>
+                                        <p class="text-slate-500 text-sm font-normal">Henüz sipariş bulunmuyor</p>
+                                    </div>
+                                </td>
+                            </tr>
+                        }
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- PO Entry Modal -->
+<div id="poModal" class="fixed inset-0 bg-black/80 backdrop-blur-sm z-[60] hidden flex items-center justify-center p-4">
+    @Html.AntiForgeryToken()
+    <div class="glass-panel bg-slate-900 rounded-2xl shadow-2xl border border-white/10 w-full max-w-sm overflow-hidden transform transition-all scale-100">
+        <div class="p-5">
+            <h3 class="text-lg font-semibold text-white mb-2">PO Numarası Giriniz</h3>
+            <p class="text-xs text-slate-400 mb-4">Bu sipariş için opsiyonel olarak bir satın alma (PO) numarası girebilirsiniz.</p>
+            
+            <input type="hidden" id="poOrderId" />
+            <input type="text" id="poInput" class="w-full bg-slate-800 border border-slate-700 rounded-xl px-4 py-2.5 text-sm text-white focus:outline-none focus:border-indigo-500 transition-colors" placeholder="PO-12345..." autofocus />
+            
+            <div class="flex justify-end gap-3 mt-6">
+                <button onclick="closePOModal()" class="px-4 py-2 text-xs font-bold text-slate-400 hover:text-white transition-colors">
+                    İptal
+                </button>
+                <button onclick="submitPO()" class="px-4 py-2 bg-emerald-600 hover:bg-emerald-500 text-white text-xs font-bold rounded-xl shadow-lg shadow-emerald-600/20 transition-all">
+                    Kaydet ve Onayla
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // --- Chart.js Implementation ---
+    // --- Chart.js Implementation for HTMX ---
+    // Store chart instance to destroy it before re-creating
+    window.productChartInstance = null;
+
+    function initProductChart() {
+        const ctx = document.getElementById('productGroupChart');
+        if (!ctx) return;
+
+        // Destroy existing instance if any
+        if (window.productChartInstance) {
+            window.productChartInstance.destroy();
+            window.productChartInstance = null;
+        }
+
+        // Deserialize Data
+        // Note: In HTMX swap, this script re-runs, so we need fresh data.
+        // We use a safe way to get data that works even if this script block is re-evaluated.
+        const chartData = @Html.Raw(Json.Serialize(ViewBag.ChartData));
+        
+        if (!chartData || !chartData.labels || chartData.labels.length === 0) return;
+
+        // Custom Colors (Vibrant Palette for Dark Mode)
+        const colors = [
+            '#F87171', // Red 400
+            '#60A5FA', // Blue 400
+            '#34D399', // Emerald 400
+            '#FBBF24', // Amber 400
+            '#A78BFA', // Violet 400
+            '#F472B6', // Pink 400
+            '#22D3EE'  // Cyan 400
+        ];
+
+        window.productChartInstance = new Chart(ctx, {
+            type: 'doughnut',
+            data: {
+                labels: chartData.labels,
+                datasets: [{
+                    data: chartData.values,
+                    backgroundColor: colors,
+                    borderWidth: 0,
+                    hoverOffset: 4
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                cutout: '75%',
+                plugins: {
+                    legend: {
+                        display: false // Custom legend
+                    },
+                    tooltip: {
+                        backgroundColor: 'rgba(15, 23, 42, 0.9)',
+                        titleColor: '#e2e8f0',
+                        bodyColor: '#e2e8f0',
+                        borderColor: 'rgba(255, 255, 255, 0.1)',
+                        borderWidth: 1,
+                        padding: 10,
+                        callbacks: {
+                            label: function(context) {
+                                let label = context.label || '';
+                                let value = context.parsed || 0;
+                                let total = context.dataset.data.reduce((a, b) => a + b, 0);
+                                let percentage = ((value / total) * 100).toFixed(1) + '%';
+                                return label + ': ' + new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY' }).format(value) + ' (' + percentage + ')';
+                            }
+                        }
+                    }
+                }
+            },
+            plugins: [{
+                id: 'htmlLegend',
+                afterUpdate: function(chart) {
+                    const container = document.getElementById('chartLegend');
+                    if (!container) return;
+                    container.innerHTML = '';
+                    
+                    const items = chart.options.plugins.legend.labels.generateLabels(chart);
+                    
+                    items.forEach(item => {
+                        const div = document.createElement('div');
+                        div.className = 'flex items-center justify-between text-xs p-1.5 hover:bg-white/5 rounded-lg cursor-pointer transition-colors';
+                        div.onclick = () => {
+                            chart.toggleDataVisibility(item.index);
+                            div.classList.toggle('opacity-50');
+                            chart.update();
+                        };
+                        
+                        const colorDetail = item.fillStyle;
+                        const value = chart.data.datasets[0].data[item.index];
+                        const formattedValue = new Intl.NumberFormat('tr-TR', { style: 'currency', currency: 'TRY', maximumFractionDigits: 0 }).format(value);
+
+                        div.innerHTML = `
+                            <div class="flex items-center gap-2 min-w-0">
+                                <span class="w-2.5 h-2.5 rounded-full flex-shrink-0" style="background-color: ${colorDetail}"></span>
+                                <span class="text-slate-300 font-medium truncate" title="${item.text}">${item.text}</span>
+                            </div>
+                            <span class="text-slate-400 font-bold text-[10px] ml-2 flex-shrink-0">${formattedValue}</span>
+                        `;
+                        container.appendChild(div);
+                    });
+                }
+            }]
+        });
+    }
+
+    // Initialize on Load and HTMX Swap
+    document.addEventListener('DOMContentLoaded', initProductChart);
+    document.body.addEventListener('htmx:afterSwap', function(evt) {
+        // Only init if the swap includes our chart container
+        if (evt.target.querySelector('#productGroupChart') || evt.target.id === 'productGroupChart') {
+            initProductChart();
+        }
+    });
+    // Fallback: If inline script runs after swap, just call it.
+    if (document.readyState === 'complete' || document.readyState === 'interactive') {
+        initProductChart();
+    }
+
+    function toggleActionMenu() {
+        const menu = document.getElementById('actionMenu');
+        menu.classList.toggle('hidden');
+    }
+
+    function sendReconciliation() {
+        // ... existing code ...
+    }
+
+    // Close menu when clicking outside
+    document.addEventListener('click', function(e) {
+        const menu = document.getElementById('actionMenu');
+        const btn = document.querySelector('button[onclick="toggleActionMenu()"]');
+        
+        if (menu && !menu.classList.contains('hidden')) {
+            if (!menu.contains(e.target) && !btn.contains(e.target)) {
+                menu.classList.add('hidden');
+            }
+        }
+    });
+
+    // Deep Linking: Auto-open Order Details if param exists
+    document.addEventListener("DOMContentLoaded", function() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const openOrderId = urlParams.get('openOrder');
+        if (openOrderId) {
+            setTimeout(() => {
+                viewOrderDetails(openOrderId);
+                window.history.replaceState({}, document.title, window.location.pathname);
+            }, 500);
+        }
+    }); 
+
+    // Global Functions (Unified Logic)
+    let activeApprovalBtn = null; // Track which button launched the modal
+
+    function toggleApproval(btn, orderId, action) {
+        if (action === 'approve') {
+            // Open Modal for correct workflow
+            activeApprovalBtn = btn;
+            document.getElementById('poOrderId').value = orderId;
+            document.getElementById('poInput').value = ''; 
+            document.getElementById('poModal').classList.remove('hidden');
+            document.getElementById('poInput').focus();
+        } else {
+            // Revoke immediately
+            handleRevoke(btn, orderId);
+        }
+    }
+
+    function closePOModal() {
+        document.getElementById('poModal').classList.add('hidden');
+        activeApprovalBtn = null;
+    }
+
+    function submitPO() {
+        const orderId = document.getElementById('poOrderId').value;
+        const poNumber = document.getElementById('poInput').value;
+        const btn = activeApprovalBtn;
+
+        // Note: Client-side validation removed to allow empty PO if desired, 
+        // but if strict requirement is needed:
+        // if (!poNumber) { alert('Lütfen PO Numarası giriniz.'); return; }
+
+        const formData = new FormData();
+        formData.append('orderId', orderId);
+        formData.append('poNumber', poNumber);
+        
+        const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
+        if (tokenInput) formData.append('__RequestVerificationToken', tokenInput.value);
+
+        // Optimistic UI Update (Immediate visual feedback on 'Save')
+        if (btn) updateUiState(btn, orderId, 'approved');
+        closePOModal();
+
+        fetch('/Finans/UpdatePO', {
+            method: 'POST',
+            body: formData
+        })
+        .then(async response => {
+             const isJson = response.headers.get('content-type')?.includes('application/json');
+             const data = isJson ? await response.json() : null;
+             if (!response.ok) throw new Error((data && data.message) || response.statusText);
+             return data;
+        })
+        .then(data => {
+            if (!data.success) throw new Error(data.message);
+            console.log(`Order ${orderId} approved successfully.`);
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('İşlem başarısız: ' + error.message);
+            if (btn) updateUiState(btn, orderId, 'revoked'); // Revert on failure
+            setTimeout(() => location.reload(), 1000); 
+        });
+    }
+
+    function handleRevoke(btn, orderId) {
+        // Optimistic UI
+        updateUiState(btn, orderId, 'revoked');
+
+        const formData = new FormData();
+        formData.append('orderId', orderId);
+        
+        const tokenInput = document.querySelector('input[name="__RequestVerificationToken"]');
+        if (tokenInput) formData.append('__RequestVerificationToken', tokenInput.value);
+
+        fetch('/Finans/RevokePO', {
+            method: 'POST',
+            body: formData
+        })
+        .then(async response => {
+             const isJson = response.headers.get('content-type')?.includes('application/json');
+             const data = isJson ? await response.json() : null;
+             if (!response.ok) throw new Error((data && data.message) || response.statusText);
+             return data;
+        })
+        .then(data => {
+            if (!data.success) throw new Error(data.message);
+            console.log(`Order ${orderId} revoked successfully.`);
+        })
+        .catch(error => {
+            console.error('Error:', error);
+            alert('İşlem başarısız: ' + error.message);
+            updateUiState(btn, orderId, 'approved'); // Revert on failure
+            setTimeout(() => location.reload(), 1000); 
+        });
+    }
+
+    // Helper to swap button styles and status badge
+    function updateUiState(btn, orderId, targetState) {
+        if (!btn) return;
+
+        if (targetState === 'approved') {
+            btn.className = "js-approval-btn px-3 py-1 bg-rose-500/10 text-rose-400 border-rose-500/20 hover:bg-rose-500/20 shadow-rose-500/10 text-[10px] font-bold rounded-lg border transition-all shadow-lg";
+            btn.innerHTML = '<i class="bi bi-arrow-counterclockwise"></i> Geri Al';
+            btn.setAttribute('onclick', `toggleApproval(this, '${orderId}', 'revoke')`);
+            
+            const row = btn.closest('tr');
+            if(row) {
+                const badge = row.querySelector('.js-status-badge');
+                if(badge) {
+                    badge.innerHTML = 'Onaylandı';
+                    badge.className = "js-status-badge px-2.5 py-1 rounded-lg text-xs font-medium border bg-emerald-500/10 text-emerald-400 border-emerald-500/20 backdrop-blur-md shadow-sm";
+                }
+            }
+        } else {
+            // Revoked (Pending)
+            btn.className = "js-approval-btn px-3 py-1 bg-emerald-500/10 text-emerald-400 border-emerald-500/20 hover:bg-emerald-500/20 shadow-emerald-500/10 text-[10px] font-bold rounded-lg border transition-all shadow-lg";
+            btn.innerHTML = '<i class="bi bi-check-lg"></i> Onayla';
+            btn.setAttribute('onclick', `toggleApproval(this, '${orderId}', 'approve')`);
+
+            const row = btn.closest('tr');
+            if(row) {
+                const badge = row.querySelector('.js-status-badge');
+                if(badge) {
+                    badge.innerHTML = 'Onay Bekliyor';
+                    badge.className = "js-status-badge px-2.5 py-1 rounded-lg text-xs font-medium border bg-amber-500/10 text-amber-400 border-amber-500/20 backdrop-blur-md shadow-sm";
+                }
+            }
+        }
+    }
+</script>
+
+<!-- Payment Modal -->
+<div id="paymentModal" class="hidden fixed inset-0 z-[100] backdrop-blur-md bg-slate-900/90 transition-all duration-300 flex items-center justify-center p-4">
+    <div class="bg-slate-900 border border-slate-700 w-full max-w-7xl h-[85vh] rounded-2xl shadow-2xl flex overflow-hidden animate-in zoom-in-95 duration-200">
+        
+        <!-- Left Panel: Pending Orders -->
+        <div class="w-1/2 p-8 border-r border-slate-700/50 flex flex-col bg-slate-800/30">
+            <h3 class="text-xl font-bold text-white mb-6 flex items-center gap-2">
+                <i class="bi bi-cart3 text-indigo-500"></i>
+                <span>Sipariş Özeti</span>
+            </h3>
+
+            <!-- Order List Header -->
+            <div class="flex items-center px-4 py-2 bg-slate-800 rounded-t-xl border border-slate-700 text-xs font-bold text-slate-400">
+                <div class="w-8">
+                    <input type="checkbox" id="selectAllPayment" onchange="toggleAllPayment(this)" class="rounded border-slate-600 bg-slate-700/50 text-emerald-500 focus:ring-offset-0 focus:ring-0 cursor-pointer w-4 h-4">
+                </div>
+                <div class="w-32">Fatura No</div>
+                <div class="flex-1">Tarih</div>
+                <div class="w-32 text-right">Tutar</div>
+            </div>
+
+            <!-- Scrollable List -->
+            <div class="flex-1 overflow-y-auto border-x border-b border-slate-700 bg-slate-900/20 rounded-b-xl custom-scrollbar relative">
+                <div id="paymentOrderList" class="divide-y divide-slate-700/50">
+                    <!-- Javascript will populate this -->
+                     @foreach (var item in Model.Where(x => (x.Bekleyen_Bakiye ?? 0) > 0))
+                     {
+                        <div class="flex items-center px-4 py-3 hover:bg-white/5 transition-colors group">
+                            <div class="w-8">
+                                <input type="checkbox" 
+                                       name="paymentItem" 
+                                       value="@item.Bekleyen_Bakiye" 
+                                       data-id="@item.OrderId"
+                                       onchange="calculatePaymentTotal()" 
+                                       class="payment-checkbox rounded border-slate-600 bg-slate-700/50 text-emerald-500 focus:ring-offset-0 focus:ring-0 cursor-pointer w-4 h-4">
+                            </div>
+                            <div class="w-32 text-xs font-mono text-slate-300">@(string.IsNullOrEmpty(item.SerialNumber) ? "-" : item.SerialNumber)</div>
+                            <div class="flex-1 text-xs text-slate-400">@(item.CreateOrderDate?.ToString("dd.MM.yyyy") ?? "-")</div>
+                            <div class="w-32 text-right text-xs font-bold text-emerald-400 font-mono">
+                                @(((decimal)(item.Bekleyen_Bakiye ?? 0)).ToString("C2"))
+                            </div>
+                        </div>
+                     }
+                     @if (!Model.Any(x => (x.Bekleyen_Bakiye ?? 0) > 0))
+                     {
+                         <div class="p-8 text-center text-slate-500 text-sm">
+                             <i class="bi bi-check-circle text-2xl mb-2 block text-emerald-500/50"></i>
+                             Ödenecek bakiyesi olan sipariş bulunamadı.
+                         </div>
+                     }
+                </div>
+            </div>
+
+            <!-- Total Section -->
+            <div class="mt-6 pt-6 border-t border-slate-700/50">
+                <div class="flex justify-between items-center mb-1">
+                    <span class="text-slate-400 text-sm">Ödenecek Toplam Tutar</span>
+                </div>
+                <div class="text-4xl font-bold text-emerald-500 tracking-tight" id="paymentTotalDisplay">
+                    ₺0,00
+                </div>
+            </div>
+
+            <!-- Company Info (Bottom) -->
+            <div class="mt-8 p-4 bg-slate-800/50 rounded-xl border border-white/5">
+                <h4 class="text-xs font-bold text-white mb-3 flex items-center gap-1">
+                    <i class="bi bi-info-circle-fill text-slate-400"></i> Firma Bilgileri
+                </h4>
+                <div class="space-y-2">
+                    <input type="text" readonly value="1234567890" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-300 placeholder-slate-600 focus:outline-none" placeholder="Vergi Numarası / TCN">
+                    <input type="text" readonly value="@ViewBag.SelectedFactory" class="w-full bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-300 placeholder-slate-600 focus:outline-none" placeholder="Firma Ünvanı">
+                </div>
+            </div>
+        </div>
+
+        <!-- Right Panel: Payment Form -->
+        <div class="w-1/2 p-0 bg-slate-900 flex flex-col relative overflow-hidden">
+            <!-- Decorative Elements -->
+            <div class="absolute -top-20 -right-20 w-80 h-80 bg-indigo-600/10 rounded-full blur-3xl pointer-events-none"></div>
+            <div class="absolute bottom-0 left-0 w-64 h-64 bg-blue-600/5 rounded-full blur-3xl pointer-events-none"></div>
+            
+            <!-- Close Button (Fixed Top Right) -->
+            <button onclick="closePaymentModal()" class="absolute top-6 right-6 z-20 text-slate-400 hover:text-white transition-colors bg-slate-800/50 hover:bg-slate-700 p-2 rounded-full w-8 h-8 flex items-center justify-center backdrop-blur-sm">
+                <i class="bi bi-x-lg text-xs"></i>
+            </button>
+
+            <!-- Tabs Header -->
+            <div class="flex border-b border-slate-700/50 bg-slate-800/30 pt-6 px-10 gap-8 relative z-10 backdrop-blur-sm">
+                <button onclick="switchPaymentTab('creditCard')" id="tabBtn_creditCard" class="pb-4 text-sm font-bold text-indigo-400 border-b-2 border-indigo-500 transition-all flex items-center gap-2 hover:text-indigo-300">
+                    <i class="bi bi-credit-card-2-front"></i> Kredi Kartı
+                </button>
+                <button onclick="switchPaymentTab('bankTransfer')" id="tabBtn_bankTransfer" class="pb-4 text-sm font-bold text-slate-500 border-b-2 border-transparent hover:text-slate-300 transition-all flex items-center gap-2">
+                    <i class="bi bi-bank"></i> Banka Havalesi
+                </button>
+            </div>
+
+            <!-- Tab Content: Credit Card -->
+            <form id="tabContent_creditCard" action="/KK/OdemeAl" method="post" class="p-10 flex flex-col flex-1 justify-between transition-all duration-300">
+                @Html.AntiForgeryToken()
+                <input type="hidden" name="tutar" id="hiddenTutar" value="0">
+                <input type="hidden" name="firmaadi" id="hiddenFirmaAdi" value="@ViewBag.SelectedFactory">
+                <input type="hidden" name="ortakfirmakod" id="hiddenOrtakFirmaKod" value="@(ViewBag.SelectedCompanyId ?? 0)">
+                <input type="hidden" name="sipariskodu" id="hiddenSiparisKodu" value="">
+                <input type="hidden" name="kk_kartno" id="hiddenKartNo" value="">
+                <input type="hidden" name="aciklama" id="hiddenAciklama" value="Web Kredi Kartı Ödemesi">
+
+                <div class="space-y-4"> <!-- Reduced gap to fit -->
+                    <div>
+                        <label class="block text-xs font-bold text-slate-400 tracking-wider mb-1.5">Kart üzerindeki isim</label>
+                        <input type="text" name="kk_adsoyad" id="cardName" maxlength="30" class="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder-slate-600" placeholder="AD SOYAD">
+                    </div>
+                    <div>
+                        <label class="block text-xs font-bold text-slate-400 tracking-wider mb-1.5">Kart numarası</label>
+                        <div class="relative">
+                            <input type="text" id="cardNumber" maxlength="19" class="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 text-sm text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder-slate-600 font-mono tracking-widest" placeholder="0000 0000 0000 0000">
+                             <div class="absolute right-3 top-1/2 -translate-y-1/2 flex gap-1">
+                                <i class="bi bi-credit-card text-slate-500 text-lg"></i>
+                             </div>
+                        </div>
+                    </div>
+                    
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="grid grid-cols-2 gap-2">
+                             <div>
+                                <label class="block text-xs font-bold text-slate-400 tracking-wider mb-1.5">Ay</label>
+                                <input type="text" name="kk_ay" id="cardMonth" maxlength="2" class="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-3 py-3 text-center text-sm text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder-slate-600" placeholder="AA">
+                             </div>
+                             <div>
+                                <label class="block text-xs font-bold text-slate-400 tracking-wider mb-1.5">Yıl</label>
+                                <input type="text" name="kk_yil" id="cardYear" maxlength="2" class="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-3 py-3 text-center text-sm text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder-slate-600" placeholder="YY">
+                             </div>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-bold text-slate-400 tracking-wider mb-1.5">CVC / CVV</label>
+                            <input type="text" name="kk_guvenlikkodu" id="cardCvc" maxlength="3" class="w-full bg-slate-800/50 border border-slate-700 rounded-xl px-4 py-3 text-center text-sm text-white focus:ring-2 focus:ring-indigo-500/50 focus:border-indigo-500 outline-none transition-all placeholder-slate-600" placeholder="***">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="mt-auto pt-4 relative z-10">
+                    <!-- Agreement -->
+                    <div class="flex items-start gap-3 mb-5 p-3 rounded-lg border border-white/5 bg-white/5 hover:bg-white/10 transition-colors">
+                        <input type="checkbox" id="agreement" class="mt-0.5 rounded border-slate-600 bg-slate-700 text-indigo-500 focus:ring-indigo-500 focus:ring-offset-0 cursor-pointer w-4 h-4">
+                        <label for="agreement" class="text-xs text-slate-400 select-none cursor-pointer">
+                            <span class="text-indigo-400 font-bold hover:underline">Mesafeli Satış Sözleşmesi</span> ve <span class="text-indigo-400 font-bold hover:underline">KVKK Aydınlatma Metni</span>'ni okudum, onaylıyorum.
+                        </label>
+                    </div>
+
+                    <button type="button" onclick="submitSecurePayment()" class="w-full py-4 bg-indigo-600 hover:bg-indigo-500 text-white rounded-xl font-bold text-lg shadow-lg shadow-indigo-600/20 hover:shadow-indigo-600/40 transition-all flex items-center justify-center gap-3 transform active:scale-[0.98] group">
+                        <i class="bi bi-shield-lock-fill text-indigo-300 group-hover:text-white transition-colors"></i>
+                        <span>Güvenli Ödeme Yap</span>
+                    </button>
+                    
+                    <div class="flex justify-center gap-4 mt-4 opacity-30 grayscale hover:grayscale-0 transition-all duration-500">
+                         <i class="bi bi-credit-card-2-front text-2xl text-slate-400"></i>
+                         <i class="bi bi-wallet2 text-2xl text-slate-400"></i>
+                         <i class="bi bi-shield-check text-2xl text-slate-400"></i>
+                    </div>
+                </div>
+            </form>
+
+            <!-- Tab Content: Bank Transfer -->
+            <div id="tabContent_bankTransfer" class="hidden p-10 flex-col flex-1 h-full overflow-y-auto">
+                <div class="bg-indigo-500/10 border border-indigo-500/20 rounded-xl p-4 mb-6 flex items-start gap-3">
+                    <i class="bi bi-info-circle-fill text-indigo-400 mt-0.5"></i>
+                    <div class="text-xs text-indigo-200">
+                        <p class="font-bold mb-1 text-indigo-300">Bilgilendirme</p>
+                        Lütfen havale/EFT işlemlerinizde açıklama kısmına <strong class="text-white">Sipariş Numarasını</strong> yazmayı unutmayınız.
+                    </div>
+                </div>
+
+                <div class="border border-slate-700 rounded-xl overflow-hidden shadow-sm">
+                    <div class="bg-indigo-600 text-white text-center py-3 text-xs font-bold tracking-wide">
+                        Univera Bilgisayar Sistemleri San. ve Tic. A.Ş.
+                    </div>
+                    <table class="w-full text-xs">
+                        <thead>
+                            <tr class="bg-slate-800 border-b border-slate-700 text-slate-400">
+                                <th class="py-3 px-3 text-left font-bold border-r border-slate-700">Banka</th>
+                                <th class="py-3 px-3 text-left font-bold border-r border-slate-700">Şube</th>
+                                <th class="py-3 px-3 text-left font-bold border-r border-slate-700">Hesap no</th>
+                                <th class="py-3 px-3 text-left font-bold">IBAN</th>
+                            </tr>
+                        </thead>
+                        <tbody class="divide-y divide-slate-700 text-slate-300 bg-slate-900">
+                            <!-- TL -->
+                            <tr class="hover:bg-slate-800/50 transition-colors">
+                                <td class="py-3 px-3 font-extrabold text-rose-500 border-r border-slate-700">ZİRAAT BANKASI</td>
+                                <td class="py-3 px-3 font-medium border-r border-slate-700">İvedik OSB - Ticari</td>
+                                <td class="py-3 px-3 font-mono font-bold text-white border-r border-slate-700">1975007 (TL)</td>
+                                <td class="py-3 px-3 font-mono font-bold text-slate-400 group cursor-pointer hover:text-white transition-colors" onclick="navigator.clipboard.writeText(this.innerText)">
+                                    <span class="opacity-50 select-none mr-1"><i class="bi bi-clipboard"></i></span>
+                                    TR59 0001 0021 0967 0001 9750 07
+                                </td>
+                            </tr>
+                            <!-- EUR -->
+                            <tr class="hover:bg-slate-800/50 transition-colors">
+                                <td class="py-3 px-3 font-extrabold text-rose-500 border-r border-slate-700">ZİRAAT BANKASI</td>
+                                <td class="py-3 px-3 font-medium border-r border-slate-700">İvedik OSB - Ticari</td>
+                                <td class="py-3 px-3 font-mono font-bold text-white border-r border-slate-700">1975008 (EUR)</td>
+                                <td class="py-3 px-3 font-mono font-bold text-slate-400 group cursor-pointer hover:text-white transition-colors">
+                                    <span class="opacity-50 select-none mr-1"><i class="bi bi-clipboard"></i></span>
+                                    TR32 0001 0021 0967 0001 9750 08
+                                </td>
+                            </tr>
+                            <!-- USD -->
+                            <tr class="hover:bg-slate-800/50 transition-colors">
+                                <td class="py-3 px-3 font-extrabold text-rose-500 border-r border-slate-700">ZİRAAT BANKASI</td>
+                                <td class="py-3 px-3 font-medium border-r border-slate-700">İvedik OSB - Ticari</td>
+                                <td class="py-3 px-3 font-mono font-bold text-white border-r border-slate-700">1975009 (USD)</td>
+                                <td class="py-3 px-3 font-mono font-bold text-slate-400 group cursor-pointer hover:text-white transition-colors">
+                                    <span class="opacity-50 select-none mr-1"><i class="bi bi-clipboard"></i></span>
+                                    TR05 0001 0021 0967 0001 9750 09
+                                </td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <div class="mt-auto pt-6">
+                    <button onclick="closePaymentModal()" class="w-full py-4 bg-slate-800 hover:bg-slate-700 text-slate-400 hover:text-white rounded-xl font-bold text-lg transition-all border border-slate-700">
+                        Pencereyi Kapat
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    // Payment Modal Functions
+    function openPaymentModal() {
+        document.getElementById('paymentModal').classList.remove('hidden');
+        document.body.style.overflow = 'hidden'; // Prevent scrolling
+        calculatePaymentTotal(); // Initial calc
+    }
+
+    function closePaymentModal() {
+        document.getElementById('paymentModal').classList.add('hidden');
+        document.body.style.overflow = ''; // Restore scrolling
+    }
+
+    // Close on backdrop click
+    document.getElementById('paymentModal').addEventListener('click', function(e) {
+        if (e.target === this) closePaymentModal();
+    });
+
+    function toggleAllPayment(source) {
+        const checkboxes = document.querySelectorAll('.payment-checkbox');
+        checkboxes.forEach(cb => {
+            cb.checked = source.checked;
+        });
+        calculatePaymentTotal();
+    }
+
+    function calculatePaymentTotal() {
+        let total = 0;
+        const checkboxes = document.querySelectorAll('.payment-checkbox:checked');
+        
+        checkboxes.forEach(cb => {
+            // Re-parsing logic:
+            // 1. Remove thousands separator (dots)
+            // 2. Replace decimal separator (comma) with dot
+            
+            let valStr = cb.value.replace(/\./g, '').replace(',', '.'); // Simplified parsing
+            let val = parseFloat(valStr);
+            if (!isNaN(val)) total += val;
+        });
+
+        const formatter = new Intl.NumberFormat('tr-TR', {
+            style: 'currency',
+            currency: 'TRY',
+            minimumFractionDigits: 2
+        });
+        
+        document.getElementById('paymentTotalDisplay').innerText = formatter.format(total);
+    }
+
+    // Toggle Tabs
+    function switchPaymentTab(tabName) {
+        // Hide all contents
+        document.getElementById('tabContent_creditCard').classList.add('hidden');
+        document.getElementById('tabContent_creditCard').classList.remove('flex');
+        document.getElementById('tabContent_bankTransfer').classList.add('hidden');
+        document.getElementById('tabContent_bankTransfer').classList.remove('flex');
+
+        // Reset Buttons
+        document.getElementById('tabBtn_creditCard').classList.remove('text-emerald-600', 'border-emerald-600');
+        document.getElementById('tabBtn_creditCard').classList.add('text-slate-400', 'border-transparent');
+        
+        document.getElementById('tabBtn_bankTransfer').classList.remove('text-emerald-600', 'border-emerald-600');
+        document.getElementById('tabBtn_bankTransfer').classList.add('text-slate-400', 'border-transparent');
+
+        // Show Active
+        const startClass = tabName === 'creditCard' ? 'justify-between' : 'h-full';
+        
+        const activeContent = document.getElementById('tabContent_' + tabName);
+        activeContent.classList.remove('hidden');
+        activeContent.classList.add('flex');
+
+        // Style Active Button
+        const activeBtn = document.getElementById('tabBtn_' + tabName);
+        activeBtn.classList.remove('text-slate-400', 'border-transparent');
+        activeBtn.classList.add('text-emerald-600', 'border-emerald-600');
+    }
+
+    // Validation Logic
+    document.addEventListener('DOMContentLoaded', function() {
+        const cardName = document.getElementById('cardName');
+        const cardNumber = document.getElementById('cardNumber');
+        const cardMonth = document.getElementById('cardMonth');
+        const cardYear = document.getElementById('cardYear');
+        const cardCvc = document.getElementById('cardCvc');
+
+        if(cardName) {
+            // Name: Max 30 handled by maxlength
+        }
+
+        if(cardNumber) {
+            // Card Number: 4-4-4-4
+            cardNumber.addEventListener('input', function(e) {
+                let value = e.target.value.replace(/\D/g, '').substring(0, 16);
+                let formatted = value.match(/.{1,4}/g)?.join('-') || value;
+                if (value.length > 0 && value.length % 4 === 0 && e.inputType !== 'deleteContentBackward' && value.length < 16) {
+                    // Optimized typing feel - handled by regex above mostly, but regex handles full string
+                }
+                e.target.value = formatted;
+            });
+        }
+
+        if(cardMonth) {
+            // Month: Max 12, Int
+            cardMonth.addEventListener('input', function(e) {
+                let value = e.target.value.replace(/\D/g, '');
+                if (value.length > 2) value = value.substring(0, 2);
+                if (parseInt(value) > 12) value = '12';
+                if (value === '00') value = '01'; 
+                e.target.value = value;
+            });
+        }
+
+        if(cardYear) {
+            // Year: 00-99, Int
+            cardYear.addEventListener('input', function(e) {
+                let value = e.target.value.replace(/\D/g, '');
+                if (value.length > 2) value = value.substring(0, 2);
+                e.target.value = value;
+            });
+        }
+
+        if(cardCvc) {
+             // CVC: 3 digits
+            cardCvc.addEventListener('input', function(e) {
+                let value = e.target.value.replace(/\D/g, '');
+                if (value.length > 3) value = value.substring(0, 3);
+                e.target.value = value;
+            });
+        }
+    });
+
+    function submitSecurePayment() {
+        // Collect checked orders
+        const checkboxes = document.querySelectorAll('.payment-checkbox:checked');
+        if (checkboxes.length === 0) {
+            alert('Lütfen ödenecek en az bir sipariş seçiniz.');
+            return;
+        }
+
+        const ids = [];
+        let total = 0;
+        checkboxes.forEach(cb => {
+            ids.push(cb.getAttribute('data-id'));
+            let valStr = cb.value.replace(/\./g, '').replace(',', '.');
+            let val = parseFloat(valStr);
+            if (!isNaN(val)) total += val;
+        });
+
+        if (total <= 0) {
+            alert('Ödenecek tutar 0 olamaz.');
+            return;
+        }
+
+        // Validate form
+        const agreement = document.getElementById('agreement');
+        if (!agreement || !agreement.checked) {
+            alert('Lütfen Mesafeli Satış Sözleşmesi ve KVKK metnini onaylayınız.');
+            return;
+        }
+
+        const cardName = document.getElementById('cardName').value.trim();
+        const cardNumber = document.getElementById('cardNumber').value.replace(/\s|-/g, '');
+        const cardMonth = document.getElementById('cardMonth').value.trim();
+        const cardYear = document.getElementById('cardYear').value.trim();
+        const cardCvc = document.getElementById('cardCvc').value.trim();
+
+        if (!cardName || !cardNumber || !cardMonth || !cardYear || !cardCvc) {
+            alert('Lütfen tüm kart bilgilerini eksiksiz doldurunuz.');
+            return;
+        }
+
+        if (cardNumber.length < 15) {
+            alert('Geçerli bir kart numarası giriniz.');
+            return;
+        }
+
+        // Setup hidden fields and submit
+        document.getElementById('hiddenSiparisKodu').value = ids.join(',');
+        document.getElementById('hiddenKartNo').value = cardNumber;
+        document.getElementById('hiddenTutar').value = total.toFixed(2).replace('.', ',');
+
+        document.getElementById('tabContent_creditCard').submit();
+    }
+
+</script>
+```

@@ -1,0 +1,415 @@
+﻿@using UniCP.Models.MsK
+@model UniCP.Models.ViewModels.UniveraHomeViewModel
+@using UniCP.Services
+@inject IUrlEncryptionService UrlEncryption
+@{
+    ViewData["Title"] = "Anasayfa";
+    var kullanici = Model.Kullanici;
+    string? encryptedCompanyId = null;
+    if (Model.SelectedCompanyId != null && Model.SelectedCompanyId > 0)
+    {
+        encryptedCompanyId = UrlEncryption.EncryptId(Model.SelectedCompanyId.Value);
+    }
+}
+
+<div class="space-y-8">
+    @if (User.FindFirst("UserType")?.Value == "4")
+    {
+        <div class="mb-6 flex justify-end">
+            <partial name="Partials/_CompanyFilter" />
+        </div>
+    }
+    <!-- Top Row: KPI Cards -->
+    <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <!-- Open Tickets -->
+        <div class="glass-panel bg-slate-800 interactive-card p-6 rounded-2xl flex items-start justify-between group hover:glow-red">
+            <div>
+                <p class="text-xs font-semibold text-slate-400 mb-2">Açık Destek Talepleri</p>
+                <h3 class="text-4xl font-bold text-white">@(Model.OpenTicketsCount)</h3>
+                <p class="text-[11px] text-slate-400 mt-4 leading-relaxed">
+                    <span class="text-red-400 font-bold">@(Model.EscalatedCount) Kritik</span> aksiyon bekliyor
+                </p>
+            </div>
+            <div class="p-3 bg-red-500/10 text-red-500 rounded-xl flex items-center justify-center border border-red-500/20 group-hover:scale-110 transition-transform">
+                <i class="bi bi-life-preserver text-2xl"></i>
+            </div>
+        </div>
+
+        <!-- Progressing Projects -->
+        <div class="glass-panel bg-slate-800 interactive-card p-6 rounded-2xl flex items-start justify-between group hover:glow-purple">
+            <div>
+                <p class="text-xs font-semibold text-slate-400 mb-2">Açık Geliştirme Talepleri</p>
+                <h3 class="text-4xl font-bold text-white">@(Model.OpenDevRequestsCount)</h3>
+                <p class="text-[11px] text-slate-400 mt-4 leading-relaxed">
+                    2 proje <span class="text-emerald-400 font-bold italic">planlanan tarihte</span>
+                </p>
+            </div>
+            <div class="p-3 bg-pink-500/10 text-pink-500 rounded-xl flex items-center justify-center border border-pink-500/20 group-hover:scale-110 transition-transform">
+                <i class="bi bi-briefcase text-2xl"></i>
+            </div>
+        </div>
+
+        <!-- Pending Budget -->
+        <div class="glass-panel bg-slate-800 interactive-card p-6 rounded-2xl flex items-start justify-between group hover:glow-amber">
+            <div>
+                <p class="text-xs font-semibold text-slate-400 mb-2">Bekleyen Talep Eforu</p>
+                @{
+                    decimal effort = Model.PendingBudgetEffort;
+                    decimal cost = effort * 22500;
+                }
+                <h3 class="text-4xl font-bold text-emerald-400">₺@cost.ToKMB()</h3>
+                
+                <div class="mt-4 flex items-center space-x-2">
+                    <span class="text-sm font-bold text-white">@effort.ToString("N1")</span>
+                    <span class="text-[10px] font-bold text-slate-500">A/G lik efor maliyetidir</span>
+                </div>
+            </div>
+            <div class="p-3 bg-orange-500/10 text-orange-500 rounded-xl flex items-center justify-center border border-orange-500/20 group-hover:scale-110 transition-transform">
+                <i class="bi bi-check-circle text-2xl"></i>
+            </div>
+        </div>
+
+        <!-- Support SLA -->
+        <!-- Pending Budget Cost (Replaces Support SLA) -->
+        <div class="glass-panel bg-slate-800 interactive-card p-6 rounded-2xl flex items-start justify-between group hover:glow-emerald">
+            <div>
+                <p class="text-xs font-semibold text-slate-400 mb-2">Onay Bekleyen Bütçe</p>
+                <h3 class="text-4xl font-bold text-white">₺@Model.PendingBudgetCost.ToKMB()</h3>
+                <p class="text-[11px] text-slate-400 mt-4 leading-relaxed">
+                    Onay bekleyen toplam <span class="text-emerald-400 font-bold">fatura tutarı</span>
+                </p>
+            </div>
+            <div class="p-3 bg-emerald-500/10 text-emerald-500 rounded-xl flex items-center justify-center border border-emerald-500/20 group-hover:scale-110 transition-transform">
+                <i class="bi bi-currency-exchange text-2xl"></i>
+            </div>
+        </div>
+    </div>
+
+    <!-- Main Content Area: Charts & Action Items -->
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-8">
+        <!-- SLA Charts (8 cols) -->
+        <div class="lg:col-span-8 glass-panel p-8 rounded-[2rem] overflow-hidden">
+            <div class="flex items-center justify-between mb-8">
+                <h2 class="text-lg font-semibold text-white tracking-tight">Performans Göstergeleri (SLA)</h2>
+                <div class="flex items-center space-x-4">
+                    <div class="flex items-center space-x-1.5">
+                        <div class="w-2.5 h-2.5 rounded-full bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]"></div>
+                        <span class="text-[10px] font-bold text-slate-400">Hedef Üstü</span>
+                    </div>
+                    <div class="flex items-center space-x-1.5">
+                        <div class="w-2.5 h-2.5 rounded-full bg-red-500 shadow-[0_0_10px_rgba(239,68,68,0.5)]"></div>
+                        <span class="text-[10px] font-bold text-slate-400">Hedef Altı</span>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 gap-8">
+                <div class="relative">
+                    <p class="text-center text-[10px] font-bold text-indigo-400 mb-4">Destek Hizmetleri SLA</p>
+                    <div class="h-[240px] relative">
+                        <canvas id="supportSlaChart"></canvas>
+                    </div>
+                </div>
+                <div class="relative">
+                    <p class="text-center text-[10px] font-bold text-blue-400 mb-4">Geliştirme Hizmetleri SLA</p>
+                    <div class="h-[240px] relative">
+                        <canvas id="devSlaChart"></canvas>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Action Waiting (4 cols) -->
+        <div class="lg:col-span-4 flex flex-col space-y-6">
+            <div class="flex items-center space-x-2">
+                <h2 class="text-lg font-semibold text-white tracking-tight">Aksiyon Bekleyenler</h2>
+                <span class="px-2 py-0.5 bg-slate-700 text-slate-300 text-[10px] font-black rounded-full shadow-inner">4</span>
+            </div>
+            
+            <div class="space-y-3 flex-1 overflow-y-auto pr-2 custom-scrollbar">
+                <!-- Action Case 1 -->
+                <!-- Action Case 1 -->
+                <a href="@Url.Action("Index", "Finans", new { filteredCompanyId = encryptedCompanyId })" class="glass-panel interactive-card p-4 rounded-2xl hover:glow-red group block">
+                    <div class="flex items-center space-x-4">
+                        <div class="p-3 bg-red-500/10 text-red-500 rounded-xl group-hover:bg-red-500 group-hover:text-white transition-colors border border-red-500/20">
+                            <i class="bi bi-exclamation-triangle-fill"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h4 class="text-sm font-medium text-white mb-0.5">Fatura Onayı Gerekli</h4>
+                            <p class="text-[10px] text-slate-400 font-medium"><span class="text-red-400 font-bold">@Model.FinancePendingCount</span> adet sipariş fatura onayı bekliyor.</p>
+                        </div>
+                    </div>
+                </a>
+
+                <!-- Action Case 2 -->
+                <a href="@Url.Action("Index", "Lisanslar", new { filteredCompanyId = encryptedCompanyId })" class="glass-panel interactive-card p-4 rounded-2xl hover:glow-amber group block">
+                    <div class="flex items-center space-x-4">
+                        <div class="p-3 bg-amber-500/10 text-amber-500 rounded-xl group-hover:bg-amber-500 group-hover:text-white transition-colors border border-amber-500/20">
+                            <i class="bi bi-file-text-fill"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h4 class="text-sm font-medium text-white mb-0.5">Sözleşme Yenileme</h4>
+                            <p class="text-[10px] text-slate-400 font-medium"><span class="text-amber-400 font-bold">@Model.ExpiredLicenseCount</span> adet lisansın yenileme tarihi geçti.</p>
+                        </div>
+                    </div>
+                </a>
+
+                <!-- Action Case 3 -->
+                <a href="@Url.Action("Index", "Talepler", new { status = "Müşteri UAT", filteredCompanyId = encryptedCompanyId })" class="glass-panel interactive-card p-4 rounded-2xl hover:glow-blue group block">
+                    <div class="flex items-center space-x-4">
+                        <div class="p-3 bg-blue-500/10 text-blue-500 rounded-xl group-hover:bg-blue-500 group-hover:text-white transition-colors border border-blue-500/20">
+                            <i class="bi bi-play-circle-fill"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h4 class="text-sm font-medium text-white mb-0.5">UAT Test Bekliyor</h4>
+                            <p class="text-[10px] text-slate-400 font-medium"><span class="text-blue-400 font-bold">@Model.UatTestCount</span> adet geliştirme talebi test onayınızı bekliyor.</p>
+                        </div>
+                    </div>
+                </a>
+
+                 <!-- Action Case 4 -->
+                <div class="glass-panel interactive-card p-4 rounded-2xl hover:glow-purple group">
+                    <div class="flex items-center space-x-4">
+                        <div class="p-3 bg-purple-500/10 text-purple-500 rounded-xl group-hover:bg-purple-500 group-hover:text-white transition-colors border border-purple-500/20">
+                            <i class="bi bi-chat-text-fill"></i>
+                        </div>
+                        <div class="flex-1 min-w-0">
+                            <h4 class="text-sm font-medium text-white mb-0.5">Memnuniyet Anketi</h4>
+                            <p class="text-[10px] text-slate-400 font-medium">Kapanan REQ-099 talebi için anketinizi tamamlayın.</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script>
+        // Custom Plugin for Line Shadow
+        const lineShadowPlugin = {
+            id: 'lineShadow',
+            beforeDatasetsDraw: (chart) => {
+                if (chart.config.type !== 'line') return;
+                const ctx = chart.ctx;
+                chart.data.datasets.forEach((dataset, i) => {
+                    const meta = chart.getDatasetMeta(i);
+                    if (meta.hidden) return;
+                    ctx.save();
+                    ctx.shadowColor = dataset.borderColor;
+                    ctx.shadowBlur = 10;
+                    ctx.shadowOffsetY = 10;
+                    meta.dataset.draw(ctx);
+                    ctx.restore();
+                });
+            }
+        };
+        Chart.register(lineShadowPlugin);
+
+        // Common Chart Defaults
+        Chart.defaults.font.family = "'Inter', sans-serif";
+        Chart.defaults.font.weight = '600';
+        Chart.defaults.color = '#64748b'; // Slate-500 for chart labels
+
+        // 1. Support SLA Chart with Dynamic Y-Axis
+        const slaHistory = @Html.Raw(Json.Serialize(Model.SlaHistory));
+        // Sort by year and month, then take last 6
+        const sortedSla = slaHistory ? slaHistory.sort((a, b) => (a.yil * 100 + a.ay) - (b.yil * 100 + b.ay)).slice(-6) : [];
+        
+        const slaLabels = sortedSla.map(i => {
+            const month = i.donem.split('-')[1] || i.donem;
+            return month.charAt(0).toUpperCase() + month.slice(1).toLowerCase();
+        });
+        const slaDataPoints = sortedSla.map(i => i.oran);
+        
+        // Calculate dynamic Y-axis range
+        const minSla = Math.min(...slaDataPoints);
+        const maxSla = Math.max(...slaDataPoints);
+        const yAxisMin = Math.max(0, Math.floor(minSla - 2)); 
+        const yAxisMax = Math.min(100, Math.ceil(maxSla + 1));
+
+        new Chart(document.getElementById('supportSlaChart'), {
+            type: 'line',
+            data: {
+                labels: slaLabels,
+                datasets: [{
+                    label: 'SLA Başarım Oranı',
+                    data: slaDataPoints,
+                    borderColor: '#34d399', // Emerald 400
+                    borderWidth: 3,
+                    backgroundColor: (context) => {
+                        const ctx = context.chart.ctx;
+                        const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+                        gradient.addColorStop(0, 'rgba(52, 211, 153, 0.3)');
+                        gradient.addColorStop(1, 'rgba(52, 211, 153, 0)');
+                        return gradient;
+                    },
+                    fill: true,
+                    tension: 0.4,
+                    pointBackgroundColor: '#1a1f37',
+                    pointBorderColor: '#34d399',
+                    pointBorderWidth: 3,
+                    pointRadius: 6,
+                    pointHoverRadius: 10,
+                    pointStyle: 'circle',
+                    pointHoverBackgroundColor: '#34d399',
+                    pointHoverBorderColor: '#fff',
+                    pointHoverBorderWidth: 3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: '#1a1f37',
+                        titleColor: '#fff',
+                        titleFont: { size: 14, weight: 'bold' },
+                        bodyColor: '#34d399',
+                        bodyFont: { size: 13, weight: '600' },
+                        borderColor: '#34d399',
+                        borderWidth: 2,
+                        padding: 12,
+                        displayColors: false,
+                        callbacks: {
+                            title: (context) => `${context[0].label}`,
+                            label: (context) => `SLA: %${context.raw.toFixed(2)}`
+                        }
+                    }
+                },
+                scales: {
+                    x: {
+                        grid: { display: false },
+                        ticks: { color: '#94a3b8', font: { size: 11, weight: '600' }, padding: 8 }
+                    },
+                    y: {
+                        display: true, 
+                        min: yAxisMin,
+                        max: yAxisMax,
+                        grid: { 
+                            borderDash: [5, 5], 
+                            color: 'rgba(255, 255, 255, 0.05)',
+                            drawBorder: false
+                        },
+                        ticks: { 
+                            font: { size: 11, weight: '600' },
+                            color: '#64748b',
+                            callback: v => '%' + v.toFixed(0),
+                            padding: 8
+                        }
+                    }
+                }
+            }
+        });
+
+        // 2. Dev SLA Chart with Dynamic Y-Axis
+        const devSlaData = [95.2, 96.8, 97.1, 98.5, 99.2];
+        const minDevSla = Math.min(...devSlaData);
+        const maxDevSla = Math.max(...devSlaData);
+        const devYAxisMin = Math.max(0, Math.floor(minDevSla - 5));
+        const devYAxisMax = Math.min(100, Math.ceil(maxDevSla + 2));
+
+        new Chart(document.getElementById('devSlaChart'), {
+            type: 'line',
+            data: {
+                labels: slaLabels,
+                datasets: [{
+                    label: 'SLA',
+                    data: devSlaData,
+                    borderColor: '#60a5fa',
+                    borderWidth: 3,
+                    backgroundColor: (context) => {
+                        const ctx = context.chart.ctx;
+                        const gradient = ctx.createLinearGradient(0, 0, 0, 300);
+                        gradient.addColorStop(0, 'rgba(96, 165, 250, 0.3)');
+                        gradient.addColorStop(1, 'rgba(96, 165, 250, 0)');
+                        return gradient;
+                    },
+                    fill: true,
+                    tension: 0.4,
+                    pointBackgroundColor: '#1a1f37',
+                    pointBorderColor: '#60a5fa',
+                    pointBorderWidth: 3,
+                    pointRadius: 6,
+                    pointHoverRadius: 10,
+                    pointStyle: 'circle',
+                    pointHoverBackgroundColor: '#60a5fa',
+                    pointHoverBorderColor: '#fff',
+                    pointHoverBorderWidth: 3
+                }]
+            },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                interaction: {
+                    mode: 'index',
+                    intersect: false
+                },
+                animation: {
+                    duration: 1500,
+                    easing: 'easeInOutQuart'
+                },
+                layout: {
+                    padding: {
+                        left: 10,
+                        right: 10,
+                        top: 10,
+                        bottom: 0
+                    }
+                },
+                plugins: { 
+                    legend: { display: false },
+                    tooltip: {
+                        enabled: true,
+                        backgroundColor: '#1a1f37',
+                        titleColor: '#fff',
+                        titleFont: { size: 14, weight: 'bold' },
+                        bodyColor: '#60a5fa',
+                        bodyFont: { size: 13, weight: '600' },
+                        borderColor: '#60a5fa',
+                        borderWidth: 2,
+                        padding: 12,
+                        displayColors: false,
+                        callbacks: {
+                            title: (context) => `${context[0].label}`,
+                            label: (context) => `SLA: %${context.raw.toFixed(2)}`
+                        }
+                    }
+                },
+                scales: { 
+                    y: { 
+                        display: true, 
+                        min: devYAxisMin,
+                        max: devYAxisMax,
+                        grid: { 
+                            borderDash: [5, 5], 
+                            color: 'rgba(255, 255, 255, 0.05)',
+                            drawBorder: false
+                        },
+                        ticks: { 
+                            font: { size: 11, weight: '600' },
+                            color: '#64748b',
+                            callback: v => '%' + v.toFixed(0),
+                            padding: 8
+                        }
+                    },
+                    x: { 
+                        grid: { display: false },
+                        ticks: { 
+                            font: { size: 11, weight: '600' },
+                            color: '#64748b',
+                            padding: 8
+                        }
+                    }
+                }
+            }
+        });
+    
+    </script>
+}

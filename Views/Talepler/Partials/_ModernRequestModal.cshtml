@@ -1,0 +1,1790 @@
+@using UniCP.Models.Talepler
+@model Request
+
+<div id="requestModal" class="hidden fixed inset-0 bg-[#0F172A]/80 backdrop-blur-md flex items-center justify-center z-[99999]" onclick="closeModal()">
+    <div class="bg-slate-900 rounded-[2.5rem] w-full max-w-6xl h-[92vh] flex flex-col overflow-hidden animate-in zoom-in-95 fade-in duration-500 shadow-[0_20px_100px_-20px_rgba(0,0,0,0.5)] transition-all mx-4 border border-white/5" onclick="event.stopPropagation()">
+        
+        <!-- Header -->
+        <div class="flex shrink-0 items-center justify-between px-10 py-6 border-b border-white/5 bg-slate-900/80 backdrop-blur-xl sticky top-0 z-20">
+            <div class="flex items-center gap-6 flex-1 min-w-0">
+                <div class="p-3 bg-red-500/10 rounded-2xl border border-red-500/20">
+                    <i class="bi bi-briefcase text-red-500 text-2xl"></i>
+                </div>
+                <div class="flex-1">
+                    <h2 id="modalTitle" class="text-xl font-normal text-white tracking-normal">@Model.Title</h2>
+                    <input id="modalEditTitle" class="hidden w-full bg-slate-800 border border-slate-700 rounded-lg px-3 py-1.5 text-white text-lg focus:outline-none focus:border-red-500 placeholder-slate-500" placeholder="Talep Başlığı Giriniz..." />
+                    <div class="flex items-center gap-3 mt-1">
+
+                        <span class="text-[10px] font-normal text-red-400 bg-red-500/10 px-2 py-0.5 rounded-full tracking-widest border border-red-500/20" id="modalId">@Model.Id</span>
+
+                        <span class="w-1 h-1 bg-slate-600 rounded-full"></span>
+                        <p class="text-[10px] font-normal text-slate-400 tracking-widest">Geliştirme Talebi</p>
+                    </div>
+                </div>
+            </div>
+            <div class="flex items-center gap-4">
+                <button id="btnSave" onclick="saveModalChanges()" class="px-6 py-2 bg-red-600 hover:bg-red-700 text-white text-[11px] font-normal tracking-widest rounded-xl shadow-lg shadow-red-900/20 transition-all hover:-translate-y-0.5 active:scale-95 normal-case">
+                    Değişiklikleri Kaydet
+                </button>
+                <button id="btnCreate" onclick="submitCreateRequest()" class="hidden px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white text-[11px] font-normal tracking-widest rounded-xl shadow-lg shadow-emerald-900/20 transition-all hover:-translate-y-0.5 active:scale-95 normal-case">
+                    Talep Oluştur
+                </button>
+                <button onclick="closeModal()" class="p-2 hover:bg-white/5 rounded-xl transition-colors">
+                    <i class="bi bi-x-lg text-slate-400 text-xl"></i>
+                </button>
+            </div>
+        </div>
+
+        <!-- Upper Banner: Process Stepper & Actions -->
+        <div class="px-10 py-8 bg-slate-800/50 border-b border-white/5">
+            <div class="flex items-center justify-between gap-12">
+                <!-- Stepper -->
+                <div class="flex-1 max-w-3xl">
+                    <div class="flex items-center justify-between relative px-2">
+                        <div class="absolute h-1 bg-slate-700 left-0 right-0 top-[14px] -z-10 rounded-full"></div>
+                        <div id="modalProgressLine" class="absolute h-1 bg-red-500 left-0 top-[14px] -z-10 transition-all duration-700 rounded-full shadow-[0_0_10px_rgba(239,68,68,0.5)]" style="width: 0%"></div>
+                        
+                        @{
+                            var steps = new[] { 
+                                new { id = "Analiz", label = "Analiz" },
+                                new { id = "Analiz Onayı", label = "Analiz Onayı" },
+                                new { id = "Bütçe Onayı", label = "Bütçe Onayı" },
+                                new { id = "Geliştirme", label = "Geliştirme" },
+                                new { id = "Proje Testi", label = "Proje Testi" },
+                                new { id = "Müşteri UAT", label = "Müşteri UAT" },
+                                new { id = "Canlıya Geçiş", label = "Canlıya Geçiş" }
+                            };
+                        }
+
+                        @for (int i = 0; i < steps.Length; i++)
+                        {
+                            <div class="relative z-10 flex flex-col items-center gap-3 group cursor-default">
+                                <div class="w-8 h-8 rounded-full bg-slate-800 border-2 border-slate-600 flex items-center justify-center text-[11px] font-normal text-slate-500 transition-all stepper-dot shadow-sm" 
+                                     data-step-id="@steps[i].id" data-index="@i">
+                                    @(i + 1)
+                                </div>
+                                <span class="text-[9px] font-normal tracking-[0.1em] text-slate-500 stepper-label whitespace-nowrap" data-step-id="@steps[i].id">@steps[i].label</span>
+                            </div>
+                        }
+                    </div>
+                </div>
+
+                <!-- Context Actions -->
+                <div id="modalActionsContainer" class="flex flex-shrink-0 items-center justify-end gap-3 z-50">
+                    <!-- Buttons will be injected via JS -->
+                </div>
+            </div>
+        </div>
+
+        <div class="flex flex-1 overflow-hidden">
+            <!-- Left Sidebar Navigation -->
+            <div class="w-24 bg-slate-800/30 border-r border-white/5 flex flex-col items-center py-8 gap-6">
+                <button onclick="switchTab('details')" class="modal-nav-btn active flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-all" data-tab="details">
+                    <i class="bi bi-info-circle text-xl"></i>
+                    <span class="text-[8px] font-normal tracking-widest">Detay</span>
+                </button>
+                <button onclick="switchTab('comments')" class="modal-nav-btn flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-all" data-tab="comments">
+                    <i class="bi bi-chat-text text-xl"></i>
+                    <span class="text-[8px] font-normal tracking-widest">Yorumlar</span>
+                </button>
+                <button onclick="switchTab('files')" class="modal-nav-btn flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-all" data-tab="files">
+                    <i class="bi bi-paperclip text-xl"></i>
+                    <span class="text-[8px] font-normal tracking-widest">Dosyalar</span>
+                </button>
+                <button onclick="switchTab('timeline')" class="modal-nav-btn flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-all" data-tab="timeline">
+                    <i class="bi bi-calendar3 text-xl"></i>
+                    <span class="text-[8px] font-normal tracking-widest">Takvim</span>
+                </button>
+
+                <div class="mt-auto">
+                    <button onclick="switchTab('history')" class="modal-nav-btn flex flex-col items-center gap-1.5 p-3 rounded-2xl transition-all" data-tab="history">
+                        <i class="bi bi-clock-history text-xl"></i>
+                        <span class="text-[8px] font-normal tracking-widest">Geçmiş</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Main Content Area -->
+            <div class="flex-1 flex flex-col min-h-0 bg-[#1e293b]"> <!-- Lighter slate (Slate-800 equivalent/custom) for better contrast -->
+                
+                <!-- Tabs Content Area (Fixed height scrolling) -->
+                <div class="flex-1 overflow-y-auto p-10 min-h-0 scroll-smooth">
+                    
+                    <!-- Detail Tab -->
+                    <div id="tab-details" class="tab-content space-y-8">
+                        <!-- Responsible Person & Progress Row -->
+                        <div class="flex items-center justify-between bg-slate-700/30 p-6 rounded-3xl border border-white/5 mb-8">
+                            <div class="flex items-center gap-5">
+                                <div class="w-14 h-14 shrink-0 rounded-2xl bg-gradient-to-tr from-red-600 to-red-400 flex items-center justify-center text-white font-bold text-xl shadow-lg border-2 border-slate-600" id="modalAssigneeAvatar">
+                                     @(Model.AssignedTo?.FirstOrDefault() ?? 'A')
+                                </div>
+                                <div class="flex flex-col">
+                                    <p class="text-[10px] font-normal text-red-400 tracking-[0.2em] mb-1">Talep Sorumlusu</p>
+                                    <h4 class="text-base font-normal text-white" id="modalPropAssignedTo">@Model.AssignedTo</h4>
+                                    
+                                    <!-- User Multi-Select -->
+                                    <div id="modalEditAssigneesContainer" class="hidden relative w-full max-w-sm mt-1">
+                                         <div class="flex flex-wrap gap-2 p-2 bg-slate-800 border border-slate-700 rounded-lg min-h-[42px] cursor-text" onclick="focusUserSearch()">
+                                             <div id="selectedUsers" class="flex flex-wrap gap-2"></div>
+                                             <input type="text" id="userSearchInput" class="bg-transparent border-none outline-none text-white text-sm min-w-[100px] flex-1" placeholder="Kişi ara..." oninput="searchUsers(this.value)" />
+                                         </div>
+                                         <div id="userDropdown" class="hidden absolute top-full left-0 right-0 mt-1 max-h-48 overflow-y-auto bg-slate-800 border border-slate-700 rounded-lg shadow-xl z-50">
+                                             <!-- Users injected here -->
+                                         </div>
+                                    </div>
+                                    
+                                    <p class="text-xs font-normal text-slate-400 mt-2 max-w-lg leading-relaxed" id="modalPropDescription">@Model.Description</p>
+                                    <textarea id="modalEditDescription" class="hidden w-full h-32 mt-2 bg-slate-800 border border-slate-700 rounded-lg px-3 py-2 text-sm text-white focus:outline-none focus:border-red-500 placeholder-slate-500 resize-none" placeholder="Talep detaylarını ve beklentilerinizi buraya yazınız..."></textarea>
+                                    <p class="text-[10px] text-slate-500 mt-1" id="modalPropDate">@Model.Date</p>
+                                </div>
+                            </div>
+
+                            <div class="flex items-center gap-8">
+                                    <p class="text-[10px] font-normal text-slate-400 tracking-widest mb-1">Tamamlanma</p>
+                                    <p class="text-lg font-medium text-white"><span id="modalPropProgress">@Model.Progress</span>%</p>
+                                <div class="w-48 h-2 bg-slate-800/80 rounded-full overflow-hidden border border-white/10 shadow-inner relative">
+                                    <div id="modalProgressBar" class="h-full rounded-full transition-all duration-700 ease-out relative overflow-hidden" style="width: @Model.Progress%">
+                                        <!-- Shimmer Animation -->
+                                        <div class="absolute inset-0 bg-gradient-to-r from-transparent via-white/30 to-transparent animate-shimmer"></div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Effort & Cost Row -->
+                        <div class="flex items-center justify-between bg-slate-700/30 p-6 rounded-3xl border border-white/5 mb-8">
+                            <div class="flex items-center gap-8">
+                                <div>
+                                    <p class="text-[10px] font-normal text-blue-400 tracking-[0.2em] mb-1">Kişi/Gün</p>
+                                    <h4 class="text-lg font-normal text-white" id="modalPropEffort">@Model.Effort</h4>
+                                    <input type="number" id="modalEditEffort" class="hidden w-24 bg-slate-800 border border-slate-700 rounded-lg px-2 py-1 text-white text-sm focus:outline-none focus:border-red-500 placeholder-slate-500" placeholder="0" oninput="calculateCost()" />
+                                    <p id="modalVarunaKisiGun" class="hidden text-[10px] font-normal text-purple-400 mt-1"></p>
+                                </div>
+                            </div>
+                            <div class="flex items-center gap-8">
+                                <div class="text-right">
+                                    <p class="text-[10px] font-normal text-emerald-400 tracking-[0.2em] mb-1">Geliştirme Tutarı</p>
+                                    <h4 class="text-lg font-normal text-white" id="modalPropCost">@Model.Cost</h4>
+                                    <input type="text" id="modalEditCost" class="hidden w-32 bg-slate-800/50 border border-slate-700 rounded-lg px-2 py-1 text-emerald-400 text-sm focus:outline-none cursor-not-allowed" placeholder="0 TL" readonly />
+                                </div>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Comments Tab -->
+                    <div id="tab-comments" class="tab-content hidden space-y-8">
+                         <h3 class="text-xl font-semibold text-white flex items-center gap-3">
+                            <div class="p-2 bg-slate-800 rounded-xl"><i class="bi bi-chat-text text-emerald-400"></i></div>
+                            Yorumlar
+                        </h3>
+                        <div class="bg-slate-800/50 p-6 rounded-3xl space-y-4 border border-white/5">
+                            <textarea id="commentTextarea" class="w-full bg-slate-900 border-2 border-slate-700/50 focus:border-emerald-500 min-h-[120px] p-5 rounded-2xl text-sm font-medium text-white transition-all outline-none resize-none shadow-inner" placeholder="Bir yorum bırakın..."></textarea>
+                            <div class="flex justify-end">
+                                <button onclick="sendComment()" class="px-8 py-2.5 bg-emerald-600 text-white text-[11px] font-normal tracking-widest rounded-xl hover:scale-105 shadow-lg shadow-emerald-900/20 transition-all normal-case">Yorum Gönder</button>
+                            </div>
+                        </div>
+                        
+                        <div id="commentsList" class="space-y-4 mt-8">
+                            <!-- Comment items will be rendered here by JS -->
+                            <div class="py-10 text-center border-2 border-dashed border-slate-700/50 rounded-3xl">
+                                <i class="bi bi-chat-square-dots text-4xl text-slate-600 mb-2 block"></i>
+                                <p class="text-xs font-normal text-slate-500 tracking-widest">Henüz yorum yapılmamış</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="tab-files" class="tab-content hidden space-y-8">
+                        <h3 class="text-xl font-semibold text-white flex items-center gap-3">
+                            <div class="p-2 bg-slate-800 rounded-xl"><i class="bi bi-paperclip text-orange-400"></i></div>
+                            Dosyalar
+                        </h3>
+                        <div id="dropZone" class="border-2 border-dashed border-slate-700/50 rounded-3xl p-12 text-center hover:border-red-500/50 hover:bg-red-500/5 transition-all cursor-pointer group relative">
+                            <input type="file" id="fileInput" class="absolute inset-0 w-full h-full opacity-0 cursor-pointer" multiple accept=".pdf,.xslt,.docx,.xls,.xlsx,.doc,.txt,.jpeg,.png" />
+                            <i class="bi bi-cloud-arrow-up text-5xl text-slate-600 group-hover:text-red-500 transition-colors mb-4 block"></i>
+                            <p class="text-sm font-normal text-white tracking-widest">Dosya Yükle</p>
+                            <p class="text-xs text-slate-500 mt-2">Sürükleyip bırakın veya tıklayın</p>
+                        </div>
+
+                        <div id="filesList" class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-8">
+                            <!-- Files will be rendered here -->
+                             <div class="col-span-full py-10 text-center border-2 border-dashed border-slate-700/30 rounded-3xl">
+                                <i class="bi bi-file-earmark-text text-4xl text-slate-700 mb-2 block"></i>
+                                <p class="text-[10px] font-normal text-slate-600 tracking-widest">Henüz dosya yüklenmemiş</p>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Timeline Tab -->
+                    <div id="tab-timeline" class="tab-content hidden space-y-8">
+                        <h3 class="text-xl font-semibold text-white flex items-center gap-3">
+                            <div class="p-2 bg-slate-800 rounded-xl"><i class="bi bi-calendar3 text-blue-400"></i></div>
+                            Proje Takvimi
+                        </h3>
+                        
+                        <!-- Planned Dates Info Banner -->
+                        <div class="bg-indigo-500/5 border border-indigo-500/10 rounded-2xl p-5">
+                            <div class="flex items-center gap-4">
+                                <div class="w-10 h-10 rounded-xl bg-slate-500/10 flex items-center justify-center">
+                                    <i class="bi bi-calendar-event text-slate-400 text-lg"></i>
+                                </div>
+                                <div class="flex-1 grid grid-cols-2 gap-8">
+                                    <div>
+                                        <p class="text-[10px] font-normal text-slate-300/70 tracking-widest mb-1.5">🎯 Hedef UAT Tarihi</p>
+                                        <p class="text-base font-semibold text-white" id="modalTimelineTargetUAT">@Model.PlanlananPyuat</p>
+                                    </div>
+                                    <div>
+                                        <p class="text-[10px] font-normal text-slate-300/70 tracking-widest mb-1.5">🚀 Hedef Canlı Geçiş</p>
+                                        <p class="text-base font-semibold text-white" id="modalTimelineTargetGoLive">@Model.PlanlananCanliTeslim</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- Alternating Timeline with Centered Dots -->
+                        <div class="relative">
+                            <!-- Central Vertical Line -->
+                            <div class="absolute left-1/2 top-0 bottom-0 w-px bg-slate-800 -translate-x-1/2"></div>
+                            
+                            <div class="space-y-8">
+                                <!-- 1. Opening (LEFT - Univera) -->
+                                <div class="relative grid grid-cols-2 gap-0 items-center min-h-[120px]" id="timeline-step-opening">
+                                    <!-- Centered Dot (Absolute to this container) -->
+                                    <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-slate-900 border-2 border-red-500 flex items-center justify-center z-10 shadow-[0_0_10px_rgba(239,68,68,0.3)]">
+                                        <i class="bi bi-check text-red-500 text-xs font-bold"></i>
+                                    </div>
+                                    <!-- Connector Line to Left -->
+                                    <div class="absolute left-1/2 top-1/2 -translate-y-1/2 -translate-x-full w-[calc(50%-1rem)] h-px bg-gradient-to-l from-red-500/30 to-transparent"></div>
+                                    
+                                    <div class="text-right pr-6 h-full flex items-center justify-end">
+                                        <div class="inline-block relative bg-slate-800/30 p-5 rounded-2xl border border-red-500/10 hover:border-red-500/30 transition-all duration-300 group">
+                                            <div class="relative">
+                                                <div class="flex items-center justify-end gap-3 mb-3">
+                                                    <h4 class="text-sm font-normal text-white tracking-wide">Madde Açılışı</h4>
+                                                    <span class="flex items-center justify-center w-5 h-5 rounded-full bg-red-500/10 text-red-400 text-[10px] font-bold">1</span>
+                                                </div>
+                                                <div class="flex items-center justify-end gap-3 mb-2" id="timeline-status-container-opening">
+                                                    <span class="px-2.5 py-0.5 rounded-full bg-red-500/10 border border-red-500/10 text-red-400 text-[10px] font-normal tracking-wider">
+                                                        Tamamlandı
+                                                    </span>
+                                                </div>
+                                                <div class="flex items-center justify-end gap-2 text-slate-400">
+                                                    <p class="text-xs" id="modalTimelineOpenedBy">@Model.AssignedTo tarafından</p>
+                                                    <div class="w-5 h-5 rounded-full bg-slate-700 flex items-center justify-center text-slate-300 text-[9px] font-bold" id="modalTimelineOpenerAvatarText">
+                                                        A
+                                                    </div>
+                                                </div>
+                                                <p class="text-xs font-semibold text-white mt-2 text-right" id="modalTimelineOpening">@Model.Date</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="h-full"></div>
+                                </div>
+                                
+                                <!-- 2. Analysis Approval (RIGHT - Customer) -->
+                                <div class="relative grid grid-cols-2 gap-0 items-center min-h-[120px]" id="timeline-step-analysis">
+                                    <!-- Centered Dot (Absolute to this container) -->
+                                    <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-slate-900 border-2 border-red-500 flex items-center justify-center z-10 shadow-[0_0_10px_rgba(239,68,68,0.3)]">
+                                        <i class="bi bi-check text-red-500 text-xs font-bold"></i>
+                                    </div>
+                                    <!-- Connector Line to Right -->
+                                    <div class="absolute left-1/2 top-1/2 -translate-y-1/2 w-[calc(50%-1rem)] h-px bg-gradient-to-r from-red-500/30 to-transparent"></div>
+                                    
+                                    <div class="h-full"></div>
+                                    <div class="pl-6 h-full flex items-center">
+                                        <div class="inline-block relative bg-slate-800/30 p-5 rounded-2xl border border-red-500/10 hover:border-red-500/30 transition-all duration-300 group">
+                                            <div class="relative">
+                                                <div class="flex items-center gap-3 mb-3">
+                                                    <span class="flex items-center justify-center w-5 h-5 rounded-full bg-red-500/10 text-red-400 text-[10px] font-bold">2</span>
+                                                    <h4 class="text-sm font-normal text-white tracking-wide">Analiz Onayı</h4>
+                                                </div>
+                                                <div class="flex items-center gap-3 mb-2" id="timeline-status-container-analysis">
+                                                    <span class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/10 text-emerald-400 text-[10px] font-normal tracking-wider">
+                                                        <i class="bi bi-check-lg"></i> Onaylandı
+                                                    </span>
+                                                </div>
+                                                <p class="text-xs text-slate-400">Müşteri analiz onayı alındı</p>
+                                                <p class="text-xs font-semibold text-white mt-2" id="modalTimelineAnalysisDate">@Model.LastModifiedDate</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                
+                                <!-- 3. Budget Approval (LEFT - Customer) -->
+                                <div class="relative grid grid-cols-2 gap-0 items-center min-h-[120px]" id="timeline-step-budget">
+                                    <!-- Centered Dot (Absolute to this container) -->
+                                    <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-slate-900 border-2 border-red-500 flex items-center justify-center z-10 shadow-[0_0_10px_rgba(239,68,68,0.3)]">
+                                        <i class="bi bi-check text-red-500 text-xs font-bold"></i>
+                                    </div>
+                                    <!-- Connector Line to Left -->
+                                    <div class="absolute left-1/2 top-1/2 -translate-y-1/2 -translate-x-full w-[calc(50%-1rem)] h-px bg-gradient-to-l from-red-500/30 to-transparent"></div>
+                                    
+                                    <div class="text-right pr-6 h-full flex items-center justify-end">
+                                        <div class="inline-block relative bg-slate-800/30 p-5 rounded-2xl border border-red-500/10 hover:border-red-500/30 transition-all duration-300 group">
+                                            <div class="relative">
+                                                <div class="flex items-center justify-end gap-3 mb-3">
+                                                    <h4 class="text-sm font-normal text-white tracking-wide">Bütçe Onayı</h4>
+                                                    <span class="flex items-center justify-center w-5 h-5 rounded-full bg-red-500/10 text-red-400 text-[10px] font-bold">3</span>
+                                                </div>
+                                                <div class="flex items-center justify-end gap-3 mb-2" id="timeline-status-container-budget">
+                                                    <span class="flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/10 text-emerald-400 text-[10px] font-normal tracking-wider">
+                                                        <i class="bi bi-check-lg"></i> Onaylandı
+                                                    </span>
+                                                </div>
+                                                <p class="text-xs text-slate-400 text-right">Müşteri bütçe onayı alındı</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div class="h-full"></div>
+                                </div>
+                                
+                                <!-- 4. Development (RIGHT - Univera) -->
+                                <div class="relative grid grid-cols-2 gap-0 items-center min-h-[120px]" id="timeline-step-development">
+                                    <!-- Centered Dot (Absolute to this container) -->
+                                    <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 w-6 h-6 rounded-full bg-slate-900 border-2 border-red-500 flex items-center justify-center z-10 shadow-[0_0_10px_rgba(239,68,68,0.3)]">
+                                        <i class="bi bi-arrow-repeat text-red-500 text-xs animate-spin" style="animation-duration: 3s;"></i>
+                                    </div>
+                                    <!-- Connector Line to Right -->
+                                    <div class="absolute left-1/2 top-1/2 -translate-y-1/2 w-[calc(50%-1rem)] h-px bg-gradient-to-r from-red-500/30 to-transparent"></div>
+                                    
+                                    <div class="h-full"></div>
+                                    <div class="pl-6 h-full flex items-center">
+                                        <div class="inline-block relative bg-slate-800/30 p-5 rounded-2xl border border-red-500/10 hover:border-red-500/30 transition-all duration-300 group">
+                                            <div class="relative">
+                                                <div class="flex items-center gap-3 mb-3">
+                                                    <span class="flex items-center justify-center w-5 h-5 rounded-full bg-red-500/10 text-red-400 text-[10px] font-bold">4</span>
+                                                    <h4 class="text-sm font-normal text-white tracking-wide">Geliştirme Süreci</h4>
+                                                </div>
+                                                <div class="flex items-center gap-3 mb-2" id="timeline-status-container-development">
+                                                    <span class="px-2.5 py-0.5 rounded-full bg-red-500/10 border border-red-500/10 text-red-400 text-[10px] font-normal tracking-wider">
+                                                        Devam Ediyor
+                                                    </span>
+                                                </div>
+                                                <p class="text-xs text-slate-400">Personel atandı, geliştirme devam ediyor</p>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <!-- DevOps Status -->
+                        <div class="mt-8 bg-slate-800/40 p-6 rounded-3xl border border-white/5">
+                            <div class="flex items-center gap-4">
+                                <div class="w-12 h-12 rounded-xl bg-slate-600/50 flex items-center justify-center text-slate-300 text-xl border border-slate-500">
+                                    <i class="bi bi-gear-wide-connected"></i>
+                                </div>
+                                <div>
+                                    <p class="text-[9px] font-normal text-slate-400 tracking-wider mb-1">DevOps Durumu</p>
+                                    <p class="text-base font-medium text-white" id="modalTimelineDevOpsStatus">@Model.DevOpsStatus</p>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div id="tab-history" class="tab-content hidden space-y-8">
+                        <h3 class="text-xl font-semibold text-white flex items-center gap-3">
+                            <div class="p-2 bg-slate-800 rounded-xl"><i class="bi bi-clock-history text-blue-400"></i></div>
+                            İşleyiş Geçmişi
+                        </h3>
+                        <div class="relative border-l-2 border-slate-700/50 ml-6 pl-8 space-y-8 py-4">
+                            <!-- Timeline items -->
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Revision Note Modal (Inner) -->
+    <div id="revisionModal" class="hidden absolute inset-0 bg-black/60 backdrop-blur-sm z-[100000] flex items-center justify-center p-4" 
+         onmousedown="onRevisionBackdropMouseDown(event)" 
+         onclick="onRevisionBackdropClick(event)">
+        <div class="bg-slate-900 rounded-3xl border border-white/10 shadow-2xl w-full max-w-lg overflow-hidden animate-in zoom-in-95 duration-200" onclick="event.stopPropagation()">
+            <div class="px-6 py-4 border-b border-white/5 flex items-center justify-between bg-slate-800/50">
+                <h3 id="revisionModalTitle" class="text-lg font-medium text-white flex items-center gap-2">
+                    <i class="bi bi-exclamation-circle text-amber-500"></i>
+                    Revize İsteği
+                </h3>
+                <button onclick="closeRevisionModal()" class="w-8 h-8 rounded-full hover:bg-white/10 flex items-center justify-center text-slate-400 transition-colors">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+            
+            <div class="p-6 space-y-4">
+                <p id="revisionModalDesc" class="text-sm text-slate-400">
+                    Lütfen revize isteme nedeninizi kısaca açıklayınız. Bu not geliştirici ekibine iletilecektir.
+                </p>
+                <textarea id="revisionReasonInput" class="w-full h-32 bg-slate-800 border-2 border-slate-700/50 rounded-xl p-4 text-white text-sm focus:border-amber-500/50 focus:outline-none resize-none placeholder-slate-600 transition-all" placeholder="Örn: Buton rengi yanlış, şu kısımdaki hesaplama hatası..."></textarea>
+            </div>
+
+            <div class="px-6 py-4 bg-slate-800/50 border-t border-white/5 flex justify-end gap-3">
+                <button id="btnCloseRevision" onclick="closeRevisionModal()" class="px-4 py-2 text-xs font-medium text-slate-400 hover:text-white transition-colors">Vazgeç</button>
+                <button id="btnSubmitRevision" onclick="submitRevision()" class="px-6 py-2 bg-amber-600 hover:bg-amber-700 text-white text-xs font-medium rounded-xl transition-all shadow-lg shadow-amber-900/20 active:scale-95">
+                    Revize Gönder
+                </button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+    let currentModalRequest = null;
+    const steps = ["Analiz", "Analiz Onayı", "Bütçe Onayı", "Geliştirme", "Proje Testi", "Müşteri UAT", "Canlıya Geçiş"];
+    
+    // Inject User Identity Logic
+    // Default to 0 (No specific type/visitor) if not found.
+    const currentUserType = @(User.FindFirst("UserType")?.Value ?? "0");
+    console.log("Current User Type:", currentUserType);
+
+    document.addEventListener('DOMContentLoaded', function() {
+        // Event delegation if needed
+    });
+
+    function openModernModal(request) {
+        currentModalRequest = JSON.parse(JSON.stringify(request)); // Deep clone
+        resetModalToViewMode();
+        console.log("Opening Modal for:", currentModalRequest);
+        const modal = document.getElementById('requestModal');
+        
+        // Populate Basic Info
+        document.getElementById('modalTitle').innerText = currentModalRequest.title || "";
+        document.getElementById('modalId').innerText = currentModalRequest.displayId || currentModalRequest.id || "";
+        document.getElementById('modalPropProgress').innerText = currentModalRequest.progress || 0;
+        document.getElementById('modalProgressBar').style.width = (currentModalRequest.progress || 0) + '%';
+        updateProgressBarVisuals(currentModalRequest.progress || 0);
+        document.getElementById('modalPropAssignedTo').innerText = currentModalRequest.assignedTo || "Atanmamış";
+        document.getElementById('modalAssigneeAvatar').innerText = getInitials(currentModalRequest.assignedTo);
+        document.getElementById('modalTimelineOpenerAvatarText').innerText = getInitials(currentModalRequest.assignedTo);
+        document.getElementById('modalPropDescription').innerText = currentModalRequest.description || "Açıklama yok.";
+        document.getElementById('modalPropDate').innerText = currentModalRequest.date || "-";
+
+        // Inject Avatar into Active Status
+        injectTimelineAvatar(currentModalRequest.status, currentModalRequest.assignedTo);
+
+        // Populate Effort & Cost
+        document.getElementById('modalPropEffort').innerText = (currentModalRequest.effort || "-").replace("K/G", "K/ Gün");
+        document.getElementById('modalPropCost').innerText = currentModalRequest.cost || "-";
+        document.getElementById('modalPropCost').innerText = currentModalRequest.cost || "-";
+
+        // Show Varuna K/Gün for user type 3 only
+        const varunaEl = document.getElementById('modalVarunaKisiGun');
+        if (varunaEl) {
+            if (currentUserType == 3 && currentModalRequest.varunaKisiGun) {
+                varunaEl.innerText = 'Varuna K/ Gün: ' + currentModalRequest.varunaKisiGun;
+                varunaEl.classList.remove('hidden');
+            } else {
+                varunaEl.classList.add('hidden');
+            }
+        }
+
+        // Populate Timeline Fields
+        document.getElementById('modalTimelineTargetUAT').innerText = currentModalRequest.planlananPyuat || "-";
+        document.getElementById('modalTimelineTargetGoLive').innerText = currentModalRequest.planlananCanliTeslim || "-";
+        document.getElementById('modalTimelineOpening').innerText = currentModalRequest.date || "-";
+        document.getElementById('modalTimelineOpenedBy').innerText = (currentModalRequest.assignedTo || "Bilinmiyor") + " tarafından";
+        document.getElementById('modalTimelineAnalysisDate').innerText = currentModalRequest.lastModifiedDate || "-";
+        
+        // Optional elements (may not exist in simplified timeline)
+        const uatEl = document.getElementById('modalTimelineUAT');
+        if (uatEl) uatEl.innerText = currentModalRequest.gerceklesenPyuat || "-";
+        
+        const goLiveEl = document.getElementById('modalTimelineGoLive');
+        if (goLiveEl) goLiveEl.innerText = currentModalRequest.gerceklesenCanliTeslim || "-";
+        
+        const devOpsEl = document.getElementById('modalTimelineDevOpsStatus');
+        if (devOpsEl) devOpsEl.innerText = currentModalRequest.devOpsStatus || "-";
+
+        renderStepper();
+        renderTimelineStates();
+        renderActionButtons();
+        switchTab('details');
+        renderHistory();
+        renderComments();
+        renderFiles();
+        initFileUpload();
+
+        modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+    }
+
+    function openCreateModal() {
+        try {
+        const modal = document.getElementById('requestModal');
+        
+        // Setup Create Mode
+        document.getElementById('modalTitle').classList.add('hidden');
+        document.getElementById('modalEditTitle').classList.remove('hidden');
+        document.getElementById('modalEditTitle').value = '';
+
+        document.getElementById('modalPropDescription').classList.add('hidden');
+        document.getElementById('modalEditDescription').classList.remove('hidden');
+        document.getElementById('modalEditDescription').value = '';
+        
+        // Show Effort & Cost Inputs
+        document.getElementById('modalPropEffort').classList.add('hidden');
+        document.getElementById('modalEditEffort').classList.remove('hidden');
+        document.getElementById('modalEditEffort').value = '';
+        
+        document.getElementById('modalPropCost').classList.add('hidden');
+        document.getElementById('modalEditCost').classList.remove('hidden');
+        document.getElementById('modalEditCost').classList.remove('hidden');
+        document.getElementById('modalEditCost').value = '0 TL';
+
+        // Show PO Input (Hidden by default, shown here)
+        document.getElementById('modalCreatePoContainer').classList.remove('hidden');
+        document.getElementById('modalEditPo').value = '';
+
+        // Hide View-Mode PO Elements
+        document.getElementById('modalPropPoBadge').classList.add('hidden');
+        document.getElementById('modalUpdatePoContainer').classList.add('hidden');
+
+        // Show Assignee Selector
+        document.getElementById('modalPropAssignedTo').classList.add('hidden');
+        document.getElementById('modalEditAssigneesContainer').classList.remove('hidden');
+        selectedUserIds = [];
+        renderSelectedUsers();
+
+        document.getElementById('btnSave').classList.add('hidden');
+        document.getElementById('btnCreate').classList.remove('hidden');
+
+        // Reset/Hide Props
+        document.getElementById('modalId').innerText = 'YENİ';
+        document.getElementById('modalPropProgress').innerText = '0';
+        document.getElementById('modalProgressBar').style.width = '0%';
+        document.getElementById('modalPropAssignedTo').innerText = '-';
+        document.getElementById('modalAssigneeAvatar').innerText = '+';
+        document.getElementById('modalPropDate').innerText = new Date().toLocaleDateString('tr-TR');
+        
+        // Hide Tabs Content but keep layout structure
+        // Disable Navigation Buttons
+        document.querySelectorAll('.modal-nav-btn').forEach(btn => {
+            if (btn.getAttribute('data-tab') !== 'details') {
+                btn.style.opacity = '0.3';
+                btn.style.pointerEvents = 'none';
+            } else {
+                btn.click(); // Switch to details
+            }
+        });
+
+        // Hide Timeline/Actions
+        document.getElementById('modalActionsContainer').innerHTML = '';
+        
+        if (typeof renderStepperForCreate === 'function') {
+            renderStepperForCreate();
+        } else {
+             console.warn("renderStepperForCreate missing, using default stepper");
+             // Fallback or just ignore
+        }
+
+        modal.classList.remove('hidden');
+        document.body.style.overflow = 'hidden';
+    } catch(e) {
+        console.error("Error opening create modal:", e);
+        alert("Bir hata oluştu: " + e.message);
+    }
+    }
+
+    function renderStepperForCreate() {
+        document.getElementById('modalProgressLine').style.width = '0%';
+        
+        document.querySelectorAll('.stepper-dot').forEach(dot => {
+            const idx = parseInt(dot.getAttribute('data-index'));
+            const dotStepId = dot.getAttribute('data-step-id');
+            const label = document.querySelector(`.stepper-label[data-step-id="${dotStepId}"]`);
+            
+            // Reset to default
+            dot.classList.remove('border-red-500', 'bg-red-500', 'text-white', 'scale-110', 'shadow-[0_0_10px_rgba(239,68,68,0.5)]');
+            dot.classList.add('border-slate-600', 'bg-slate-800', 'text-slate-500');
+             if (label) {
+                label.classList.remove('text-red-500');
+                label.classList.add('text-slate-500');
+            }
+
+            if (idx === 0) { // First step active
+                 dot.classList.add('border-red-500', 'text-red-500', 'scale-110', 'shadow-[0_0_10px_rgba(239,68,68,0.5)]');
+                 dot.classList.remove('text-slate-500', 'border-slate-600');
+                 dot.innerHTML = '1';
+                 if (label) {
+                     label.classList.add('text-red-500');
+                     label.classList.remove('text-slate-500');
+                 }
+            } else {
+                 dot.innerHTML = (idx + 1).toString();
+            }
+        });
+    }
+
+    function resetModalToViewMode() {
+        document.getElementById('modalTitle').classList.remove('hidden');
+        document.getElementById('modalEditTitle').classList.add('hidden');
+
+        document.getElementById('modalPropDescription').classList.remove('hidden');
+        document.getElementById('modalEditDescription').classList.add('hidden');
+
+        document.getElementById('modalPropEffort').classList.remove('hidden');
+        document.getElementById('modalEditEffort').classList.add('hidden');
+
+         document.getElementById('modalPropCost').classList.remove('hidden');
+        document.getElementById('modalEditCost').classList.add('hidden');
+
+        document.getElementById('modalPropAssignedTo').classList.remove('hidden');
+        document.getElementById('modalPropAssignedTo').classList.remove('hidden');
+        document.getElementById('modalEditAssigneesContainer').classList.add('hidden');
+
+
+
+        document.getElementById('btnSave').classList.remove('hidden');
+        document.getElementById('btnCreate').classList.add('hidden');
+
+        document.querySelectorAll('.modal-nav-btn').forEach(btn => {
+            btn.style.opacity = '1';
+            btn.style.pointerEvents = 'auto';
+        });
+    }
+
+    // --- Create Logic Extensions ---
+    
+    function calculateCost() {
+        const effort = parseFloat(document.getElementById('modalEditEffort').value) || 0;
+        const rate = 22500;
+        const cost = effort * rate;
+        document.getElementById('modalEditCost').value = cost.toLocaleString('tr-TR') + ' TL';
+    }
+
+    let selectedUserIds = []; // Stores IDs of selected users
+    let availableUsers = []; // Cache for users
+
+    function focusUserSearch() {
+        document.getElementById('userSearchInput').focus();
+        document.getElementById('userDropdown').classList.remove('hidden');
+        if(availableUsers.length === 0) searchUsers('');
+    }
+    
+    // Close dropdown on click outside
+    document.addEventListener('click', function(e) {
+        const container = document.getElementById('modalEditAssigneesContainer');
+        if (container && !container.contains(e.target)) {
+            document.getElementById('userDropdown').classList.add('hidden');
+        }
+    });
+
+    function searchUsers(query) {
+        fetch(`/Talepler/GetUsers?q=${encodeURIComponent(query)}`)
+        .then(res => res.json())
+        .then(users => {
+            availableUsers = users;
+            renderUserDropdown(users);
+        });
+    }
+
+    function renderUserDropdown(users) {
+        const dropdown = document.getElementById('userDropdown');
+        dropdown.innerHTML = '';
+        if (users.length === 0) {
+            dropdown.innerHTML = '<div class="p-2 text-slate-500 text-xs">Kullanıcı bulunamadı</div>';
+            return;
+        }
+
+        users.forEach(user => {
+            if (selectedUserIds.some(u => u.id === user.id)) return; // Skip selected
+
+            const div = document.createElement('div');
+            div.className = 'p-2 hover:bg-slate-700 cursor-pointer flex items-center gap-2 text-sm text-slate-300';
+            div.innerHTML = `
+                <div class="w-6 h-6 rounded-full bg-slate-600 flex items-center justify-center text-[10px] text-white">
+                    ${getInitials(user.name)}
+                </div>
+                <span>${user.name}</span>
+            `;
+            div.onclick = (e) => {
+                e.stopPropagation();
+                selectUser(user);
+            };
+            dropdown.appendChild(div);
+        });
+    }
+
+
+
+    function selectUser(user) {
+        if (selectedUserIds.length >= 1) return; // Prevent multiple selection
+        selectedUserIds.push(user);
+        renderSelectedUsers();
+        document.getElementById('userSearchInput').value = '';
+        document.getElementById('userDropdown').classList.add('hidden');
+        
+        // Hide input after selection
+        document.getElementById('userSearchInput').classList.add('hidden');
+    }
+
+    function removeUser(userId) {
+        selectedUserIds = selectedUserIds.filter(u => u.id !== userId);
+        renderSelectedUsers();
+        
+        // Show input again
+        document.getElementById('userSearchInput').classList.remove('hidden');
+        document.getElementById('userSearchInput').focus();
+    }
+
+    function renderSelectedUsers() {
+        const container = document.getElementById('selectedUsers');
+        container.innerHTML = '';
+        selectedUserIds.forEach(user => {
+            const tag = document.createElement('div');
+            tag.className = 'flex items-center gap-1 bg-slate-700 text-white text-xs px-2 py-1 rounded-md';
+            tag.innerHTML = `
+                <span>${user.name}</span>
+                <i class="bi bi-x cursor-pointer hover:text-red-400" onclick="removeUser(${user.id})"></i>
+            `;
+            container.appendChild(tag);
+        });
+    }
+
+    function submitCreateRequest() {
+        const title = document.getElementById('modalEditTitle').value;
+        const desc = document.getElementById('modalEditDescription').value;
+        const effort = document.getElementById('modalEditEffort').value;
+        const assignees = selectedUserIds.map(u => u.id).join(',');
+
+        if (!title) {
+            alert('Lütfen bir başlık giriniz.');
+            return;
+        }
+
+        const btn = document.getElementById('btnCreate');
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-hourglass-split animate-spin"></i> Oluşturuluyor...';
+
+        fetch('/Talepler/Create', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `title=${encodeURIComponent(title)}&description=${encodeURIComponent(desc)}&effort=${effort}&assignees=${assignees}`
+        })
+        .then(res => res.json())
+        .then(data => {
+             if (data.success) {
+                 closeModal();
+                 // Refresh page to show new item
+                 window.location.reload();
+             } else {
+                 alert('Hata: ' + data.message);
+                 btn.disabled = false;
+                 btn.innerHTML = originalText;
+             }
+        })
+        .catch(err => {
+            console.error(err);
+            alert('Bir hata oluştu.');
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        });
+    }
+
+    function renderTimelineStates() {
+        const statusMap = {
+            'Analiz': 1,
+            'Analiz Onayı': 2,
+            'Bütçe Onayı': 3,
+            'Geliştirme': 4,
+            'Proje Testi': 5,
+            'Müşteri UAT': 6,
+            'Canlıya Geçiş': 7
+        };
+        
+        // Map current status to step index
+        const currentStatus = currentModalRequest.status;
+        const currentIndex = statusMap[currentStatus] || 1; // Default to 1 (Analiz/Start)
+
+        // Helper to update step visual
+        const updateStep = (id, stepIdx) => {
+            const container = document.getElementById(id);
+            if (!container) return;
+
+            const dot = container.querySelector('.timeline-dot');
+            const dotLarge = container.querySelector('.timeline-dot-large');
+            const line = container.querySelector('.timeline-line');
+            const card = container.querySelector('.timeline-card');
+            const number = container.querySelector('.timeline-number');
+            const statusBadge = container.querySelector('.timeline-status span');
+            const icon = container.querySelector('i');
+
+            // Reset
+            if (card) { card.classList.add('opacity-50'); card.classList.remove('border-red-500/30', 'bg-red-500/5', 'border-emerald-500/30', 'bg-emerald-500/5'); }
+            if (dot) { dot.classList.replace('border-red-500', 'border-slate-700'); dot.classList.replace('bg-red-500', 'bg-slate-900'); }
+            if (line) { line.classList.replace('from-red-500/30', 'from-slate-700/50'); }
+            if (icon) { icon.classList.replace('text-white', 'text-slate-500'); icon.classList.replace('text-red-500', 'text-slate-500'); icon.classList.replace('text-emerald-500', 'text-slate-500'); }
+
+            if (stepIdx < currentIndex) {
+                // Completed
+                if (card) { card.classList.remove('opacity-50'); }
+                if (dot) { dot.classList.replace('border-slate-700', 'border-red-500'); dot.classList.replace('bg-slate-900', 'bg-red-500'); }
+                if (line) { line.classList.replace('from-slate-700/50', 'from-red-500/30'); }
+                if (icon) { icon.classList.replace('text-slate-500', 'text-white'); icon.className = "bi bi-check-lg text-white text-xs font-bold"; }
+                if (number) { number.classList.replace('bg-slate-700', 'bg-red-500/10'); number.classList.replace('text-slate-400', 'text-red-400'); number.innerHTML = '<i class="bi bi-check"></i>'; }
+                if (statusBadge) {
+                   statusBadge.innerHTML = '<i class="bi bi-check-lg"></i> Tamamlandı';
+                   statusBadge.className = 'flex items-center gap-1.5 px-2.5 py-0.5 rounded-full bg-emerald-500/10 border border-emerald-500/10 text-emerald-400 text-[10px] font-normal tracking-wider';
+                }
+            } else if (stepIdx === currentIndex) {
+                // Active
+                if (card) { card.classList.remove('opacity-50'); card.classList.add('border-red-500/30', 'bg-red-500/5'); }
+                if (dot) { dot.classList.replace('border-slate-700', 'border-red-500'); }
+                if (line) { line.classList.replace('from-slate-700/50', 'from-red-500/30'); }
+                if (icon) { icon.classList.replace('text-slate-500', 'text-red-500'); icon.classList.add('animate-spin'); } // Spin only for active if needed, usually arrow-repeat
+                
+                // Specific icons for active state
+                if(stepIdx === 4) icon.className = "bi bi-bug text-red-500 text-xs";
+                if(stepIdx === 5) icon.className = "bi bi-person-check text-red-500 text-xs";
+                if(stepIdx === 6) icon.className = "bi bi-rocket-takeoff text-red-500 text-xl"; // Large dot has larger icon
+
+                if (dotLarge) { dotLarge.classList.replace('border-slate-700', 'border-red-500'); dotLarge.classList.add('shadow-[0_0_20px_rgba(239,68,68,0.4)]'); }
+
+                if (number) { number.classList.replace('bg-slate-700', 'bg-red-500'); number.classList.replace('text-slate-400', 'text-white'); number.innerHTML = stepIdx; }
+                if (statusBadge) {
+                   statusBadge.innerHTML = 'Devam Ediyor';
+                   statusBadge.className = 'px-2.5 py-0.5 rounded-full bg-red-500/10 border border-red-500/10 text-red-400 text-[10px] font-normal tracking-wider';
+                }
+            } else {
+                // Pending
+                // Default state is fine
+            }
+        };
+
+        // Apply to new steps (Analysis, Budget, Dev are static/partially dynamic in HTML, but we can override or just handle the new ones)
+        // Ideally we should make ALL steps dynamic to be consistent, but for now let's focus on the new ones and Dev's dynamic state
+        
+        // Development Step (Index 3)
+        // We need to query this one carefully as it exists in HTML
+        updateStep('timeline-step-development', 3);
+        updateStep('timeline-step-test', 4);
+        updateStep('timeline-step-uat', 5);
+        updateStep('timeline-step-golive', 6);
+    }
+
+    function renderStepper() {
+        // Map TFS statuses to portal workflow stages (same as renderActionButtons)
+        const statusMap = {
+            // TFS English statuses
+            'IN DEVELOPMENT': 'Geliştirme',
+            'DEVELOPMENT': 'Geliştirme',
+            'IN ANALYSIS': 'Analiz',
+            'ANALYSIS': 'Analiz',
+            'BUDGET APPROVAL': 'Bütçe Onayı',
+            'IN BUDGET APPROVAL': 'Bütçe Onayı',
+            'PROJECT TEST': 'Proje Testi',
+            'IN PROJECT TEST': 'Proje Testi',
+            'CUSTOMER UAT': 'Müşteri UAT',
+            'IN CUSTOMER UAT': 'Müşteri UAT',
+            'PRODUCTION': 'Canlıya Geçiş',
+            'IN PRODUCTION': 'Canlıya Geçiş',
+            // Turkish mappings
+            'Analiz': 'Analiz',
+            'Analiz Onayı': 'Analiz Onayı',
+            'Bütçe Onayı': 'Bütçe Onayı',
+            'Geliştirme': 'Geliştirme',
+            'Proje Testi': 'Proje Testi',
+            'Müşteri UAT': 'Müşteri UAT',
+            'Canlıya Geçiş': 'Canlıya Geçiş'
+        };
+        
+        // Map current status to workflow stage
+        const currentStage = statusMap[currentModalRequest.status] || statusMap[currentModalRequest.status?.toUpperCase()] || 'Analiz';
+        
+        const statusToStepId = {
+            "Analiz": "Analiz",
+            "Analiz Onayı": "Analiz Onayı",
+            "Bütçe Onayı": "Bütçe Onayı",
+            "Geliştirme": "Geliştirme",
+            "Proje Testi": "Proje Testi",
+            "Müşteri UAT": "Müşteri UAT",
+            "Canlıya Geçiş": "Canlıya Geçiş"
+        };
+        const currentStepId = statusToStepId[currentStage] || "Analiz";
+        const stepIds = ["Analiz", "Analiz Onayı", "Bütçe Onayı", "Geliştirme", "Proje Testi", "Müşteri UAT", "Canlıya Geçiş"];
+        const stepIndex = stepIds.indexOf(currentStepId);
+        
+        const progressPercent = (stepIndex / (stepIds.length - 1)) * 100;
+        document.getElementById('modalProgressLine').style.width = progressPercent + '%';
+        
+        // Sync Completion Percentage Display
+        const roundedPercent = Math.round(progressPercent);
+        const progressText = document.getElementById('modalPropProgress');
+        const progressBar = document.getElementById('modalProgressBar');
+        
+        if (progressText) progressText.innerText = roundedPercent;
+        if (progressBar) progressBar.style.width = roundedPercent + '%';
+
+        document.querySelectorAll('.stepper-dot').forEach(dot => {
+            const idx = parseInt(dot.getAttribute('data-index'));
+            const dotStepId = dot.getAttribute('data-step-id');
+            const label = document.querySelector(`.stepper-label[data-step-id="${dotStepId}"]`);
+            
+            dot.classList.remove('border-red-500', 'bg-red-500', 'text-white', 'scale-110', 'shadow-[0_0_10px_rgba(239,68,68,0.5)]');
+            dot.classList.add('border-slate-600', 'bg-slate-800', 'text-slate-500');
+            if (label) label.classList.remove('text-red-500');
+            if (label) label.classList.add('text-slate-500');
+
+            if (idx < stepIndex) {
+                 dot.classList.add('border-red-500', 'bg-red-500', 'text-white');
+                 dot.classList.remove('bg-slate-800', 'text-slate-500', 'border-slate-600');
+                 dot.innerHTML = '<i class="bi bi-check-lg"></i>';
+            } else if (idx === stepIndex) {
+                 dot.classList.add('border-red-500', 'text-red-500', 'scale-110', 'shadow-[0_0_10px_rgba(239,68,68,0.5)]');
+                 dot.classList.remove('text-slate-500', 'border-slate-600');
+                 dot.innerHTML = (idx + 1).toString();
+                 if (label) {
+                     label.classList.add('text-red-500');
+                     label.classList.remove('text-slate-500');
+                 }
+            } else {
+                 dot.innerHTML = (idx + 1).toString();
+            }
+        });
+    }
+
+    function renderActionButtons() {
+        const container = document.getElementById('modalActionsContainer');
+        container.innerHTML = '';
+        
+        let buttons = [];
+        const status = currentModalRequest.status;
+        
+        // Map TFS statuses to portal workflow stages
+        const statusMap = {
+            // TFS English statuses
+            'IN DEVELOPMENT': 'Geliştirme',
+            'DEVELOPMENT': 'Geliştirme',
+            'IN ANALYSIS': 'Analiz',
+            'ANALYSIS': 'Analiz',
+            'BUDGET APPROVAL': 'Bütçe Onayı',
+            'IN BUDGET APPROVAL': 'Bütçe Onayı',
+            'PROJECT TEST': 'Proje Testi',
+            'IN PROJECT TEST': 'Proje Testi',
+            'CUSTOMER UAT': 'Müşteri UAT',
+            'IN CUSTOMER UAT': 'Müşteri UAT',
+            'PRODUCTION': 'Canlıya Geçiş',
+            'IN PRODUCTION': 'Canlıya Geçiş',
+            // Turkish mappings
+            'Analiz': 'Analiz',
+            'Analiz Onayı': 'Analiz Onayı',
+            'Bütçe Onayı': 'Bütçe Onayı',
+            'Geliştirme': 'Geliştirme',
+            'Proje Testi': 'Proje Testi',
+            'Müşteri UAT': 'Müşteri UAT',
+            'Canlıya Geçiş': 'Canlıya Geçiş'
+        };
+        
+        const currentStage = statusMap[status] || statusMap[status?.toUpperCase()] || 'Analiz';
+        
+        // Ensure user type is number for comparison
+        const userType = parseInt(currentUserType) || 0;
+
+        if (currentStage === 'Analiz') {
+            buttons.push({ 
+                text: 'Analizi Tamamla', 
+                class: 'bg-blue-600 hover:bg-blue-700 text-white', 
+                icon: 'bi-check-circle', 
+                allowedTypes: [1, 3], // Admin, Univera
+                owner: 'Univera',
+                action: () => {
+                    if (!currentModalRequest.hasFiles) {
+                        alert("Analizi tamamlamak için en az bir doküman yüklemelisiniz.");
+                        switchTab('files'); // Redirect to files tab
+                        return;
+                    }
+                    updateStatus('Analiz Onayı', 'Analiz tamamlandı, analiz onayına sunuldu.');
+                } 
+            });
+        } else if (currentStage === 'Analiz Onayı') {
+             buttons.push({ 
+                 text: 'Analizi Onayla', 
+                 class: 'bg-emerald-600 hover:bg-emerald-700 text-white', 
+                 icon: 'bi-check-all', 
+                 allowedTypes: [1, 3], // Admin, Univera
+                 owner: 'Univera',
+                 action: () => updateStatus('Bütçe Onayı', 'Analiz onaylandı, bütçeye sunuldu.') 
+             });
+        } else if (currentStage === 'Bütçe Onayı') {
+            buttons.push({ 
+                text: 'Reddet', 
+                class: 'bg-slate-800 text-slate-400 hover:bg-slate-700', 
+                icon: 'bi-x-circle', 
+                allowedTypes: [1, 2], // Admin, Customer
+                owner: 'Müşteri',
+                action: () => updateStatus('Analiz', 'Bütçe reddedildi, analize geri gönderildi.') 
+            });
+            buttons.push({ 
+                text: 'Bütçeyi Onayla', 
+                class: 'bg-emerald-600 hover:bg-emerald-700 text-white', 
+                icon: 'bi-check-circle', 
+                allowedTypes: [1, 2], // Admin, Customer
+                owner: 'Müşteri',
+                action: () => updateStatus('Geliştirme', 'Bütçe onaylandı, geliştirme başlatıldı.') 
+            });
+        } else if (currentStage === 'Geliştirme') {
+            buttons.push({ 
+                text: 'Geliştirmeyi Bitir', 
+                class: 'bg-orange-600 hover:bg-orange-700 text-white', 
+                icon: 'bi-code-slash', 
+                allowedTypes: [1, 3], // Admin, Univera
+                owner: 'Univera',
+                action: () => updateStatus('Proje Testi', 'Geliştirme tamamlandı, proje testine geçildi.') 
+            });
+        } else if (currentStage === 'Proje Testi') {
+             // Show Note if exists (Always allowed if visible)
+            if (currentModalRequest.lastRevisionNote) {
+                 buttons.push({ 
+                     text: 'Revize Notu', 
+                     class: 'bg-amber-500/10 text-amber-500 hover:bg-amber-500/20 border border-amber-500/20', 
+                     icon: 'bi-sticky', 
+                     allowedTypes: null, // Public
+                     action: () => showRevisionNote() 
+                 });
+            }
+
+            buttons.push({ 
+                text: 'Test Başarısız', 
+                class: 'bg-red-900/50 text-red-500 hover:bg-red-900/70', 
+                icon: 'bi-bug', 
+                allowedTypes: [1, 3], // Admin, Univera
+                owner: 'Univera',
+                action: () => updateStatus('Geliştirme', 'Testte hata bulundu, geliştirmeye geri gönderildi.') 
+            });
+            buttons.push({ 
+                text: 'UAT\'a Gönder', 
+                class: 'bg-purple-600 hover:bg-purple-700 text-white', 
+                icon: 'bi-send', 
+                allowedTypes: [1, 3], // Admin, Univera
+                owner: 'Univera',
+                action: () => updateStatus('Müşteri UAT', 'Test başarılı, müşteri UAT onayına sunuldu.') 
+            });
+        } else if (currentStage === 'Müşteri UAT') {
+            buttons.push({ 
+                text: 'Revize İste', 
+                class: 'bg-amber-600/20 text-amber-500 hover:bg-amber-600/30', 
+                icon: 'bi-exclamation-circle', 
+                allowedTypes: [1, 2], // Admin, Customer
+                owner: 'Müşteri',
+                action: () => openRevisionModal() 
+            });
+            buttons.push({ 
+                text: 'Canlıya Al', 
+                class: 'bg-emerald-600 hover:bg-emerald-700 text-white', 
+                icon: 'bi-rocket-takeoff', 
+                allowedTypes: [1, 2], // Admin, Customer
+                owner: 'Müşteri',
+                action: () => updateStatus('Canlıya Geçiş', 'Müşteri onayladı, canlıya geçiş yapıldı.') 
+            });
+        } else if (currentStage === 'Canlıya Geçiş') {
+            buttons.push({ 
+                text: 'Süreci Geri Al', 
+                class: 'bg-red-900/50 text-red-500 hover:bg-red-900/70', 
+                icon: 'bi-arrow-counterclockwise', 
+                allowedTypes: [1, 3], // Admin, Univera
+                owner: 'Univera',
+                action: () => updateStatus('Müşteri UAT', 'Canlıdan geri alındı, UAT aşamasına dönüldü.') 
+            });
+            buttons.push({ 
+                text: 'Tamamlandı', 
+                class: 'bg-emerald-600/20 text-emerald-500 cursor-default shadow-none border border-emerald-500/20', 
+                icon: 'bi-check2-all', 
+                allowedTypes: [1, 3], // Admin, Univera (Visual only basically)
+                owner: 'Univera',
+                action: () => {} 
+            });
+        }
+
+        buttons.forEach(btn => {
+            const b = document.createElement('button');
+            const isAllowed = btn.allowedTypes ? btn.allowedTypes.includes(userType) : true;
+            
+            // Base style
+            let btnClass = `px-5 py-2.5 font-normal rounded-xl transition-all text-[11px] tracking-wider flex items-center gap-2 normal-case `;
+
+            if (isAllowed) {
+                // Active configuration
+                btnClass += `${btn.class} shadow-lg hover:scale-105 active:scale-95`;
+                b.onclick = btn.action;
+                
+                // Color overrides (preserved from original code)
+                if (btn.class.includes('bg-orange-600')) b.style.backgroundColor = '#ea580c'; 
+                if (btn.class.includes('bg-blue-600')) b.style.backgroundColor = '#2563eb';   
+                if (btn.class.includes('bg-emerald-600')) b.style.backgroundColor = '#059669'; 
+                if (btn.class.includes('bg-purple-600')) b.style.backgroundColor = '#9333ea';
+
+            } else {
+                // Passive configuration
+                // Remove hover effects from class string (simple approximation)
+                let passiveClass = btn.class.replace(/hover:\S+/g, '').trim();
+                
+                // Add passive styles: Opacity, forbidden cursor, grayscale
+                btnClass += `${passiveClass} opacity-40 cursor-not-allowed grayscale-[0.5] shadow-none`;
+                
+                // Tooltip
+                const ownerName = btn.owner === 'Univera' ? 'Univera personeli' : 'Müşteri yetkilisi';
+                b.setAttribute('title', `Bu işlem ${ownerName} tarafından yapılacaktır`);
+                
+                // Ensure no click action
+                b.onclick = (e) => { e.preventDefault(); e.stopPropagation(); };
+                
+                // Apply background colors for passive state too (dimmed by opacity)
+                if (btn.class.includes('bg-orange-600')) b.style.backgroundColor = '#ea580c'; 
+                if (btn.class.includes('bg-blue-600')) b.style.backgroundColor = '#2563eb';   
+                if (btn.class.includes('bg-emerald-600')) b.style.backgroundColor = '#059669'; 
+                if (btn.class.includes('bg-purple-600')) b.style.backgroundColor = '#9333ea';
+            }
+
+            b.className = btnClass;
+            b.innerHTML = `<i class="bi ${btn.icon}"></i><span>${btn.text}</span>`;
+            
+            container.appendChild(b);
+        });
+    }
+
+    function updateStatus(newStatus, actionDesc) {
+        const progressMap = {
+            'Analiz': 15,
+            'Analiz Onayı': 25,
+            'Bütçe Onayı': 30,
+            'Geliştirme': 50,
+            'Proje Testi': 70,
+            'Müşteri UAT': 85,
+            'Canlıya Geçiş': 100
+        };
+
+        const id = currentModalRequest.id;
+
+        // Disable buttons to prevent double-click
+        const buttons = document.querySelectorAll('#modalActionsContainer button');
+        buttons.forEach(b => {
+             b.classList.add('opacity-50', 'cursor-not-allowed');
+             b.disabled = true;
+        });
+
+        // Auto-save to server
+        fetch('/Talepler/UpdateStatus', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `id=${encodeURIComponent(id)}&status=${encodeURIComponent(newStatus)}`
+        })
+        .then(res => res.json())
+        .then(data => {
+            if(data.success) {
+                console.log("Status auto-saved to server:", newStatus);
+                
+                const historyEntry = {
+                    Id: Date.now().toString(),
+                    User: "Ben", 
+                    Action: actionDesc,
+                    Date: new Date().toLocaleString('tr-TR'),
+                    Type: 'status_change'
+                };
+
+                currentModalRequest.status = newStatus;
+                currentModalRequest.progress = progressMap[newStatus] || currentModalRequest.progress;
+                if (!currentModalRequest.history) currentModalRequest.history = [];
+                currentModalRequest.history.unshift({
+                    id: historyEntry.Id,
+                    user: historyEntry.User,
+                    action: historyEntry.Action,
+                    date: historyEntry.Date,
+                    type: historyEntry.Type
+                });
+
+                // Update UI elements
+                document.getElementById('modalPropProgress').innerText = currentModalRequest.progress;
+                document.getElementById('modalProgressBar').style.width = currentModalRequest.progress + '%';
+                updateProgressBarVisuals(currentModalRequest.progress);
+                
+                renderStepper();
+                renderActionButtons();
+                if (document.querySelector('.modal-nav-btn.active').getAttribute('data-tab') === 'history') {
+                    renderHistory();
+                }
+            } else {
+                alert("Durum güncellenemedi: " + data.message);
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert("Sunucu hatası, durum kaydedilemedi.");
+        });
+    }
+
+    function renderHistory() {
+        const historyContainer = document.querySelector('#tab-history .relative');
+        if (!historyContainer) return;
+        
+        historyContainer.innerHTML = '';
+        const history = currentModalRequest.history || [];
+
+        if (history.length === 0) {
+            historyContainer.innerHTML = '<div class="py-10 text-center"><p class="text-slate-500 text-xs font-normal tracking-widest">Henüz aktivite kaydı yok</p></div>';
+            return;
+        }
+
+        history.forEach((item, index) => {
+            const div = document.createElement('div');
+            div.className = 'relative pl-8 pb-8 last:pb-0';
+            
+            let iconClass = "bi-clock-history bg-slate-800 text-slate-400 border border-slate-700";
+            if (item.type === 'status_change') iconClass = "bi-arrow-repeat bg-blue-500/10 text-blue-400 border border-blue-500/20";
+            if (item.action.includes('onay') || item.action.includes('Canlı')) iconClass = "bi-check-circle bg-emerald-500/10 text-emerald-400 border border-emerald-500/20";
+            if (item.action.includes('red') || item.action.includes('iptal')) iconClass = "bi-x-circle bg-red-500/10 text-red-500 border border-red-500/20";
+
+            // Create safe elements to avoid XSS
+            div.innerHTML = `
+                <div class="absolute -left-[9px] top-1 w-4 h-4 rounded-full bg-slate-900 border-2 border-slate-700 z-10 flex items-center justify-center">
+                    <div class="w-1.5 h-1.5 rounded-full ${item.type === 'status_change' ? 'bg-red-500' : 'bg-slate-500'}"></div>
+                </div>
+                <div class="bg-slate-800/40 p-5 rounded-2xl border border-white/5 group hover:bg-slate-800 transition-all">
+                    <div class="flex items-center justify-between mb-2">
+                        <div class="flex items-center gap-3">
+                            <div class="w-8 h-8 rounded-lg flex items-center justify-center font-black text-xs ${iconClass}">
+                                <i class="bi ${iconClass.split(' ')[0]}"></i>
+                            </div>
+                            <span class="font-normal text-xs text-white tracking-tight history-user"></span>
+                        </div>
+                        <span class="text-[10px] font-bold text-slate-500">${item.date}</span>
+                    </div>
+                    <p class="text-sm font-medium text-slate-300 pl-11 history-action"></p>
+                </div>
+            `;
+            
+            // Safe text assignment
+            div.querySelector('.history-user').textContent = item.user || 'Sistem';
+            div.querySelector('.history-action').textContent = item.action;
+
+            historyContainer.appendChild(div);
+        });
+    }
+
+    function renderComments() {
+        const container = document.getElementById('commentsList');
+        if (!container) return;
+        
+        container.innerHTML = '';
+        const comments = currentModalRequest.comments || [];
+
+        if (comments.length === 0) {
+            container.innerHTML = `
+                <div class="py-10 text-center border-2 border-dashed border-slate-700/50 rounded-3xl">
+                    <i class="bi bi-chat-square-dots text-4xl text-slate-600 mb-2 block"></i>
+                    <p class="text-xs font-normal tracking-widest text-slate-500">Henüz yorum yapılmamış</p>
+                </div>`;
+            return;
+        }
+
+        comments.slice().reverse().forEach(comment => {
+            const div = document.createElement('div');
+            div.className = 'bg-slate-800/40 p-5 rounded-2xl border border-white/5 mb-4 hover:bg-slate-800 hover:shadow-lg transition-all';
+            
+            // Create safe structure
+            div.innerHTML = `
+                <div class="flex items-center justify-between mb-2">
+                    <div class="flex items-center gap-3">
+                        <div class="w-8 h-8 rounded-lg bg-emerald-500/10 flex items-center justify-center font-black text-xs text-emerald-400 comment-avatar">
+                             
+                        </div>
+                        <span class="font-normal text-xs text-white tracking-tight comment-user"></span>
+                    </div>
+                    <span class="text-[10px] font-bold text-slate-500">${comment.date}</span>
+                </div>
+                <p class="text-sm font-medium text-slate-300 pl-11 comment-text"></p>
+            `;
+
+            // Safe text assignment to avoid XSS
+            div.querySelector('.comment-avatar').textContent = comment.user.charAt(0);
+            div.querySelector('.comment-user').textContent = comment.user;
+            div.querySelector('.comment-text').textContent = comment.text;
+
+            container.appendChild(div);
+        });
+    }
+
+    function sendComment() {
+        const textarea = document.getElementById('commentTextarea');
+        const text = textarea.value.trim();
+        if (!text) return;
+
+        const id = currentModalRequest.id;
+
+        fetch('/Talepler/AddComment', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: `id=${encodeURIComponent(id)}&text=${encodeURIComponent(text)}`
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                if (!currentModalRequest.comments) currentModalRequest.comments = [];
+                currentModalRequest.comments.push(data.comment);
+                textarea.value = '';
+                renderComments();
+            } else {
+                alert("Yorum gönderilirken bir hata oluştu.");
+            }
+        })
+        .catch(error => {
+            console.error('Error adding comment:', error);
+            alert("Sunucuyla iletişim kurulurken bir hata oluştu.");
+        });
+    }
+
+    function closeModal() {
+        const modal = document.getElementById('requestModal');
+        modal.classList.add('hidden');
+        document.body.style.overflow = 'auto';
+    }
+
+    function switchTab(tabId) {
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.add('hidden'));
+        document.getElementById('tab-' + tabId).classList.remove('hidden');
+
+        document.querySelectorAll('.modal-nav-btn').forEach(b => b.classList.remove('active'));
+        document.querySelector(`.modal-nav-btn[data-tab="${tabId}"]`).classList.add('active');
+        
+        if (tabId === 'history') renderHistory();
+    }
+
+    function saveModalChanges() {
+        console.log("Saving changes for:", currentModalRequest);
+        
+        const id = currentModalRequest.id;
+        const status = currentModalRequest.status;
+
+        const btn = document.getElementById('btnSave');
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-hourglass-split animate-spin"></i> Kaydediliyor...';
+
+        // Persist to server
+        fetch('/Talepler/UpdateStatus', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/x-www-form-urlencoded',
+            },
+            body: `id=${encodeURIComponent(id)}&status=${encodeURIComponent(status)}`
+        })
+        .then(response => response.json())
+        .then(data => {
+            if (data.success) {
+                console.log("Save successful");
+                closeModal();
+                location.reload(); 
+            } else {
+                alert("Kaydedilirken bir hata oluştu.");
+                btn.disabled = false;
+                btn.innerHTML = originalText;
+            }
+        })
+        .catch(error => {
+            console.error('Error saving:', error);
+            alert("Sunucuyla iletişim kurulurken bir hata oluştu.");
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        });
+    }
+    function updateProgressBarVisuals(percent) {
+        const bar = document.getElementById('modalProgressBar');
+        if (!bar) return;
+
+        let gradientClass = "";
+        let glowColor = "";
+
+        // Logic matching N4B/Index.cshtml
+        if (percent < 50) {
+            bar.className = `h-full rounded-full transition-all duration-700 ease-out relative overflow-hidden bg-gradient-to-r from-red-500 via-pink-500 to-red-400`;
+            glowColor = "rgba(239, 68, 68, 0.5)";
+        } else if (percent < 80) {
+            bar.className = `h-full rounded-full transition-all duration-700 ease-out relative overflow-hidden bg-gradient-to-r from-orange-500 via-amber-400 to-yellow-500`;
+            glowColor = "rgba(251, 146, 60, 0.5)";
+        } else {
+            bar.className = `h-full rounded-full transition-all duration-700 ease-out relative overflow-hidden bg-gradient-to-r from-emerald-500 via-green-400 to-emerald-600`;
+            glowColor = "rgba(16, 185, 129, 0.5)";
+        }
+
+        bar.style.boxShadow = `0 0 15px ${glowColor}, inset 0 1px 0 rgba(255,255,255,0.3)`;
+    }
+
+    // File Upload JS
+    function initFileUpload() {
+        const dropZone = document.getElementById('dropZone');
+        const fileInput = document.getElementById('fileInput');
+
+        if (!dropZone || !fileInput) return;
+
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, e => {
+                e.preventDefault();
+                e.stopPropagation();
+            }, false);
+        });
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.add('bg-red-500/10', 'border-red-500'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.remove('bg-red-500/10', 'border-red-500'), false);
+        });
+
+        dropZone.addEventListener('drop', e => {
+            const dt = e.dataTransfer;
+            const files = dt.files;
+            handleFiles(files);
+        }, false);
+
+        fileInput.addEventListener('change', function() {
+            handleFiles(this.files);
+        });
+    }
+
+    function handleFiles(files) {
+        const allowedExtensions = ['.pdf', '.xslt', '.docx', '.xls', '.xlsx', '.doc', '.txt', '.jpeg', '.png'];
+        const validFiles = [...files].filter(file => {
+            const ext = '.' + file.name.split('.').pop().toLowerCase();
+            if (!allowedExtensions.includes(ext)) {
+                alert(`"${file.name}" dosyası yüklenemedi. Geçersiz uzantı.`);
+                return false;
+            }
+            return true;
+        });
+
+        validFiles.forEach(uploadFile);
+    }
+
+    function uploadFile(file) {
+        const url = '/Talepler/UploadFile';
+        const formData = new FormData();
+        formData.append('file', file);
+        formData.append('id', currentModalRequest.id);
+
+        fetch(url, {
+            method: 'POST',
+            body: formData
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                renderFiles();
+            } else {
+                alert('Dosya yüklenemedi: ' + data.message);
+            }
+        })
+        .catch(() => alert('Yükleme sırasında hata oluştu.'));
+    }
+
+    function renderFiles() {
+        const container = document.getElementById('filesList');
+        if (!container) return;
+
+        fetch('/Talepler/GetFiles?id=' + encodeURIComponent(currentModalRequest.id))
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                currentModalRequest.hasFiles = data.files.length > 0; // Track file existence
+
+                if (data.files.length === 0) {
+                    container.innerHTML = `
+                        <div class="col-span-full py-10 text-center border-2 border-dashed border-slate-700/30 rounded-3xl">
+                            <i class="bi bi-file-earmark-text text-4xl text-slate-700 mb-2 block"></i>
+                            <p class="text-[10px] font-normal text-slate-600 tracking-widest">Henüz dosya yüklenmemiş</p>
+                        </div>`;
+                    return;
+                }
+
+                container.innerHTML = data.files.map(file => `
+                    <div class="bg-slate-800/40 p-4 rounded-2xl border border-white/5 group hover:bg-slate-800 transition-all">
+                        <a href="/Talepler/DownloadFile?id=${file.lngkod}" class="flex items-center gap-4 overflow-hidden flex-1 group/file">
+                            <div class="w-10 h-10 shrink-0 rounded-xl bg-slate-700 flex items-center justify-center text-slate-400 group-hover/file:bg-red-500/20 group-hover/file:text-red-400 transition-all">
+                                <i class="bi bi-file-earmark-arrow-down text-lg"></i>
+                            </div>
+                            <div class="min-w-0">
+                                <p class="text-xs font-medium text-white truncate group-hover/file:text-red-400 transition-colors">${file.fileName}</p>
+                                <p class="text-[9px] text-slate-500 mt-1">${file.date}</p>
+                            </div>
+                        </a>
+                    </div>
+                `).join('');
+            }
+        });
+    }
+
+    function injectTimelineAvatar(status, assignedTo) {
+        // Clear existing avatars
+        document.querySelectorAll('.timeline-avatar-injection').forEach(el => el.remove());
+
+        if (!status) return;
+        
+        // Map status to container ID
+        const statusMap = {
+            'Analiz': 'timeline-status-container-analysis',
+            'Bütçe Onayı': 'timeline-status-container-budget',
+            'Geliştirme': 'timeline-status-container-development',
+            // Default mappings for simplicity (Modify as needed)
+            'Proje Testi': 'timeline-status-container-development',
+            'Müşteri UAT': 'timeline-status-container-development',
+            'Canlıya Geçiş': 'timeline-status-container-development'
+        };
+        
+        // Special Case: "Madde Açılışı" is usually always Step 1, but we might want to show it there if status is brand new?
+        // Usually we track current status.
+        
+        const containerId = statusMap[status] || statusMap[status.replace('IN ', '')] || 'timeline-status-container-analysis';
+        const container = document.getElementById(containerId);
+        
+        if (container) {
+            const initials = getInitials(assignedTo);
+            const avatarHtml = `
+                <div class="timeline-avatar-injection w-6 h-6 rounded-full bg-slate-700 border border-slate-500 flex items-center justify-center text-[10px] text-white font-bold ml-2 shadow-lg animate-in fade-in zoom-in duration-300">
+                    ${initials}
+                </div>
+            `;
+            container.insertAdjacentHTML('beforeend', avatarHtml);
+        }
+    }
+
+    function getInitials(name) {
+        if (!name) return 'A';
+        const parts = name.trim().split(' ');
+        if (parts.length === 1) return parts[0].charAt(0).toUpperCase();
+        // First and Last name initials
+        return (parts[0].charAt(0) + parts[parts.length - 1].charAt(0)).toUpperCase();
+    }
+
+    // --- PO Edit Logic ---
+    function enablePoEdit() {
+        document.getElementById('modalPropPoBadge').classList.add('invisible');
+        const container = document.getElementById('modalUpdatePoContainer');
+        container.classList.remove('hidden');
+        
+        const currentVal = currentModalRequest.po === '-' ? '' : currentModalRequest.po;
+        const input = document.getElementById('modalUpdatePoInput');
+        input.value = currentVal;
+        input.focus();
+    }
+
+    function cancelPoEdit() {
+        document.getElementById('modalPropPoBadge').classList.remove('invisible');
+        document.getElementById('modalUpdatePoContainer').classList.add('hidden');
+    }
+
+    function savePo() {
+        const newVal = document.getElementById('modalUpdatePoInput').value.trim();
+        const id = currentModalRequest.id;
+
+        fetch('/Talepler/UpdatePo', {
+            method: 'POST',
+            headers: {'Content-Type': 'application/x-www-form-urlencoded'},
+            body: `id=${encodeURIComponent(id)}&po=${encodeURIComponent(newVal)}`
+        })
+        .then(r => r.json())
+        .then(d => {
+            if(d.success) {
+                currentModalRequest.po = newVal || '-';
+                
+                // Refresh Badge
+                const poBadge = document.getElementById('modalPropPoBadge');
+                if (newVal) {
+                    poBadge.textContent = newVal;
+                    poBadge.classList.remove('border-dashed', 'text-slate-500', 'bg-transparent');
+                    poBadge.classList.add('bg-slate-700', 'text-slate-300', 'border-slate-600');
+                } else {
+                    poBadge.innerHTML = '<i class="bi bi-plus text-[9px]"></i> PO Ekle';
+                    poBadge.classList.remove('bg-slate-700', 'text-slate-300', 'border-slate-600');
+                    poBadge.classList.add('border-dashed', 'border-slate-600', 'text-slate-500', 'bg-transparent');
+                }
+                
+                cancelPoEdit();
+            } else {
+                alert('Hata: ' + d.message);
+            }
+        });
+    }
+    // --- Revision Logic ---
+    // --- Revision Logic ---
+    let isRevisionBackdropMouseDown = false;
+
+    function onRevisionBackdropMouseDown(event) {
+        event.stopPropagation(); // Prevent bubbling even on mousedown
+        if (event.target === event.currentTarget) {
+            isRevisionBackdropMouseDown = true;
+        } else {
+            isRevisionBackdropMouseDown = false;
+        }
+    }
+
+    function onRevisionBackdropClick(event) {
+        event.stopPropagation(); // CRITICAL: Stop bubbling to parent requestModal
+        
+        if (event.target === event.currentTarget && isRevisionBackdropMouseDown) {
+            closeRevisionModal();
+        }
+        isRevisionBackdropMouseDown = false; // Reset
+    }
+
+    function openRevisionModal() {
+        const modal = document.getElementById('revisionModal');
+        modal.classList.remove('hidden');
+        
+        // Reset to Write Mode
+        document.getElementById('revisionModalTitle').innerHTML = '<i class="bi bi-exclamation-circle text-amber-500"></i> Revize İsteği';
+        document.getElementById('revisionModalDesc').innerText = 'Lütfen revize isteme nedeninizi kısaca açıklayınız. Bu not geliştirici ekibine iletilecektir.';
+        
+        const textarea = document.getElementById('revisionReasonInput');
+        textarea.value = '';
+        textarea.readOnly = false;
+        textarea.classList.remove('opacity-70', 'cursor-not-allowed');
+        textarea.focus();
+
+        document.getElementById('btnSubmitRevision').classList.remove('hidden');
+        document.getElementById('btnCloseRevision').innerText = 'Vazgeç';
+    }
+
+    function showRevisionNote() {
+        if (!currentModalRequest.lastRevisionNote) return;
+
+        const modal = document.getElementById('revisionModal');
+        modal.classList.remove('hidden');
+
+        // Set to Edit Mode
+        // document.getElementById('revisionModalTitle').innerHTML = '<i class="bi bi-pencil-square text-amber-500"></i> Revize Notunu Düzenle';
+        document.getElementById('revisionModalTitle').innerHTML = '<i class="bi bi-sticky text-amber-500"></i> Revize Notu';
+        document.getElementById('revisionModalDesc').innerText = 'Bu talep için girilen son revize notunu düzenleyebilirsiniz:';
+        
+        const textarea = document.getElementById('revisionReasonInput');
+        textarea.value = currentModalRequest.lastRevisionNote;
+        
+        // Make it Editable
+        textarea.readOnly = false;
+        textarea.classList.remove('opacity-70', 'cursor-not-allowed');
+
+        const btn = document.getElementById('btnSubmitRevision');
+        btn.classList.remove('hidden');
+        btn.innerHTML = 'Güncelle';
+        btn.onclick = updateRevisionNote; // Switch handler
+
+        document.getElementById('btnCloseRevision').innerText = 'İptal';
+    }
+
+    function updateRevisionNote() {
+        const reason = document.getElementById('revisionReasonInput').value.trim();
+        if (!reason) {
+            alert("Lütfen bir açıklama giriniz.");
+            return;
+        }
+
+        const btn = document.getElementById('btnSubmitRevision');
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-hourglass-split animate-spin"></i> Güncelleniyor...';
+
+        fetch('/Talepler/UpdateRevisionNote', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `id=${encodeURIComponent(currentModalRequest.id)}&text=${encodeURIComponent(reason)}`
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                // Update local state locally to reflect immediately if we don't reload
+                currentModalRequest.lastRevisionNote = reason; 
+                closeRevisionModal();
+                // Optionally reload to refresh timeline/history if needed, or just alert success
+                alert("Revize notu güncellendi.");
+            } else {
+                 alert("Hata: " + data.message);
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert("Bir hata oluştu.");
+        })
+        .finally(() => {
+             btn.disabled = false;
+             btn.innerHTML = originalText;
+        });
+    }
+
+    function closeRevisionModal() {
+        document.getElementById('revisionModal').classList.add('hidden');
+        // Reset Button Handler to default (just in case)
+        const btn = document.getElementById('btnSubmitRevision');
+        btn.onclick = submitRevision;
+    }
+
+    function submitRevision() {
+        const reason = document.getElementById('revisionReasonInput').value.trim();
+        if (!reason) {
+            alert("Lütfen bir açıklama giriniz.");
+            return;
+        }
+
+        const btn = document.getElementById('btnSubmitRevision');
+        const originalText = btn.innerHTML;
+        btn.disabled = true;
+        btn.innerHTML = '<i class="bi bi-hourglass-split animate-spin"></i> Gönderiliyor...';
+
+        fetch('/Talepler/RequestRevision', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+            body: `id=${encodeURIComponent(currentModalRequest.id)}&reason=${encodeURIComponent(reason)}`
+        })
+        .then(res => res.json())
+        .then(data => {
+            if (data.success) {
+                closeRevisionModal();
+                closeModal();
+                window.location.reload();
+            } else {
+                 alert("Hata: " + data.message);
+                 btn.disabled = false;
+                 btn.innerHTML = originalText;
+            }
+        })
+        .catch(err => {
+            console.error(err);
+            alert("Bir hata oluştu.");
+            btn.disabled = false;
+            btn.innerHTML = originalText;
+        });
+    }
+</script>
+<style>
+    .modal-nav-btn {
+        color: #64748b; /* slate-500 */
+    }
+    .modal-nav-btn.active {
+        background-color: #0f172a; /* slate-900 */
+        color: #f8fafc; /* slate-50 */
+        box-shadow: 0 4px 12px rgba(15, 23, 42, 0.5);
+        border: 1px solid rgba(255,255,255,0.05);
+    }
+    .modal-nav-btn:hover:not(.active) {
+        color: #94a3b8; /* slate-400 */
+        background-color: rgba(15, 23, 42, 0.3);
+    }
+
+    @@keyframes shimmer {
+        0% { transform: translateX(-100%); }
+        100% { transform: translateX(100%); }
+    }
+    .animate-shimmer {
+        animation: shimmer 2s infinite linear;
+    }
+    
+    /* Hide spin buttons for number input */
+    input[type=number]::-webkit-inner-spin-button, 
+    input[type=number]::-webkit-outer-spin-button { 
+        -webkit-appearance: none; 
+        margin: 0; 
+    }
+    input[type=number] {
+        -moz-appearance: textfield;
+    }
+</style>

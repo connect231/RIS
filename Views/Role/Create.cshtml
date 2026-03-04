@@ -1,0 +1,27 @@
+@model UniCP.Models.Kullanici.Role.RoleCreateModel
+
+@{
+    ViewData["Title"] = "Yeni Rol";
+}
+
+<div class="max-w-xl mx-auto glass-panel p-8 rounded-2xl">
+    <h2 class="text-2xl font-bold text-white mb-6">@ViewData["Title"]</h2>
+
+    <form asp-action="Create" method="post" class="space-y-6">
+        <div asp-validation-summary="ModelOnly" class="text-red-400 text-sm bg-red-500/10 p-3 rounded-lg"></div>
+
+        <div class="space-y-2">
+            <label asp-for="RoleAdi" class="text-sm font-medium text-slate-300">Rol Adı</label>
+            <input asp-for="RoleAdi" class="w-full bg-slate-900/50 border border-slate-700 rounded-xl px-4 py-2.5 text-white focus:outline-none focus:border-indigo-500 transition-colors" />
+            <span asp-validation-for="RoleAdi" class="text-xs text-red-400"></span>
+        </div>
+
+        <div class="flex items-center gap-4 pt-4 border-t border-slate-700/50">
+            <button type="submit" class="px-6 py-2.5 bg-indigo-600 hover:bg-indigo-700 text-white rounded-xl transition-colors font-medium">Kaydet</button>
+            <a asp-action="Index" class="px-6 py-2.5 bg-slate-700 hover:bg-slate-600 text-slate-200 rounded-xl transition-colors font-medium">İptal</a>
+        </div>
+    </form>
+</div>
+@section Scripts {
+    <partial name="_ValidationScriptsPartial" />
+}

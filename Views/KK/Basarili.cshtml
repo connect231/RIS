@@ -1,0 +1,72 @@
+﻿@model UniCP.Models.KKModels.sonucmodel
+@{
+    ViewData["Title"] = "Ödeme Başarılı";
+    Layout = "~/Views/Shared/_LayoutMusteri.cshtml";
+    ViewData["HidePageHeader"] = true;
+}
+
+<div class="space-y-6 animate-in fade-in duration-500 flex items-center justify-center min-h-[70vh]">
+    <div class="glass-panel bg-slate-800/50 rounded-[2rem] shadow-2xl border border-emerald-500/20 max-w-lg w-full overflow-hidden relative">
+        <!-- Glow Effect background -->
+        <div class="absolute top-0 left-1/2 -translate-x-1/2 w-64 h-64 bg-emerald-500/10 rounded-full blur-3xl pointer-events-none"></div>
+
+        <div class="p-8 md:p-10 flex flex-col items-center relative z-10 text-center">
+            
+            <!-- Success Icon Animation -->
+            <div class="w-24 h-24 rounded-full bg-emerald-500/10 border border-emerald-500/20 flex items-center justify-center mb-6 animate-[bounce_2s_infinite]">
+                 <i class="bi bi-check-circle-fill text-5xl text-emerald-400"></i>
+            </div>
+
+            <h2 class="text-2xl font-black text-white mb-2">Ödeme Başarılı</h2>
+            <p class="text-sm text-emerald-400 font-medium tracking-wide mb-8">@Model.aciklama</p>
+
+            <!-- Details Card -->
+            <div class="w-full bg-slate-900/50 rounded-2xl p-6 border border-white/5 mb-8">
+                <div class="space-y-4">
+                    <div class="flex justify-between items-center border-b border-white/5 pb-4">
+                        <span class="text-xs font-bold text-slate-400 tracking-wider">Sipariş ID</span>
+                        <span class="text-sm font-medium text-white font-mono bg-white/5 px-2 py-1 rounded">@Model.siparisid</span>
+                    </div>
+                    
+                    <div class="flex justify-between items-center border-b border-white/5 pb-4">
+                        <span class="text-xs font-bold text-slate-400 tracking-wider">Dekont ID</span>
+                        <span class="text-sm font-medium text-white font-mono bg-white/5 px-2 py-1 rounded">
+                            @(string.IsNullOrEmpty(Model.dekontid) ? "-" : Model.dekontid)
+                        </span>
+                    </div>
+                    
+                    <div class="flex justify-between items-center pt-2">
+                        <span class="text-xs font-bold text-slate-400 tracking-wider">Ödenen Tutar</span>
+                        <span class="text-2xl font-black text-emerald-400">
+                             @{
+                                 decimal parsedTutar;
+                                 if (decimal.TryParse(Model.tutar, out parsedTutar))
+                                 {
+                                     @parsedTutar.ToString("C2")
+                                 }
+                                 else
+                                 {
+                                     @Model.tutar
+                                 }
+                             }
+                        </span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Action Buttons -->
+            <div class="flex flex-col sm:flex-row gap-4 w-full justify-center">
+                <a href="@Url.Action("Index", "Finans")" class="px-6 py-4 bg-emerald-600 hover:bg-emerald-500 text-white rounded-xl font-bold text-sm shadow-lg shadow-emerald-600/20 transition-all flex items-center justify-center gap-2 group flex-1">
+                    <i class="bi bi-arrow-left group-hover:-translate-x-1 transition-transform"></i>
+                    Fatura Ekranına Dön
+                </a>
+               
+            </div>
+            
+            <!-- System Notice -->
+             <div class="mt-6 text-[10px] text-slate-500 italic max-w-sm">
+                 Ödeme işleminiz başarıyla kaydedilmiştir. Bir kopyası mail adresinize ve finans departmanına iletilecektir.
+             </div>
+        </div>
+    </div>
+</div>
