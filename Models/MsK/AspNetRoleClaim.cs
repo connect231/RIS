@@ -1,10 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
-namespace UniCP.Models.MsK;
+namespace SOS.Models.MsK;
 
 [Index("RoleId", Name = "IX_AspNetRoleClaims_RoleId")]
 public partial class AspNetRoleClaim
@@ -22,3 +22,4 @@ public partial class AspNetRoleClaim
     [InverseProperty("AspNetRoleClaims")]
     public virtual AspNetRole Role { get; set; } = null!;
 }
+

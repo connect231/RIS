@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Identity.Client;
 
-namespace UniCP.Models.MsK.SpModels
+namespace SOS.Models.MsK.SpModels
 {
     public class SpVarunaSiparisResult
     {
@@ -51,3 +51,4 @@ namespace UniCP.Models.MsK.SpModels
         public decimal? Fatura_toplam { get; set; }
     }
 }
+

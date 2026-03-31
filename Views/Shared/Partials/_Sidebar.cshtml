@@ -1,6 +1,6 @@
-@using UniCP.Models.MsK
+@using SOS.Models.MsK
 @using System.Security.Claims
-@using UniCP.Services
+@using SOS.Services
 @inject IUrlEncryptionService UrlEncryption
 @{
     var currentController = ViewContext.RouteData.Values["controller"]?.ToString();
@@ -83,8 +83,16 @@
 
         @if (User.IsInRole("Musteri") || User.IsInRole("Admin"))
         {
+            <a href="@Url.Action("Index", "Cockpit", new { filteredCompanyId = encryptedFilteredCompanyId })" class="w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all @IsActive("Cockpit")">
+                <i class="bi bi-speedometer2 text-lg"></i>
+                <span class="font-normal text-sm">Cockpit</span>
+            </a>
+        }
+
+        @if (User.IsInRole("Musteri") || User.IsInRole("Admin"))
+        {
             <a href="@Url.Action("Index", "UniveraHome", new { filteredCompanyId = encryptedFilteredCompanyId })" class="w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all @IsActive("UniveraHome", "Index")">
-                <i class="bi bi-grid text-lg"></i> 
+                <i class="bi bi-grid text-lg"></i>
                 <span class="font-normal text-sm">Anasayfa</span>
             </a>
         }
@@ -121,40 +129,42 @@
             </a>
         }
 
-        @if (User.IsInRole("User") || User.IsInRole("Role") || User.IsInRole("Admin"))
+        @if (User.IsInRole("Pazarlama") || User.IsInRole("Admin"))
+        {
+            <a href="@Url.Action("Index", "Duyurular")" class="w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all @IsActive("Duyurular")">
+                <i class="bi bi-megaphone text-lg"></i>
+                <span class="font-normal text-sm">Duyurular</span>
+            </a>
+        }
+
+        @if (User.IsInRole("Admin") || User.FindFirst("UserType")?.Value == "1")
         {
              <div class="h-px bg-white/10 my-2 mx-4"></div>
              <div class="text-[10px] font-normal text-slate-500 uppercase tracking-[0.2em] mb-2 px-4 mt-4">
                  YÖNETİM
              </div>
 
-             @if (User.IsInRole("User") || User.IsInRole("Admin"))
-             {
-                 <a href="/User/Index" class="w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all @IsActive("User")">
-                    <i class="bi bi-people text-lg"></i> 
-                    <span class="font-normal text-sm">Kullanıcılar</span>
-                </a>
-             }
+             <a href="/User/Index" class="w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all @IsActive("User")">
+                <i class="bi bi-people text-lg"></i> 
+                <span class="font-normal text-sm">Kullanıcılar</span>
+            </a>
 
-             @if (User.IsInRole("Role") || User.IsInRole("Admin"))
-             {
-                 <a href="/Role/Index" class="w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all @IsActive("Role")">
-                    <i class="bi bi-shield-lock text-lg"></i> 
-                    <span class="font-normal text-sm">Roller</span>
-                </a>
-             }
+             <a href="/Role/Index" class="w-full flex items-center space-x-3 px-4 py-3 rounded-xl transition-all @IsActive("Role")">
+                <i class="bi bi-shield-lock text-lg"></i> 
+                <span class="font-normal text-sm">Roller</span>
+            </a>
         }
     </nav>
 
     <!-- Sidebar Bottom Section -->
     <div class="mt-auto p-4 space-y-4">
         <!-- Live Status Pill -->
-        <div class="mx-2 px-3 py-2 rounded-lg bg-emerald-950/30 border border-emerald-900/30 flex items-center space-x-3">
+        <div class="mx-2 px-3 py-2 rounded-lg bg-indigo-950/30 border border-indigo-900/30 flex items-center space-x-3">
             <div class="relative flex h-2 w-2">
-                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75"></span>
-                <span class="relative inline-flex rounded-full h-2 w-2 bg-emerald-500"></span>
+                <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-violet-400 opacity-75"></span>
+                <span class="relative inline-flex rounded-full h-2 w-2 bg-indigo-500"></span>
             </div>
-            <span class="text-[10px] font-normal text-emerald-400 tracking-wide uppercase">Canlı Entegrasyon: Aktif</span>
+            <span class="text-[10px] font-normal text-violet-400 tracking-wide uppercase">Canlı Entegrasyon: Aktif</span>
         </div>
 
         <!-- Utility Buttons -->
@@ -184,3 +194,4 @@
         </div>
     </div>
 </div>
+

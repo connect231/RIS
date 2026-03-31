@@ -1,10 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
-namespace UniCP.Models.MsK;
+namespace SOS.Models.MsK;
 
 [Keyless]
 [Table("STOKKODUESLESTIRME")]
@@ -22,3 +22,4 @@ public partial class STOKKODUESLESTIRME
     [StringLength(255)]
     public string? STOK_ADI { get; set; }
 }
+

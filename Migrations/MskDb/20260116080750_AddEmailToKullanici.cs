@@ -1,9 +1,9 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace UniCP.Migrations.MskDb
+namespace SOS.Migrations.MskDb
 {
     /// <inheritdoc />
     public partial class AddEmailToKullanici : Migration
@@ -29,3 +29,4 @@ namespace UniCP.Migrations.MskDb
         }
     }
 }
+

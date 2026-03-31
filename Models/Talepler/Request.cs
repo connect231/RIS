@@ -1,7 +1,7 @@
 using System;
 using System.Collections.Generic;
 
-namespace UniCP.Models.Talepler
+namespace SOS.Models.Talepler
 {
     public class Request
     {
@@ -61,3 +61,4 @@ namespace UniCP.Models.Talepler
         public string Type { get; set; } = string.Empty;
     }
 }
+

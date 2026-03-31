@@ -1,0 +1,14 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(*)",
+      "Read(*)",
+      "Write(*)",
+      "Edit(*)",
+      "Glob(*)",
+      "Grep(*)",
+      "Skill(*)",
+      "Bash(curl -s http://localhost:5165/Home/Index -L)"
+    ]
+  }
+}

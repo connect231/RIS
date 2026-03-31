@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations.Schema;
 
-namespace UniCP.Models.MsK.SpModels
+namespace SOS.Models.MsK.SpModels
 {
     // Fix: Removed inheritance to avoid EF Core Keyless Entity Hierarchy issues (TPH).
     // All properties are copied from base classes.
@@ -296,3 +296,4 @@ namespace UniCP.Models.MsK.SpModels
         }
     }
 }
+

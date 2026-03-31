@@ -1,4 +1,4 @@
-namespace UniCP.Services
+namespace SOS.Services
 {
     public interface IUrlEncryptionService
     {
@@ -8,3 +8,4 @@ namespace UniCP.Services
         int? DecryptId(string cipherText);
     }
 }
+

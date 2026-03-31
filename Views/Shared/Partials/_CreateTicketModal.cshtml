@@ -18,7 +18,7 @@
                 <div class="space-y-1.5">
                     <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Konu / Başlık</label>
                     <input type="text" id="ticketTitle" required
-                           class="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-all placeholder:text-slate-600"
+                           class="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all placeholder:text-slate-600"
                            placeholder="Sorununuzu kısaca özetleyiniz...">
                 </div>
 
@@ -66,7 +66,7 @@
                 <div class="space-y-1.5">
                     <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Açıklama</label>
                     <textarea id="ticketDescription" rows="5" required
-                              class="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-emerald-500/50 focus:ring-1 focus:ring-emerald-500/50 transition-all placeholder:text-slate-600 resize-none"
+                              class="w-full bg-slate-900/50 border border-white/10 rounded-xl px-4 py-3 text-sm text-white focus:outline-none focus:border-indigo-500/50 focus:ring-1 focus:ring-indigo-500/50 transition-all placeholder:text-slate-600 resize-none"
                               placeholder="Detaylı açıklama..."></textarea>
                 </div>
 
@@ -75,9 +75,9 @@
                     <label class="text-xs font-semibold text-slate-400 uppercase tracking-wider">Dosya Ekle</label>
                     <div class="relative group">
                         <input type="file" id="ticketFile" multiple class="absolute inset-0 w-full h-full opacity-0 cursor-pointer z-10" onchange="updateFileName(this)">
-                        <div class="w-full bg-slate-900/50 border border-dashed border-white/20 rounded-xl px-4 py-8 flex flex-col items-center justify-center gap-2 group-hover:border-emerald-500/50 group-hover:bg-slate-900/80 transition-all">
+                        <div class="w-full bg-slate-900/50 border border-dashed border-white/20 rounded-xl px-4 py-8 flex flex-col items-center justify-center gap-2 group-hover:border-indigo-500/50 group-hover:bg-slate-900/80 transition-all">
                             <div class="w-10 h-10 rounded-full bg-slate-800 flex items-center justify-center group-hover:scale-110 transition-transform">
-                                <i class="bi bi-cloud-upload text-slate-400 group-hover:text-emerald-400 transition-colors"></i>
+                                <i class="bi bi-cloud-upload text-slate-400 group-hover:text-violet-400 transition-colors"></i>
                             </div>
                             <div class="text-center">
                                 <p class="text-sm text-slate-300 font-medium" id="uploadText">Dosyaları buraya sürükleyin veya seçin</p>
@@ -96,7 +96,7 @@
                 İptal
             </button>
             <button onclick="document.getElementById('createTicketForm').dispatchEvent(new Event('submit', {cancelable: true}))" 
-                    class="px-6 py-2 bg-emerald-500 hover:bg-emerald-600 text-white text-sm font-medium rounded-xl shadow-lg shadow-emerald-500/20 hover:shadow-emerald-500/30 transition-all flex items-center gap-2">
+                    class="px-6 py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-sm font-medium rounded-xl shadow-lg shadow-indigo-500/20 hover:shadow-indigo-500/30 transition-all flex items-center gap-2">
                 <span>Oluştur</span>
                 <i class="bi bi-send-fill text-xs"></i>
             </button>
@@ -248,7 +248,7 @@
             // Leaf node - selectable
             html += `
                 <button type="button" onclick="selectBildirimTipi(${cat.categoryID}, '${safeName}')" 
-                        class="w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-emerald-500/10 hover:text-emerald-400 transition-colors flex items-center gap-2"
+                        class="w-full text-left px-3 py-2 rounded-lg text-sm text-slate-300 hover:bg-indigo-500/10 hover:text-violet-400 transition-colors flex items-center gap-2"
                         style="padding-left: ${12 + paddingLeft}px">
                     <i class="bi bi-circle text-[6px] text-slate-600"></i>
                     <span>${cat.categoryName}</span>
@@ -291,10 +291,10 @@
         const text = document.getElementById('uploadText');
         if (input.files && input.files.length > 0) {
             text.textContent = `${input.files.length} dosya seçildi`;
-            text.classList.add('text-emerald-400');
+            text.classList.add('text-violet-400');
         } else {
             text.textContent = 'Dosyaları buraya sürükleyin veya seçin';
-            text.classList.remove('text-emerald-400');
+            text.classList.remove('text-violet-400');
         }
     }
 
@@ -309,7 +309,7 @@
         resetBildirimTipi();
         document.getElementById('bildirimTipiList').innerHTML = '';
         const uploadText = document.getElementById('uploadText');
-        if (uploadText) { uploadText.textContent = 'Dosyaları buraya sürükleyin veya seçin'; uploadText.classList.remove('text-emerald-400'); }
+        if (uploadText) { uploadText.textContent = 'Dosyaları buraya sürükleyin veya seçin'; uploadText.classList.remove('text-violet-400'); }
     }
 
     function submitTicket(e) {
@@ -323,7 +323,7 @@
         if (!title) { alert('Lütfen bir başlık giriniz.'); return; }
         if (!bildirimTipiId) { alert('Lütfen bildirim tipi seçiniz.'); return; }
 
-        const submitBtn = document.querySelector('#createTicketModal .bg-emerald-500');
+        const submitBtn = document.querySelector('#createTicketModal .bg-indigo-500');
         const originalText = submitBtn.innerHTML;
         submitBtn.innerHTML = '<i class="bi bi-arrow-repeat animate-spin"></i> Gönderiliyor...';
         submitBtn.disabled = true;
@@ -405,3 +405,4 @@
         transition: transform 0.2s ease;
     }
 </style>
+

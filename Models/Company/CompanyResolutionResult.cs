@@ -1,6 +1,6 @@
-using UniCP.Models.MsK;
+using SOS.Models.MsK;
 
-namespace UniCP.Models.Company
+namespace SOS.Models.Company
 {
     /// <summary>
     /// Result of company resolution containing authorized companies and selected company
@@ -27,9 +27,6 @@ namespace UniCP.Models.Company
         /// </summary>
         public string AuthorizedCompanyNames { get; set; } = "";
         
-        /// <summary>
-        /// Debug information about the resolution process
-        /// </summary>
-        public List<string> DebugFlow { get; set; } = new();
     }
 }
+

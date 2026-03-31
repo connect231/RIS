@@ -1,4 +1,4 @@
-ï»¿namespace UniCP.Models
+namespace SOS.Models
 {
     public class MailBody
     {
@@ -10,13 +10,13 @@
                 "<table width=\"600\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#ffffff;border-radius:8px;box-shadow:0 4px 15px rgba(0,0,0,0.08);\">" +
                 "<tr>" +
                 "<td style=\"padding:40px 40px 10px 40px;text-align:center;\">" +
-                "<h2 style=\"margin:0;color:#333;font-size:24px;\">E-Posta DoÄŸrulama</h2>" +
+                "<h2 style=\"margin:0;color:#333;font-size:24px;\">E-Posta Doğrulama</h2>" +
                 "               </td>" +
                 "           </tr>" +
                 "    <tr>" +
                 "    <td style=\"padding:20px 40px;color:#555;font-size:15px;line-height:22px;\">\r\n       " +
                 "                 Merhaba <strong>"+ ad+"</strong> <br><br>\r\n                " +
-                "        HesabÄ±nÄ±zÄ± aktif hale getirmek iÃ§in aÅŸaÄŸÄ±daki butona tÄ±klayarak e-posta adresinizi doÄŸrulayÄ±n.\r\n   " +
+                "        Hesabınızı aktif hale getirmek için aşağıdaki butona tıklayarak e-posta adresinizi doğrulayın.\r\n   " +
                 "</td>" +
                 "</tr>" +
                 "       <tr>" +
@@ -31,13 +31,13 @@
                 "           border-radius:6px;" +
                 "           display:inline-block;" +
                 "           font-weight:bold;\">" +
-                "           âœ” E-PostamÄ± DoÄŸrula" +
+                "           ? E-Postamı Doğrula" +
                 "            </a>" +
                 "        </td>" +
                 "       </tr>" +
                 "<tr>" +
                 "<td style=\"background:#f0f0f0;padding:15px 40px;border-bottom-left-radius:8px;border-bottom-right-radius:8px;color:#888;font-size:12px;text-align:center;\">" +
-                "Bu mail otomatik olarak gÃ¶nderilmiÅŸtir. LÃ¼tfen yanÄ±tlamayÄ±nÄ±z." +
+                "Bu mail otomatik olarak gönderilmiştir. Lütfen yanıtlamayınız." +
                 "</td>" +
                 "</tr>" +
                 "</table>" +
@@ -58,13 +58,13 @@
                 "<table width=\"600\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#ffffff;border-radius:8px;box-shadow:0 4px 15px rgba(0,0,0,0.08);\">" +
                 "<tr>" +
                 "<td style=\"padding:40px 40px 10px 40px;text-align:center;\">" +
-                "<h2 style=\"margin:0;color:#333;font-size:24px;\">Parola SÄ±fÄ±rlama</h2>" +
+                "<h2 style=\"margin:0;color:#333;font-size:24px;\">Parola Sıfırlama</h2>" +
                 "               </td>" +
                 "           </tr>" +
                 "    <tr>" +
                 "    <td style=\"padding:20px 40px;color:#555;font-size:15px;line-height:22px;\">\r\n       " +
                 "                 Merhaba <strong>" + ad + "</strong> <br><br>\r\n                " +
-                "        HesabÄ±nÄ±zÄ± aktif hale getirmek iÃ§in aÅŸaÄŸÄ±daki butona tÄ±klayarak ÅŸifrenizi sÄ±fÄ±rlayabilirsiniz.\r\n   " +
+                "        Hesabınızı aktif hale getirmek için aşağıdaki butona tıklayarak şifrenizi sıfırlayabilirsiniz.\r\n   " +
                 "</td>" +
                 "</tr>" +
                 "       <tr>" +
@@ -79,13 +79,13 @@
                 "           border-radius:6px;" +
                 "           display:inline-block;" +
                 "           font-weight:bold;\">" +
-                "           âœ” Åifremi Yenile" +
+                "           ? Şifremi Yenile" +
                 "            </a>" +
                 "        </td>" +
                 "       </tr>" +
                 "<tr>" +
                 "<td style=\"background:#f0f0f0;padding:15px 40px;border-bottom-left-radius:8px;border-bottom-right-radius:8px;color:#888;font-size:12px;text-align:center;\">" +
-                "Bu mail otomatik olarak gÃ¶nderilmiÅŸtir. LÃ¼tfen yanÄ±tlamayÄ±nÄ±z." +
+                "Bu mail otomatik olarak gönderilmiştir. Lütfen yanıtlamayınız." +
                 "</td>" +
                 "</tr>" +
                 "</table>" +
@@ -106,13 +106,13 @@
                 "<table width=\"600\" cellpadding=\"0\" cellspacing=\"0\" style=\"background:#ffffff;border-radius:8px;box-shadow:0 4px 15px rgba(0,0,0,0.08);\">" +
                 "<tr>" +
                 "<td style=\"padding:40px 40px 10px 40px;text-align:center;\">" +
-                "<h2 style=\"margin:0;color:#333;font-size:24px;\">GeÃ§ici Åifre</h2>" +
+                "<h2 style=\"margin:0;color:#333;font-size:24px;\">Geçici Şifre</h2>" +
                 "               </td>" +
                 "           </tr>" +
                 "    <tr>" +
                 "    <td style=\"padding:20px 40px;color:#555;font-size:15px;line-height:22px;\">\r\n       " +
                 "                 Merhaba <strong>" + ad + "</strong> <br><br>\r\n                " +
-                "        Åifre sÄ±fÄ±rlama talebiniz Ã¼zerine hesabÄ±nÄ±z iÃ§in geÃ§ici bir ÅŸifre oluÅŸturulmuÅŸtur. <br>LÃ¼tfen bu ÅŸifre ile giriÅŸ yapÄ±p, ÅŸifrenizi deÄŸiÅŸtiriniz.\r\n   " +
+                "        Şifre sıfırlama talebiniz üzerine hesabınız için geçici bir şifre oluşturulmuştur. <br>Lütfen bu şifre ile giriş yapıp, şifrenizi değiştiriniz.\r\n   " +
                 "</td>" +
                 "</tr>" +
                 "       <tr>" +
@@ -124,7 +124,7 @@
                 "       </tr>" +
                 "<tr>" +
                 "<td style=\"background:#f0f0f0;padding:15px 40px;border-bottom-left-radius:8px;border-bottom-right-radius:8px;color:#888;font-size:12px;text-align:center;\">" +
-                "Bu mail otomatik olarak gÃ¶nderilmiÅŸtir. LÃ¼tfen yanÄ±tlamayÄ±nÄ±z." +
+                "Bu mail otomatik olarak gönderilmiştir. Lütfen yanıtlamayınız." +
                 "</td>" +
                 "</tr>" +
                 "</table>" +
@@ -136,3 +136,4 @@
         }
     }
 }
+

@@ -1,24 +1,13 @@
-﻿using Microsoft.EntityFrameworkCore;
-using UniCP.Models.MsK.SpModels;
+using Microsoft.EntityFrameworkCore;
+using SOS.Models.MsK;
+using SOS.Models.MsK.SpModels;
 
-namespace UniCP.DbData
+namespace SOS.DbData
 {
     public partial class MskDbContext
     {
         partial void OnModelCreatingPartial(ModelBuilder modelBuilder)
         {
-            modelBuilder.Entity<Sp_Deneme>(entity =>
-            {
-                entity.HasNoKey();
-                entity.ToView(null);
-            });
-
-            modelBuilder.Entity<Fn_Deneme>(entity =>
-            {
-                entity.HasNoKey();
-                entity.ToView(null);   // EF bu nesnenin tablo olmadığını anlasın
-            });
-
             modelBuilder.Entity<SSP_N4B_TICKETLARI>(entity =>
             {
                 entity.HasNoKey();
@@ -64,6 +53,13 @@ namespace UniCP.DbData
             modelBuilder.Entity<SSP_N4B_TICKET_DURUM_SAYILARI_COKLU>(e => { e.HasNoKey(); e.ToView(null); });
             modelBuilder.Entity<SSP_N4B_SLA_ORAN_COKLU>(e => { e.HasNoKey(); e.ToView(null); });
             modelBuilder.Entity<SSP_VARUNA_SIPARIS_DETAY_COKLU>(e => { e.HasNoKey(); e.ToView(null); });
+
+            // SQL View: VIEW_CP_EXCEL_FATURA
+            modelBuilder.Entity<VIEW_CP_EXCEL_FATURA>(entity =>
+            {
+                entity.ToView("VIEW_CP_EXCEL_FATURA");
+            });
         }
     }
 }
+

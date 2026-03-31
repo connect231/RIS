@@ -2,7 +2,7 @@ using System.Security.Cryptography;
 using System.Text;
 using System.Web;
 
-namespace UniCP.Services
+namespace SOS.Services
 {
     public class UrlEncryptionService : IUrlEncryptionService
     {
@@ -115,3 +115,4 @@ namespace UniCP.Services
         }
     }
 }
+

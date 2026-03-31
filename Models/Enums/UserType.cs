@@ -1,4 +1,4 @@
-namespace UniCP.Models.Enums
+namespace SOS.Models.Enums
 {
     /// <summary>
     /// Kullanıcı tipi enum - LNGKULLANICITIPI için
@@ -26,3 +26,4 @@ namespace UniCP.Models.Enums
         UniveraCustomer = 4
     }
 }
+

@@ -2,10 +2,10 @@ using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using System.Security.Claims;
-using UniCP.DbData;
-using UniCP.Models.Kullanici;
+using SOS.DbData;
+using SOS.Models.Kullanici;
 
-namespace UniCP.Services
+namespace SOS.Services
 {
     public class CustomUserClaimsPrincipalFactory : UserClaimsPrincipalFactory<AppUser, AppRole>
     {
@@ -54,3 +54,4 @@ namespace UniCP.Services
         }
     }
 }
+

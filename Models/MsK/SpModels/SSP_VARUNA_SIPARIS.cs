@@ -1,7 +1,7 @@
-﻿using Microsoft.AspNetCore.Http.HttpResults;
+using Microsoft.AspNetCore.Http.HttpResults;
 using Microsoft.Identity.Client;
 
-namespace UniCP.Models.MsK.SpModels
+namespace SOS.Models.MsK.SpModels
 {
     public class SSP_VARUNA_SIPARIS
     {
@@ -43,7 +43,7 @@ namespace UniCP.Models.MsK.SpModels
         public string? AccountTitle { get; set; }
         public string? Durum { get; set; }
         public int? Gecikme_Gun { get; set; }
-        public int? Satıs_Vadesi { get; set; }
+        public int? Sat�s_Vadesi { get; set; }
         public DateTime? Tahsil_Tarihi { get; set; }
         public int? Bekleme_Gun { get; set; }
 
@@ -54,3 +54,4 @@ namespace UniCP.Models.MsK.SpModels
         
     }
 }
+

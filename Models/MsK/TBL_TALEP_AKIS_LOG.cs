@@ -1,10 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
-namespace UniCP.Models.MsK;
+namespace SOS.Models.MsK;
 
 [Table("TBL_TALEP_AKIS_LOG")]
 public partial class TBL_TALEP_AKIS_LOG
@@ -39,3 +39,4 @@ public partial class TBL_TALEP_AKIS_LOG
     [InverseProperty("TBL_TALEP_AKIS_LOGs")]
     public virtual TBL_TALEP_AKISDURUMLARI? LNGDURUMKODNavigation { get; set; }
 }
+

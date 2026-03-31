@@ -1,4 +1,4 @@
-﻿namespace UniCP.Models
+namespace SOS.Models
 {
     public class Grafik
     {
@@ -9,3 +9,4 @@
         public int Sayi { get; set; }
     }
 }
+

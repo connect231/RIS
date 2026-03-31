@@ -1,9 +1,9 @@
-﻿using System;
+using System;
 using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace UniCP.Migrations
+namespace SOS.Migrations
 {
     /// <inheritdoc />
     public partial class Ilk_olusturma : Migration
@@ -225,3 +225,4 @@ namespace UniCP.Migrations
         }
     }
 }
+

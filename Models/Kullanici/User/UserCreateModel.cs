@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace UniCP.Models.Kullanici.User;
+namespace SOS.Models.Kullanici.User;
 
 public class UserCreateModel
 {

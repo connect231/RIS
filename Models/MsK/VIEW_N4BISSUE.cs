@@ -1,10 +1,10 @@
-ï»¿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
-namespace UniCP.Models.MsK;
+namespace SOS.Models.MsK;
 
 [Keyless]
 public partial class VIEW_N4BISSUE
@@ -32,7 +32,7 @@ public partial class VIEW_N4BISSUE
     public string? Gelis_Kanali { get; set; }
 
     [StringLength(200)]
-    public string? Tercih_Edilen_Geri_DÃ¶nÃ¼s_Metodu2 { get; set; }
+    public string? Tercih_Edilen_Geri_Dönüs_Metodu2 { get; set; }
 
     [StringLength(200)]
     public string? Cevap_Verilen_Kanallar1 { get; set; }
@@ -122,3 +122,4 @@ public partial class VIEW_N4BISSUE
     [StringLength(200)]
     public string? Kullanici_Bolum { get; set; }
 }
+

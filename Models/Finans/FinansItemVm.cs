@@ -1,4 +1,4 @@
-namespace UniCP.Models.Finans
+namespace SOS.Models.Finans
 {
     public class FinansItemVm
     {
@@ -9,3 +9,4 @@ namespace UniCP.Models.Finans
         public string Aciklama { get; set; } = string.Empty;
     }
 }
+

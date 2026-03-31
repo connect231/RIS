@@ -1,9 +1,9 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using Microsoft.EntityFrameworkCore;
-using UniCP.Models.MsK;
+using SOS.Models.MsK;
 
-namespace UniCP.DbData;
+namespace SOS.DbData;
 
 public partial class MskDbContext : DbContext
 {
@@ -15,8 +15,6 @@ public partial class MskDbContext : DbContext
         : base(options)
     {
     }
-
-    public virtual DbSet<AIServiceLog> AIServiceLogs { get; set; }
 
     public virtual DbSet<AspNetRole> AspNetRoles { get; set; }
 
@@ -98,6 +96,8 @@ public partial class MskDbContext : DbContext
 
     public virtual DbSet<TBL_VARUNA_URUN_GRUPLAMA> TBL_VARUNA_URUN_GRUPLAMAs { get; set; }
 
+    public virtual DbSet<TBL_DUYURU> TBL_DUYURUs { get; set; }
+
     public virtual DbSet<TBL_ZABBIX_HOST_LIST> TBL_ZABBIX_HOST_LISTs { get; set; }
 
     public virtual DbSet<VIEW_N4BISSUE> VIEW_N4BISSUEs { get; set; }
@@ -110,7 +110,7 @@ public partial class MskDbContext : DbContext
 
     public virtual DbSet<VIEW_ORTAK_PROJE_ISIMLERI> VIEW_ORTAK_PROJE_ISIMLERIs { get; set; }
 
-    public virtual DbSet<WWDENEME> WWDENEMEs { get; set; }
+    public virtual DbSet<VIEW_CP_EXCEL_FATURA> VIEW_CP_EXCEL_FATURAs { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         => optionsBuilder.UseSqlServer("Name=ConnectionStrings:MsKConnection");
@@ -282,13 +282,9 @@ public partial class MskDbContext : DbContext
             entity.Property(e => e.LNGKOD).ValueGeneratedOnAdd();
         });
 
-        modelBuilder.Entity<WWDENEME>(entity =>
-        {
-            entity.ToView("WWDENEME");
-        });
-
         OnModelCreatingPartial(modelBuilder);
     }
 
     partial void OnModelCreatingPartial(ModelBuilder modelBuilder);
 }
+

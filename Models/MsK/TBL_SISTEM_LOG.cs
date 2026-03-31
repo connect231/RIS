@@ -1,10 +1,10 @@
-ï»¿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
-namespace UniCP.Models.MsK;
+namespace SOS.Models.MsK;
 
 public partial class TBL_SISTEM_LOG
 {
@@ -28,4 +28,11 @@ public partial class TBL_SISTEM_LOG
     public string? TXTMODUL { get; set; }
 
     public DateTime? TRHKAYIT { get; set; }
+
+    /// <summary>
+    /// Kullanýcýnýn o an baktýðý firma/tenant kodu.
+    /// Forensic analizde "hangi müþterinin verisi sorgulandý?" sorusunu yanýtlar.
+    /// </summary>
+    public int? LNGORTAKFIRMAKOD { get; set; }
 }
+

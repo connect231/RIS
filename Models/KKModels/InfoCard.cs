@@ -1,6 +1,6 @@
-﻿using System.ComponentModel.DataAnnotations;
+using System.ComponentModel.DataAnnotations;
 
-namespace UniCP.Models.KKModels
+namespace SOS.Models.KKModels
 {
     public class InfoCard
     {
@@ -23,3 +23,4 @@ namespace UniCP.Models.KKModels
 
    
 }
+

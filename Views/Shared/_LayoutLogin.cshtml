@@ -1,10 +1,11 @@
-﻿
+
 <!DOCTYPE html>
 <html lang="tr">
 <head>
     <meta charset="utf-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Giriş Yap - Univera Connect</title>
+    <title>Giri� Yap - SOS</title>
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
     <!-- Bootstrap 5.3 CSS -->
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
@@ -26,7 +27,7 @@
             --text-light: #6b7280;
             --bg-light: #f8fafc;
             --error-color: #dc2626;
-            --success-color: #10b981;
+            --success-color: #6366f1;
         }
 
         * {
@@ -365,7 +366,7 @@
 
             .password-strength-bar.strong {
                 width: 100%;
-                background: #10b981;
+                background: #6366f1;
             }
 
         .password-strength-text {
@@ -383,7 +384,7 @@
             }
 
             .password-strength-text.strong {
-                color: #10b981;
+                color: #6366f1;
             }
 
         /* Responsive */
@@ -431,6 +432,62 @@
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 
+    <!-- Giri� Loading Overlay -->
+    <div id="login-loading-overlay" style="display:none; position:fixed; inset:0; z-index:9999; background:rgba(10,17,40,0.93); backdrop-filter:blur(6px); align-items:center; justify-content:center; flex-direction:column; gap:24px;">
+        <svg viewBox="0 0 200 185" width="120" height="111" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;">
+            <polygon class="uf" style="fill:#1e40af;--dx:-65px;--dy:-90px;animation-delay:0s"     points="20,10 80,10 80,40"/>
+            <polygon class="uf" style="fill:#1d4ed8;--dx:-90px;--dy:-65px;animation-delay:0.07s"  points="20,10 20,40 80,40"/>
+            <polygon class="uf" style="fill:#2563eb;--dx:-75px;--dy:-35px;animation-delay:0.14s"  points="20,40 80,40 80,70"/>
+            <polygon class="uf" style="fill:#1e3a8a;--dx:-85px;--dy:-15px;animation-delay:0.21s"  points="20,40 20,70 80,70"/>
+            <polygon class="uf" style="fill:#3b82f6;--dx:-85px;--dy:20px;animation-delay:0.28s"   points="20,70 80,70 80,100"/>
+            <polygon class="uf" style="fill:#2563eb;--dx:-70px;--dy:40px;animation-delay:0.35s"   points="20,70 20,100 80,100"/>
+            <polygon class="uf" style="fill:#1d4ed8;--dx:-65px;--dy:65px;animation-delay:0.42s"   points="20,100 80,100 80,130"/>
+            <polygon class="uf" style="fill:#1e40af;--dx:-85px;--dy:85px;animation-delay:0.49s"   points="20,100 20,130 80,130"/>
+            <polygon class="uf" style="fill:#1e40af;--dx:65px;--dy:-90px;animation-delay:0.07s"   points="120,10 180,10 180,40"/>
+            <polygon class="uf" style="fill:#1d4ed8;--dx:90px;--dy:-65px;animation-delay:0.14s"   points="120,10 120,40 180,40"/>
+            <polygon class="uf" style="fill:#2563eb;--dx:75px;--dy:-35px;animation-delay:0.21s"   points="120,40 180,40 180,70"/>
+            <polygon class="uf" style="fill:#1e3a8a;--dx:85px;--dy:-15px;animation-delay:0.28s"   points="120,40 120,70 180,70"/>
+            <polygon class="uf" style="fill:#3b82f6;--dx:85px;--dy:20px;animation-delay:0.35s"    points="120,70 180,70 180,100"/>
+            <polygon class="uf" style="fill:#2563eb;--dx:70px;--dy:40px;animation-delay:0.42s"    points="120,70 120,100 180,100"/>
+            <polygon class="uf" style="fill:#1d4ed8;--dx:65px;--dy:65px;animation-delay:0.49s"    points="120,100 180,100 180,130"/>
+            <polygon class="uf" style="fill:#1e40af;--dx:85px;--dy:85px;animation-delay:0.56s"    points="120,100 120,130 180,130"/>
+            <polygon class="uf" style="fill:#1e3a8a;--dx:-45px;--dy:90px;animation-delay:0.56s"   points="20,130 20,162 100,182"/>
+            <polygon class="uf" style="fill:#1e3a8a;--dx:45px;--dy:90px;animation-delay:0.63s"    points="100,182 180,162 180,130"/>
+        </svg>
+        <div style="color:#93c5fd; font-size:12px; font-family:'Inter',sans-serif; font-weight:600; letter-spacing:0.18em; display:flex; gap:1px;">
+            <span style="display:inline-block;animation:nav-wave 1.5s ease-in-out infinite;animation-delay:0s">Y</span><span style="display:inline-block;animation:nav-wave 1.5s ease-in-out infinite;animation-delay:0.1s">�</span><span style="display:inline-block;animation:nav-wave 1.5s ease-in-out infinite;animation-delay:0.2s">K</span><span style="display:inline-block;animation:nav-wave 1.5s ease-in-out infinite;animation-delay:0.3s">L</span><span style="display:inline-block;animation:nav-wave 1.5s ease-in-out infinite;animation-delay:0.4s">E</span><span style="display:inline-block;animation:nav-wave 1.5s ease-in-out infinite;animation-delay:0.5s">N</span><span style="display:inline-block;animation:nav-wave 1.5s ease-in-out infinite;animation-delay:0.6s">�</span><span style="display:inline-block;animation:nav-wave 1.5s ease-in-out infinite;animation-delay:0.7s">Y</span><span style="display:inline-block;animation:nav-wave 1.5s ease-in-out infinite;animation-delay:0.8s">O</span><span style="display:inline-block;animation:nav-wave 1.5s ease-in-out infinite;animation-delay:0.9s">R</span>
+        </div>
+    </div>
+    <style>
+        .uf {
+            animation: nav-assemble 2.6s ease-in-out infinite;
+            transform-box: fill-box;
+            transform-origin: center;
+        }
+        @@keyframes nav-assemble {
+            0%   { opacity: 0; transform: translate(var(--dx, 0px), var(--dy, 0px)) scale(0.3); }
+            35%  { opacity: 1; transform: translate(0px, 0px) scale(1); }
+            65%  { opacity: 1; transform: translate(0px, 0px) scale(1); }
+            100% { opacity: 0; transform: translate(var(--dx, 0px), var(--dy, 0px)) scale(0.3); }
+        }
+        @@keyframes nav-wave {
+            0%, 100% { transform: translateY(0px); }
+            50%       { transform: translateY(-5px); }
+        }
+    </style>
+    <script>
+        (function () {
+            var overlay = document.getElementById('login-loading-overlay');
+            // Giri� formu submit oldu�unda overlay'i g�ster
+            document.addEventListener('submit', function (e) {
+                var form = e.target;
+                if (form && form.method && form.method.toLowerCase() === 'post') {
+                    overlay.style.display = 'flex';
+                }
+            }, true);
+        })();
+    </script>
+
     <!-- Custom Scripts -->
     <script>
         // Password Strength Indicator
@@ -463,13 +520,13 @@
 
                 // Determine strength level
                 if (strength < 2) {
-                    strengthText = 'Zayıf';
+                    strengthText = 'Zay�f';
                     strengthClass = 'weak';
                 } else if (strength < 4) {
                     strengthText = 'Orta';
                     strengthClass = 'medium';
                 } else {
-                    strengthText = 'Güçlü';
+                    strengthText = 'G��l�';
                     strengthClass = 'strong';
                 }
 
@@ -504,7 +561,7 @@
                 if (passwordInput.value !== confirmPasswordInput.value) {
                     e.preventDefault();
                     confirmPasswordInput.classList.add('is-invalid');
-                    alert('Şifreler eşleşmiyor!');
+                    alert('�ifreler e�le�miyor!');
                     return false;
                 }
             });
@@ -513,3 +570,4 @@
 </body>
 
 </html>
+

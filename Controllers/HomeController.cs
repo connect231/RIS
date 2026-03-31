@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 
-namespace UniCP.Controllers
+namespace SOS.Controllers
 {
     [Authorize]
     public class HomeController : Controller
@@ -18,3 +18,4 @@ namespace UniCP.Controllers
         }
     }
 }
+

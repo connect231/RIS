@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace UniCP.Models.Kullanici.Account;
+namespace SOS.Models.Kullanici.Account;
 
 public class AccountCreateModel
 {

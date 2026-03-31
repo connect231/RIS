@@ -1,4 +1,4 @@
-﻿namespace UniCP.Models.MsK.SpModels
+namespace SOS.Models.MsK.SpModels
 {
     public class SSP_N4B_SLA_ORAN
     {
@@ -10,3 +10,4 @@
         public decimal ORAN { get; set; }
     }
 }
+

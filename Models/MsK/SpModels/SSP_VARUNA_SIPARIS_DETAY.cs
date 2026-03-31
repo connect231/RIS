@@ -1,4 +1,4 @@
-﻿namespace UniCP.Models.MsK.SpModels
+namespace SOS.Models.MsK.SpModels
 {
     public class SSP_VARUNA_SIPARIS_DETAY
     {
@@ -23,3 +23,4 @@
         public string? ItemNo { get; set; }
     }
 }
+

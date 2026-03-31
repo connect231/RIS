@@ -1,4 +1,4 @@
-namespace UniCP.Models.Lisans
+namespace SOS.Models.Lisans
 {
     public class LisansVm
     {
@@ -9,3 +9,4 @@ namespace UniCP.Models.Lisans
         public string UrunGrubu { get; set; } = string.Empty;
     }
 }
+

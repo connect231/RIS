@@ -114,16 +114,40 @@ flowchart TD
 
 | Bölüm | İçerik | Veri Kaynağı |
 |-------|--------|-------------|
-| **Finans Özeti** | Toplam sipariş tutarı, aylık/yıllık karşılaştırma | Stored Procedure: `SP_VARUNA_SIPARIS` |
-| **Performans** | Büyüme oranları, dönemsel karşılaştırma | Hesaplanan metrikler |
-| **Destek Talepleri** | Açık, bekleyen, çözülen talep sayıları | Stored Procedure: `SSP_N4B_TICKET_DURUM_SAYILARI` |
-| **Talep Grafikleri** | Destek taleplerinin görsel dağılımı | Chart.js ile görselleştirme |
-| **Sipariş Listesi** | Son siparişler tablosu | Stored Procedure verileri |
+| **Finans Özeti** | Toplam sipariş tutarı, aylık/yıllık karşılaştırma | Stored Procedure: `SP_VARUNA_SIPARIS_COKLU_FILTRE` |
+| **Performans** | Büyüme oranları, dönemsel karşılaştırma | Finansal sipariş verisi üzerinden dönemsel kıyaslama ile |
+| **Destek Talepleri** | Açık, bekleyen, çözülen talep sayıları | Stored Procedure: `SP_N4B_TICKETLARI_COKLU_FILTRE` / `SP_N4B_TICKET_DURUM_SAYILARI` |
+| **Talep Grafikleri** | Geliştirme/Destek taleplerinin görsel dağılımı | Chart.js ile görselleştirme |
+| **Sipariş Listesi** | Son siparişler tablosu | `SP_VARUNA_SIPARIS_DETAY_COKLU_FILTRE` (Ön-yüklemeli veriler) |
 
-##### Firma Filtresi:
-- Header bölümünde firma seçim butonu
-- Modal ile firma değiştirilebilir
-- Seçim sonrası tüm veriler filtrelenmiş olarak yenilenir
+##### 3.2.3 Veri Kaynakları ve Metrik Hesaplama Mantığı
+
+Portal üzerindeki anahtar metrikler ve görsel kartlar, canlı veriler filtrelenerek aşağıdaki iş kurallarına göre hesaplanmaktadır:
+
+**1. Açık Geliştirme Talepleri (Open Dev Requests):**
+- **Kaynak:** `SP_TFS_GELISTIRME` prosedüründen dönen TFS kayıtları + `TBL_TALEP` üzerinde yer alan ve TFS bağlantısı olmayan portal talepleri.
+- **Mantık:** Sadece "CLOSED", "CANCEL", "RESOLVED", "REJECTED", "KAPATILDI", "İPTAL EDİLDİ", "ÇÖZÜLDÜ" gibi durum kodları **hariç** tutulan aktif talepler hesaplamaya dahil edilir. Her benzersiz TFS numarası bir kez sayılarak (+ TFS bağlı olmayan portal talepleri) toplam devredilen geliştirme backlog büyüklüğü oluşturulur.
+
+**2. Müşteri UAT (User Acceptance Test) Bekleyenler:**
+- **Kaynak:** `TBL_TALEP_AKIS_LOGs` güncel durumu + TFS Verileri.
+- **Mantık:** Doğrudan `TBL_TALEP_AKISDURUMLARI` tablosundaki "Müşteri UAT" durumunda yer alan aktif biletler toplanır. TFS üzerinde durumu doğrudan "Reject" (`MADDEDURUM == "Reject"`) olan maddeler de test/kabul aşamasında kullanıcı müdahalesi beklediği için bu listeye dahil edilir.
+
+**3. Kritik Durumdaki Destek Talepleri (SLA Aşımı & Eskalasyon):**
+- **Kaynak:** `SP_N4B_TICKETLARI_COKLU_FILTRE`.
+- **Mantık:** Zaten "Kapatıldı", "Çözüldü", "Closed", "Resolved" durumunda olan biletler değerlendirme dışı bırakılır. Geriye kalan **Aktif (Açık)** destek biletleri içerisinde, `Bildirim_Durumu` alanında "Eskale" kelimesi geçenler ya da `SLA_YD_Cozum_Kalan_Sure < 0` (SLA zaman sınırı aşılmış) olan destek talepleri sistemde alarm/kritik statüsünde kümülatif olarak raporlanır.
+
+**4. Bütçe Onayı Bekleyen İşler (Maliyet Özeti):**
+- **Kaynak:** Portal Akış Durumu "`Bütçe Onayı`" ("Pending Budget"), `TBL_VARUNA_TEKLIF_URUNLERI` ve efor hesaplaması.
+- **Mantık:** 
+  - **Kesin Maliyet (Talepler Listesi):** Geliştirme talebinin bir TFS numarası varsa, `TBL_VARUNA_TEKLIF_URUNLERI` tablosundaki kalemlerle (TFS NO `ItemNo` alanıyla eşleştirilerek) `NetLineTotalAmount_Amount` değerlerinin toplamı üzerinden doğrudan sistemden güncel/doğru maliyet çekilir. Ek olarak miktar bazlı (`Quantity`) hesaplarla "Varuna Kişi/Gün" değerleri de listelere yansıtılır.
+  - **Tahmini/Öngörü Maliyet (Dashboard Bütçe Grafiği vb.):** Bilet bazlı efor hesaplamasında, biletin TFS entegrasyonu varsa `YAZILIM_TOPLAMAG` alanından çekilir, portal özel ise `TBL_TALEP.DEC_EFOR` üzerinden alınır. Finansal analiz için tahmin edilen efor x `22,500 TL` standart çarpanı bir öngörü/yedek (fallback) hesabı olarak dashboard grafiklerinde (Budget Approval Stats) kullanılır.
+
+**5. Finansal Sipariş ve Onaylar:**
+- **Kaynak:** `SP_VARUNA_SIPARIS`.
+- **Mantık:** Siparişlerin anlık durumları listelenir, özellikle `OrderStatus == "Onay Bekliyor"` ("Open") koşulu sağlayan işlem adetleri dashboard üzerinden ilgili yetkiliye alarm olarak sunulur.
+
+##### Firma Filtresi (Coklu Filtre Optimizasyonu):
+- Uygulama, kullanıcının Tip derecesi baz alınarak (Admin/Type-1 veya Type-3/Univera) arka planda yüzlerce "Coklu SP" (`..._COKLU_FILTREAsync`) çağrısıyla tek sorguda tüm organizasyonlarının (Target Companies) verisini getirir. Böylece sayfa yüklenme optimizasyonu sağlanır. Seçim sonrası tüm veriler hafıza önbelleklerinden (ConcurrentDictionary) anlık olarak süzülür.
 
 ---
 
@@ -435,25 +459,23 @@ flowchart TD
 
 ### 6.1 Sol Menü Yapısı
 
-```
-📋 MÜŞTERİ PANELİ
-├── 🏠 Anasayfa (UniveraHome/Musteri)
-├── 💼 Talepler (Geliştirme Talepleri)
-├── 🎧 Destek (N4B - Destek Merkezi)
-├── 📄 Finans (Finansal İşlemler)
-└── 💳 Lisanslar (Lisans Sözleşmeleri)
+- 📋 **MÜŞTERİ PANELİ**
+  - 🏠 Anasayfa (UniveraHome/Musteri)
+  - 💼 Talepler (Geliştirme Talepleri)
+  - 🎧 Destek (N4B - Destek Merkezi)
+  - 📄 Finans (Finansal İşlemler)
+  - 💳 Lisanslar (Lisans Sözleşmeleri)
 
-🔧 YÖNETİM (Sadece User/Role/Admin rolleri)
-├── 👥 Kullanıcılar
-└── 🔒 Roller
+- 🔧 **YÖNETİM** (Sadece User/Role/Admin rolleri)
+  - 👥 Kullanıcılar
+  - 🔒 Roller
 
-⚙️ ALT BÖLÜM
-├── 🌙 Gece Modu
-├── 🚪 Çıkış Yap
-└── 👤 Kullanıcı Profil Kartı
+- ⚙️ **ALT BÖLÜM**
+  - 🌙 Gece Modu
+  - 🚪 Çıkış Yap
+  - 👤 Kullanıcı Profil Kartı
 
-🟢 Canlı Entegrasyon: Aktif (Durum göstergesi)
-```
+- 🟢 **Canlı Entegrasyon:** Aktif (Durum göstergesi)
 
 ### 6.2 Üst Menü / Header
 
@@ -544,6 +566,70 @@ flowchart LR
 | **Claim** | Kullanıcıya atanan özel bilgi etiketi (firma, tip vb.) |
 | **TBL_KULLANICI** | Kullanıcı bilgilerinin tutulduğu iş tablosu |
 | **VIEW_N4B_KATEGORILER** | Destek kategorilerinin hiyerarşik görünümü |
+
+---
+
+## 11. Veritabanı Yapısı ve Veri Kaynakları
+
+Sistem, `MskDbContext` üzerinden SQL Server veritabanına bağlanır. Veriler temel olarak "Geliştirme", "Destek", "Finans", "Sistem" ve "Kullanıcı" olmak üzere 5 ana alanda kategorize edilebilir. Sistemdeki verilerin büyük bölümü, performans için Stored Procedure (`SP_` ve `SSP_` önekli) ve SQL View'lar üzerinden okunur, ancak yazma/güncelleme işlemleri Entity Framework Core üzerinden doğrudan tablolara veya harici API'lara `POST` edilerek sağlanır.
+
+### 11.1 Kullanıcı ve Yetkilendirme Tabloları
+| Tablo Adı | Modül/Kullanım Amacı | İçerik |
+|-----------|--------------------|--------|
+| `TBL_KULLANICI` | Genel Sistem | Portal kullanıcılarının (müşteri ve iç kullanıcılar) tüm profil bilgileri, şifre hash'leri, firma eşleşmeleri ve kullanıcı tipleri (Tip 1, 2, 3, 4). |
+| `AspNetRoles`, `AspNetUsers` vb. | Identity | Identity Framework güvenlik ve token tabloları. |
+| `TBL_MENU`, `TBL_MENU_YETKI_GRUBU` | Navigasyon | Sol menü öğeleri ve rol bazlı menü görünürlük ayarları. |
+| `TBL_KULLANICI_FIRMA` | Firma Filtresi | Çoklu firmaya (Tip 4) sahip Müşteriler için firma yetki eşleşmeleri. |
+
+### 11.2 Geliştirme Talepleri (Portal) Tabloları
+| Tablo Adı | Modül/Kullanım Amacı | İçerik |
+|-----------|--------------------|--------|
+| `TBL_TALEP` | Geliştirme Talepleri | Portaldan açılan tüm geliştirme talepleri. TFS ile eşleşen (*LNGTFSNO*) veya eşleşmeyen (*Sadece Portal*) kayıtlar. Referans: `TaleplerController`. |
+| `TBL_TALEP_AKIS_LOG` | Geliştirme Akışı | Bir talebin hangi durumda (`Analiz`, `Müşteri UAT` vb.) olduğunu izleyen zaman damgalı log tablosu. |
+| `TBL_TALEP_AKISDURUMLARI` | Durum Yönetimi | Talep durum havuzu (Örn: "Müşteri UAT", "Canlıya Geçiş"). |
+| `TBL_TALEP_FILE`, `TBL_TALEP_NOTLAR` | Dosya/Yorum | Bir talebe eklenen belgeler (Base64) ve kullanıcı yorumları. |
+
+### 11.3 Destek Merkezi (N4B) Tabloları
+| Tablo Adı | Modül/Kullanım Amacı | İçerik |
+|-----------|--------------------|--------|
+| `TBL_N4BISSUE` | Destek Talepleri | Müşterinin açtığı destek (Ticket) kayıtları. Buradaki veriler anlık olarak N4B API üzerinden merkeze iletilir. |
+| `TBL_N4BISSSEFILES` | Destek Eki | N4B biletlerine bağlanan dosyalar ve ekran görüntüleri. |
+| `VIEW_N4B_KATEGORILER` | Destek Formu | Sorun bildirimi sırasında seçilen kategori ağacı. |
+| `VIEW_N4BISSUESLIFECYCLE` | Dashboard / AI | N4B sisteminden gelen destek taleplerinin durum özetleri görünümü. |
+
+### 11.4 Finans, Sipariş ve Lisans Tabloları
+| Tablo Adı | Modül/Kullanım Amacı | İçerik |
+|-----------|--------------------|--------|
+| `TBL_VARUNA_SIPARIS_xxx` | Finans | Müşteriye ait genel fatura ve sipariş işlemleri. |
+| `TBL_VARUNA_TEKLIF_URUNLERI` | Finans / Bütçe | Sipariş kalemleri, efor kırılımları ve güncel ürün tutarları (Örn: `NetLineTotalAmount_Amount`). TFS geliştirme maddelerinin gerçek fiyatlandırmasını sağlar. |
+| `TBL_VARUNA_SOZLESME` | Lisans Yönetimi | Aktif veya geçmiş müşteri sözleşmeleri, bitiş tarihleri ve lisans bedelleri. |
+
+### 11.5 Log ve İzleme Tabloları
+| Tablo Adı | Modül/Kullanım Amacı | İçerik |
+|-----------|--------------------|--------|
+| `TBL_SISTEM_LOG` | Sistem İzleme | Kullanıcının portala giriş/çıkış hareketleri, şifre değişiklikleri, yetkisiz erişim denemeleri gibi genel sistem güvenliği izleri. |
+| `TBL_LOG` | Hata İzleme | Uygulama bazlı Exception ve Warning logları. |
+| `AIServiceLogs` | AI Asistan Mimarisi| Gemini AI botu üzerinden yapılan sorguların geçmişi, yanıtları ve token (kredi) tüketimleri. |
+
+---
+
+## 12. Sürüm Notları ve Son Güncellemeler (Mart 2026)
+
+Projede yakın zamanda tespit edilen ve teknik olarak çözülen kritik akış ve yetkilendirme sorunları aşağıdaki gibidir:
+
+### 11.1 Geliştirme Talepleri (Açık Talep Sayısı) Senkronizasyonu
+**Sorun:** Anasayfa (`MusteriController`) ve UniveraHome (`UniveraHomeController`) dashboard ekranlarında açık geliştirme talebi sayısının, gerçek ve doğru veriyi sunan `TaleplerController` ekranından daha yüksek görüntülenmesi (örn. 267 vs. 132).
+**Kök Neden:** Dashboard controller'larının hızlı yükleme (fast-path) durumunda `SP_TFS_GELISTIRME_COKLU_FILTRE` isimli toplu veritabanı prosedürünü çağırması ve bu prosedürün çapraz/fazladan talepleri (farklı şirket durumlarına ait verileri) filtrelemeden döndürmesiydi.
+**Çözüm:** Toplu SP çağrısı yerine `TaleplerController` içerisinde uygulanan, kullanıcının yetkili olduğu firmaları eşzamanlı (`Parallel.ForEachAsync`) olarak dönüp `SP_TFS_GELISTIRME` prosedürünü ayrı ayrı çağıran mimari dashboard ekranlarına entegre edildi. Son hesaplamalara "portal-only" aktif biletler mantığı kusursuz dahil edildi.
+
+### 11.2 Yan Menü (Sidebar) Yönetim Sekmeleri Yetkilendirmesi
+**Sorun:** Tüm kullanıcıların (Örn: Yetkisiz iç kullanıcılar) yan menüde bulunan `YÖNETİM` altındaki "Kullanıcılar" ve "Roller" sekmelerini görebilmesi.
+**Çözüm:** Sidebar render edilen üç ana arayüz dosyasına (`_Layout.cshtml`, `_LayoutMusteri.cshtml`, ve `_Sidebar.cshtml`) katı yetkilendirme (`User.IsInRole("Admin") || userTypeClaim == "1"`) koşulu eklendi. Görüntüleme kısıtlamaları doğrudan veritabanındaki "Kullanıcı Tipi = 1" koşulu üzerinden kalıcı olarak yetkilendirildi.
+
+### 11.3 Lisans ve Sözleşmeler Bölümü Univera Filtresi
+**Sorun:** Univera kullanıcı tipi (`Type == 3`) ile giriş yapıldığında, sol menüden yapılan firma filtreleme işlemlerinin geçersiz olması ve tüm lisansların zorla ekranda listelenmesi.
+**Kök Neden:** `LisanslarController` içerisindeki `isViewingAllAsAdmin` değişkeninin hem `Tip 1` (Admin) hem de `Tip 3` (Univera Admin) kullanıcıları kapsayacak şekilde geniş tutulması.
+**Çözüm:** Admin bypass kuralından Type 3 (`LNGKULLANICITIPI == 3`) koşulu kaldırıldı. Univera tipindeki kullanıcıların, normal müşteriler (`targetCompanies` yetkileri ve URL filtresi) üzerinden kısıtlama mimarisine saygı duyması zorunlu kılındı.
 
 ---
 

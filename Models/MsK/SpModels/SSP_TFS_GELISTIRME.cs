@@ -1,6 +1,6 @@
 using System;
 
-namespace UniCP.Models.MsK.SpModels
+namespace SOS.Models.MsK.SpModels
 {
     public class SSP_TFS_GELISTIRME
     {
@@ -27,3 +27,4 @@ namespace UniCP.Models.MsK.SpModels
         public string? YARATICI { get; set; }
     }
 }
+

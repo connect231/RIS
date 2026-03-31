@@ -1,4 +1,4 @@
-﻿namespace UniCP.Models.KKModels
+namespace SOS.Models.KKModels
 {
     public class Pos_OdemePostDTO
     {
@@ -16,3 +16,4 @@
         public string TURKPOS_RETVAL_Hash { get; set; }
     }
 }
+

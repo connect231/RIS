@@ -1,10 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
-namespace UniCP.Models.MsK;
+namespace SOS.Models.MsK;
 
 [Index("UserId", Name = "IX_AspNetUserClaims_UserId")]
 public partial class AspNetUserClaim
@@ -22,3 +22,4 @@ public partial class AspNetUserClaim
     [InverseProperty("AspNetUserClaims")]
     public virtual AspNetUser User { get; set; } = null!;
 }
+

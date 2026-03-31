@@ -1,5 +1,15 @@
 @{
     ViewData["Title"] = "Erişim Engellendi";
+
+    string homeUrl = "/Account/Login";
+    if (User.IsInRole("UniveraHome"))
+        homeUrl = Url.Action("Index", "UniveraHome")!;
+    else if (User.IsInRole("Musteri") || User.IsInRole("Admin"))
+        homeUrl = Url.Action("Index", "Musteri")!;
+    else if (User.IsInRole("Talepler"))
+        homeUrl = Url.Action("Index", "Talepler")!;
+    else if (User.IsInRole("Finans"))
+        homeUrl = Url.Action("Index", "Finans")!;
 }
 
 <div class="min-h-[60vh] flex items-center justify-center">
@@ -15,9 +25,10 @@
         
 
 
-        <a href="/" class="inline-flex items-center px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl transition-colors">
+        <a href="@homeUrl" class="inline-flex items-center px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl transition-colors">
             <i class="bi bi-arrow-left mr-2"></i>
             Ana Sayfaya Dön
         </a>
     </div>
 </div>
+

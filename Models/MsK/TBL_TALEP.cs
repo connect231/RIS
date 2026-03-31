@@ -1,10 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
-namespace UniCP.Models.MsK;
+namespace SOS.Models.MsK;
 
 [Table("TBL_TALEP")]
 public partial class TBL_TALEP
@@ -48,3 +48,4 @@ public partial class TBL_TALEP
     [InverseProperty("LNGTALEPKODNavigation")]
     public virtual ICollection<TBL_TALEP_NOTLAR> TBL_TALEP_NOTLARs { get; set; } = new List<TBL_TALEP_NOTLAR>();
 }
+

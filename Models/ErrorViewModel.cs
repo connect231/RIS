@@ -1,4 +1,4 @@
-namespace UniCP.Models
+namespace SOS.Models
 {
     public class ErrorViewModel
     {
@@ -7,3 +7,4 @@ namespace UniCP.Models
         public bool ShowRequestId => !string.IsNullOrEmpty(RequestId);
     }
 }
+

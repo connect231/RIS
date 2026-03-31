@@ -1,10 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
-namespace UniCP.Models.MsK;
+namespace SOS.Models.MsK;
 
 [Table("TBL_N4BISSSEFILES")]
 public partial class TBL_N4BISSSEFILE
@@ -26,3 +26,4 @@ public partial class TBL_N4BISSSEFILE
     [InverseProperty("TBL_N4BISSSEFILEs")]
     public virtual TBL_N4BISSUE? LNGTBLISSUEKODNavigation { get; set; }
 }
+

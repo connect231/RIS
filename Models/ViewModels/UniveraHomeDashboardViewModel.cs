@@ -1,7 +1,7 @@
-using UniCP.Models.MsK;
-using UniCP.Models.MsK.SpModels;
+using SOS.Models.MsK;
+using SOS.Models.MsK.SpModels;
 
-namespace UniCP.Models.ViewModels
+namespace SOS.Models.ViewModels
 {
     /// <summary>
     /// ViewModel for Univera Home Dashboard
@@ -44,10 +44,6 @@ namespace UniCP.Models.ViewModels
         // ===== License =====
         public int ExpiredLicenseCount { get; set; }
 
-        // ===== Debug Info (optional - can be removed in production) =====
-        public List<string> DebugFlow { get; set; } = new();
-        public int DebugTargetCompaniesCount { get; set; }
-        public List<string> DebugExceptions { get; set; } = new();
-        public object? DebugOrders { get; set; }
     }
 }
+

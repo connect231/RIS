@@ -1,10 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
-namespace UniCP.Models.MsK;
+namespace SOS.Models.MsK;
 
 [Keyless]
 public partial class VIEW_N4B_CUSTOMER
@@ -60,3 +60,4 @@ public partial class VIEW_N4B_CUSTOMER
 
     public int? LNGORTAKPROJEKOD { get; set; }
 }
+

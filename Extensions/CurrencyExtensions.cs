@@ -1,6 +1,6 @@
 using System;
 
-namespace UniCP.Extensions
+namespace SOS.Extensions
 {
     public static class CurrencyExtensions
     {
@@ -20,3 +20,4 @@ namespace UniCP.Extensions
         }
     }
 }
+

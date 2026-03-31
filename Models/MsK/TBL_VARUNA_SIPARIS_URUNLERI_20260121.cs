@@ -1,10 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
-namespace UniCP.Models.MsK;
+namespace SOS.Models.MsK;
 
 [Keyless]
 [Table("TBL_VARUNA_SIPARIS_URUNLERI_20260121")]
@@ -70,3 +70,4 @@ public partial class TBL_VARUNA_SIPARIS_URUNLERI_20260121
     [Unicode(false)]
     public string? StockCode { get; set; }
 }
+

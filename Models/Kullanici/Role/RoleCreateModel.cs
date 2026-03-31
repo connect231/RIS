@@ -1,6 +1,6 @@
 using System.ComponentModel.DataAnnotations;
 
-namespace UniCP.Models.Kullanici.Role;
+namespace SOS.Models.Kullanici.Role;
 
 public class RoleCreateModel
 {

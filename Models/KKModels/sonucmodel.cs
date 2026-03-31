@@ -1,4 +1,4 @@
-﻿namespace UniCP.Models.KKModels
+namespace SOS.Models.KKModels
 {
     public class sonucmodel
     {
@@ -12,3 +12,4 @@
 
     }
 }
+

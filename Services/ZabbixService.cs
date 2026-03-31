@@ -2,13 +2,15 @@ using System.Text;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Configuration;
+using Microsoft.Extensions.Logging;
 
-namespace UniCP.Services
+namespace SOS.Services
 {
     public class ZabbixService
     {
         private readonly HttpClient _httpClient;
         private readonly IConfiguration _configuration;
+        private readonly ILogger<ZabbixService> _logger;
         private readonly string _apiUrl;
         private readonly string _username;
         private readonly string _password;
@@ -16,10 +18,11 @@ namespace UniCP.Services
         private bool _isAuthenticated = false;
         private readonly SemaphoreSlim _authLock = new(1, 1);
 
-        public ZabbixService(HttpClient httpClient, IConfiguration configuration)
+        public ZabbixService(HttpClient httpClient, IConfiguration configuration, ILogger<ZabbixService> logger)
         {
             _httpClient = httpClient;
             _configuration = configuration;
+            _logger = logger;
             
             // Read from configuration
             _apiUrl = _configuration["Zabbix:ApiUrl"] ?? throw new InvalidOperationException("Zabbix:ApiUrl not configured");
@@ -156,8 +159,8 @@ namespace UniCP.Services
                 }
             }
 
-            Console.WriteLine($"[Zabbix Debug] Sending Request to: {_apiUrl}");
-            Console.WriteLine($"[Zabbix Debug] Payload: {logJson}");
+            _logger.LogDebug("[Zabbix] Sending request to: {ApiUrl}", _apiUrl);
+            _logger.LogDebug("[Zabbix] Payload: {Payload}", logJson);
 
             var content = new StringContent(json, Encoding.UTF8, "application/json");
             var response = await _httpClient.PostAsync(_apiUrl, content);
@@ -225,3 +228,4 @@ namespace UniCP.Services
         public DateTime GetDateTime() => DateTimeOffset.FromUnixTimeSeconds(GetTime()).DateTime.ToLocalTime();
     }
 }
+

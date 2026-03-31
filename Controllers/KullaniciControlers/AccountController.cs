@@ -7,13 +7,13 @@ using Microsoft.VisualStudio.Web.CodeGenerators.Mvc.Templates.BlazorIdentity.Pag
 using NuGet.Common;
 using System.Security.Claims;
 using System.Threading.Tasks;
-using UniCP.DbData;
-using UniCP.Models;
-using UniCP.Models.Kullanici;
-using UniCP.Models.Kullanici.Account;
+using SOS.DbData;
+using SOS.Models;
+using SOS.Models.Kullanici;
+using SOS.Models.Kullanici.Account;
 using static Microsoft.EntityFrameworkCore.DbLoggerCategory;
 
-namespace UniCP.Controllers;
+namespace SOS.Controllers;
 
 public class AccountController : Controller
 {
@@ -25,9 +25,9 @@ public class AccountController : Controller
     private readonly Services.ICompanyResolutionService _companyResolution;
     private readonly Services.IUrlEncryptionService _urlEncryption;
     private readonly Services.ILogService _logService;
+    private readonly ILogger<AccountController> _logger;
 
-
-    public AccountController(UserManager<AppUser> userManager, SignInManager<AppUser> signInManager, IEmailService emailService , MskDbContext mskDb, Services.ICompanyResolutionService companyResolution, Services.IUrlEncryptionService urlEncryption, Services.ILogService logService)
+    public AccountController(UserManager<AppUser> userManager, SignInManager<AppUser> signInManager, IEmailService emailService, MskDbContext mskDb, Services.ICompanyResolutionService companyResolution, Services.IUrlEncryptionService urlEncryption, Services.ILogService logService, ILogger<AccountController> logger)
     {
         _userManager = userManager;
         _signInManager = signInManager;
@@ -36,6 +36,7 @@ public class AccountController : Controller
         _companyResolution = companyResolution;
         _urlEncryption = urlEncryption;
         _logService = logService;
+        _logger = logger;
     }
     public ActionResult Create()
     {
@@ -162,7 +163,7 @@ public class AccountController : Controller
             if (!check.Succeeded) return Json(new { success = false, message = "Hatalı şifre." });
 
             // Get User Type
-            var dbUser = await _mskDb.TBL_KULLANICIs.FirstOrDefaultAsync(u => u.LNGIDENTITYKOD == user.Id);
+            var dbUser = await _mskDb.TBL_KULLANICIs.AsNoTracking().FirstOrDefaultAsync(u => u.LNGIDENTITYKOD == user.Id);
             int type = dbUser?.LNGKULLANICITIPI ?? 0;
 
             // Check for ForcePasswordChange claim
@@ -173,7 +174,7 @@ public class AccountController : Controller
                 return Json(new { success = true, forceChange = true });
             }
 
-            if (type == 1) // Admin / Internal can select company
+            if (type == 1) // Admin - can select from all companies
             {
                 var projects = await _mskDb.VIEW_ORTAK_PROJE_ISIMLERIs
                                         .OrderBy(x => x.TXTORTAKPROJEADI)
@@ -190,7 +191,7 @@ public class AccountController : Controller
                 
                 return Json(new { success = true, type = 1, projects = projectList });
             }
-            else if (type == 4) // Univera Customer - Select from Authorized Companies
+            else if (type == 3 || type == 4) // Univera Internal/Customer - Select from Authorized Companies
             {
                 var authorizedIndices = await _mskDb.TBL_KULLANICI_FIRMAs
                                         .Where(f => f.LNGKULLANICIKOD == dbUser.LNGKOD)
@@ -210,7 +211,7 @@ public class AccountController : Controller
                  var projectList = new List<object> { allOption };
                  projectList.AddRange(mappedProjects);
                  
-                 return Json(new { success = true, type = 4, projects = projectList });
+                 return Json(new { success = true, type = type, projects = projectList });
             }
 
             // Customer (Type 2 or others) - direct login
@@ -218,7 +219,8 @@ public class AccountController : Controller
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = "Sunucu Hatası: " + ex.Message + " | " + ex.InnerException?.Message });
+            _logger.LogError(ex, "PreLoginCheck sırasında hata oluştu");
+            return Json(new { success = false, message = "İşlem sırasında bir hata oluştu. Lütfen daha sonra tekrar deneyiniz." });
         }
     }
 
@@ -242,15 +244,6 @@ public class AccountController : Controller
              }
         }
 
-        try 
-        {
-            ViewBag.Projects = _mskDb.VIEW_ORTAK_PROJE_ISIMLERIs.OrderBy(x => x.TXTORTAKPROJEADI).ToList();
-        }
-        catch
-        {
-            ViewBag.Projects = new List<UniCP.Models.MsK.VIEW_ORTAK_PROJE_ISIMLERI>();
-        }
-
         return View();
     }
 
@@ -271,7 +264,7 @@ public class AccountController : Controller
                     // Fetch Company Name & User Type from TBL_KULLANICI
                     var dbUser = _mskDb.TBL_KULLANICIs
                         .Where(x => x.LNGIDENTITYKOD == user.Id)
-                        .Select(x => new { x.TXTFIRMAADI, x.LNGKULLANICITIPI })
+                        .Select(x => new { x.LNGKOD, x.TXTFIRMAADI, x.LNGKULLANICITIPI })
                         .FirstOrDefault();
 
                     var claims = new List<Claim>();
@@ -283,47 +276,6 @@ public class AccountController : Controller
                         }
                         // Add UserType Claim (1=Admin, 2=Customer)
                         claims.Add(new Claim("UserType", dbUser.LNGKULLANICITIPI?.ToString() ?? "0"));
-                    }
-
-                    // Add Selected Project Code Claim
-                    if (projectCode.HasValue)
-                    {
-                        var pCode = projectCode.Value;
-                        if (pCode > 0)
-                        {
-                            claims.Add(new Claim("ProjectCode", pCode.ToString()));
-                            
-                            // Optional: Fetch Project Name for display if needed
-                            var projectName = _mskDb.VIEW_ORTAK_PROJE_ISIMLERIs
-                                .Where(p => p.LNGKOD == pCode)
-                                .Select(p => p.TXTORTAKPROJEADI)
-                                .FirstOrDefault();
-                                
-                            if (!string.IsNullOrEmpty(projectName))
-                            {
-                                claims.Add(new Claim("ProjectName", projectName));
-                            }
-                        }
-
-                        // [FIX] Set Cookie and Redirect Logic for Initial Login
-                        // Skip cookie for Admin (1) and Univera Internal (3) - they should use URL params
-                        var userType = dbUser?.LNGKULLANICITIPI ?? 0;
-                        if (userType != 1 && userType != 3)
-                        {
-                            if (pCode <= 0)
-                            {
-                                _companyResolution.ClearCompanyCookie(HttpContext);
-                            }
-                            else
-                            {
-                                _companyResolution.SetCompanyCookie(HttpContext, pCode);
-                            }
-                        }
-                        else
-                        {
-                            // Admin/Univera Internal: Always delete cookie
-                            Response.Cookies.Delete("SelectedCompanyId");
-                        }
                     }
 
                     // Welcome Bonus: Give 1000 tokens if balance is 0
@@ -377,7 +329,7 @@ public class AccountController : Controller
                         return await RedirectToAuthorizedPage(user, projectCode.Value);
                     }
 
-                    _ = _logService.LogAsync("LOGIN_SUCCESS", $"Kullanıcı giriş yaptı: {user.UserName}", "ACCOUNT");
+                    await _logService.LogAsync("LOGIN_SUCCESS", $"Kullanıcı giriş yaptı: {user.UserName}", "ACCOUNT");
 
                     return await RedirectToAuthorizedPage(user);
 
@@ -398,31 +350,17 @@ public class AccountController : Controller
                 {
                     ModelState.AddModelError("", "Hatalı parola");
                     TempData["Mesaj"] = "Hatalı parola";
-                    _ = _logService.LogAsync("LOGIN_FAILED", $"Hatalı parola denemesi: {model.Email}", "ACCOUNT");
+                    await _logService.LogAsync("LOGIN_FAILED", $"Hatalı parola denemesi: {model.Email}", "ACCOUNT");
                 }
             }
             else
             {
                 ModelState.AddModelError("", "Hatalı email");
                 TempData["Mesaj"] = "Hatalı email";
-                _ = _logService.LogAsync("LOGIN_FAILED", $"Hatalı email denemesi: {model.Email}", "ACCOUNT");
+                await _logService.LogAsync("LOGIN_FAILED", $"Hatalı email denemesi: {model.Email}", "ACCOUNT");
             }
         }
         
-
-
-
-
-        try 
-        {
-            ViewBag.Projects = _mskDb.VIEW_ORTAK_PROJE_ISIMLERIs.OrderBy(x => x.TXTORTAKPROJEADI).ToList();
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"[ERROR] Failed to fetch projects: {ex.Message} \n {ex.StackTrace}");
-            ViewBag.Projects = new List<UniCP.Models.MsK.VIEW_ORTAK_PROJE_ISIMLERI>();
-        }
-
         return View(model);
     }
 
@@ -433,8 +371,10 @@ public class AccountController : Controller
         Response.Headers["Clear-Site-Data"] = "\"cache\", \"cookies\", \"storage\", \"executionContexts\"";
         
         await _signInManager.SignOutAsync();
-        
-        _ = _logService.LogAsync("LOGOUT", "Kullanıcı çıkış yaptı.", "ACCOUNT");
+
+        Response.Cookies.Delete("duyuru_goruldu");
+
+        await _logService.LogAsync("LOGOUT", "Kullanıcı çıkış yaptı.", "ACCOUNT");
 
         return RedirectToAction("Login", "Account");
     }
@@ -570,7 +510,7 @@ public class AccountController : Controller
         if (user == null)
         {
             // 3. Try to find in TBL_KULLANICI (Business Table)
-            var dbUser = await _mskDb.TBL_KULLANICIs.FirstOrDefaultAsync(x => x.TXTEMAIL == email);
+            var dbUser = await _mskDb.TBL_KULLANICIs.AsNoTracking().FirstOrDefaultAsync(x => x.TXTEMAIL == email);
             if (dbUser != null && dbUser.LNGIDENTITYKOD.HasValue)
             {
                 user = await _userManager.FindByIdAsync(dbUser.LNGIDENTITYKOD.Value.ToString());
@@ -632,8 +572,8 @@ public class AccountController : Controller
             }
             catch (Exception ex)
             {
-                 // Create a log or feedback mechanism here
-                 TempData["Mesaj"] = "Şifre oluşturuldu ancak mail gönderilemedi: " + ex.Message;
+                 _logger.LogError(ex, "Şifre sıfırlama maili gönderilemedi");
+                 TempData["Mesaj"] = "Şifre oluşturuldu ancak mail gönderilemedi. Lütfen daha sonra tekrar deneyiniz.";
                  return RedirectToAction("Login");
             }
         }
@@ -718,74 +658,8 @@ public class AccountController : Controller
 
     private async Task<ActionResult> RedirectToAuthorizedPage(AppUser user, int? companyId = null)
     {
-         var roles = await _userManager.GetRolesAsync(user);
-         TempData["DebugRolesHelper"] = string.Join(",", roles);
-         TempData["DebugLogicHelper"] = "RedirectToAuthorizedPage Hit";
-
-        // Priority 0: UniveraHome
-        if (roles.Contains("UniveraHome"))
-        {
-            if (companyId.HasValue)
-            {
-                 return RedirectToAction("Index", "UniveraHome", new { filteredCompanyId = _urlEncryption.EncryptId(companyId.Value) });
-            }
-            return RedirectToAction("Index", "UniveraHome");
-        }
-
-        // Priority 1: Musteri / Admin (Default Dashboard)
-        if (roles.Contains("Musteri") || roles.Contains("Admin"))
-        {
-            if (companyId.HasValue)
-            {
-                 return RedirectToAction("Index", "Musteri", new { filteredCompanyId = _urlEncryption.EncryptId(companyId.Value) });
-            }
-            return RedirectToAction("Index", "Musteri");
-        }
-        
-        // Priority 2: Talepler
-        if (roles.Contains("Talepler"))
-        {
-            return RedirectToAction("Index", "Talepler");
-        }
-
-        // Priority 3: Finans
-        if (roles.Contains("Finans"))
-        {
-            return RedirectToAction("Index", "Finans");
-        }
-
-        // Priority 4: Raporlar
-        if (roles.Contains("Raporlar"))
-        {
-            return RedirectToAction("Index", "Raporlar");
-        }
-        
-        // Priority 5: Lisanslar
-        if (roles.Contains("Lisanslar"))
-        {
-            return RedirectToAction("Index", "Lisanslar");
-        }
-        
-        // Priority 6: N4B
-        if (roles.Contains("N4B"))
-        {
-            return RedirectToAction("Index", "N4B");
-        }
-        
-        // Priority 7: Role Management
-        if (roles.Contains("Role"))
-        {
-            return RedirectToAction("Index", "Role");
-        }
-        
-        // Priority 8: User Management
-        if (roles.Contains("User"))
-        {
-            return RedirectToAction("Index", "User");
-        }
-
-        // Fallback
-        return RedirectToAction("Index", "Home");
+        // Giriş sonrası Cockpit dashboard'a yönlendir
+        return RedirectToAction("Index", "Cockpit");
     }
 
     private async Task<bool> IsUserAuthorizedForUrl(AppUser user, string url)
@@ -974,9 +848,9 @@ public class AccountController : Controller
             await _signInManager.SignInWithClaimsAsync(user, false, claims);
 
             // [FIX] Set Cookie for robust persistence
-            // Skip cookie for Admin (1) and Univera Internal (3) - they should use URL params
+            // Skip cookie for Admin (1) only - they should use URL params
             var userType = dbUser?.LNGKULLANICITIPI ?? 0;
-            if (userType != 1 && userType != 3)
+            if (userType != 1)
             {
                 if (targetCompanyId <= 0)
                 {
@@ -989,15 +863,16 @@ public class AccountController : Controller
             }
             else
             {
-                // Admin/Univera Internal: Always delete cookie
+                // Admin: Always delete cookie
                 _companyResolution.ClearCompanyCookie(HttpContext);
             }
-
             return Json(new { success = true });
         }
         catch (Exception ex)
         {
-            return Json(new { success = false, message = "Hata: " + ex.Message });
+            _logger.LogError(ex, "Şirket değiştirme sırasında hata oluştu");
+            return Json(new { success = false, message = "İşlem sırasında bir hata oluştu." });
         }
     }
 }
+

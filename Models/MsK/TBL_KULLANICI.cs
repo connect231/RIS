@@ -1,10 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
-namespace UniCP.Models.MsK;
+namespace SOS.Models.MsK;
 
 [Table("TBL_KULLANICI")]
 public partial class TBL_KULLANICI
@@ -40,3 +40,4 @@ public partial class TBL_KULLANICI
     [InverseProperty("RevokedByNavigation")]
     public virtual ICollection<TBL_FINANS_ONAY> TBL_FINANS_ONAYRevokedByNavigations { get; set; } = new List<TBL_FINANS_ONAY>();
 }
+

@@ -1,9 +1,9 @@
-﻿using DocumentFormat.OpenXml.Office2010.CustomUI;
+using DocumentFormat.OpenXml.Office2010.CustomUI;
 using DocumentFormat.OpenXml.Presentation;
 using ParamService;
 using System.ServiceModel;
 
-namespace UniCP.Services
+namespace SOS.Services
 {
     public class ParamPosService
     {
@@ -38,3 +38,4 @@ namespace UniCP.Services
       
     }
 }
+

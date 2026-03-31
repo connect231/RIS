@@ -1,7 +1,7 @@
-using UniCP.Models.MsK;
-using UniCP.Models.MsK.SpModels;
+using SOS.Models.MsK;
+using SOS.Models.MsK.SpModels;
 
-namespace UniCP.Models.ViewModels
+namespace SOS.Models.ViewModels
 {
     public class UniveraHomeViewModel
     {
@@ -10,9 +10,6 @@ namespace UniCP.Models.ViewModels
         public string AuthorizedCompanyNames { get; set; }
         public int? SelectedCompanyId { get; set; }
         
-        // Debug Info
-        public List<string> DebugFlow { get; set; } = new();
-
         // User Info
         public TBL_KULLANICI Kullanici { get; set; }
 
@@ -41,10 +38,10 @@ namespace UniCP.Models.ViewModels
 
     public class UniveraDashboardData
     {
-        public List<UniCP.Models.MsK.SpModels.SSP_N4B_TICKET_DURUM_SAYILARI_COKLU> Stats { get; set; } = new();
-        public List<UniCP.Models.MsK.SpModels.SSP_N4B_SLA_ORAN_COKLU> SlaStats { get; set; } = new();
-        public List<UniCP.Models.MsK.SpModels.SSP_TFS_GELISTIRME_COKLU> TfsStats { get; set; } = new();
-        public List<UniCP.Models.MsK.SpModels.SSP_VARUNA_SIPARIS_COKLU> FinanceOrders { get; set; } = new();
+        public List<SOS.Models.MsK.SpModels.SSP_N4B_TICKET_DURUM_SAYILARI_COKLU> Stats { get; set; } = new();
+        public List<SOS.Models.MsK.SpModels.SSP_N4B_SLA_ORAN_COKLU> SlaStats { get; set; } = new();
+        public List<SOS.Models.MsK.SpModels.SSP_TFS_GELISTIRME_COKLU> TfsStats { get; set; } = new();
+        public List<SOS.Models.MsK.SpModels.SSP_VARUNA_SIPARIS_COKLU> FinanceOrders { get; set; } = new();
         public List<TBL_VARUNA_SOZLESME> Contracts { get; set; } = new();
         
         // For Univera User (Type 3) - Batched Data
@@ -57,10 +54,12 @@ namespace UniCP.Models.ViewModels
 
     public class CompanyData
     {
-        public List<UniCP.Models.MsK.SpModels.SSP_N4B_TICKET_DURUM_SAYILARI> Stats { get; set; } = new();
-        public List<UniCP.Models.MsK.SpModels.SSP_N4B_SLA_ORAN> SlaData { get; set; } = new();
-        public List<UniCP.Models.MsK.SpModels.SSP_N4B_TICKETLARI> OpenTickets { get; set; } = new();
-        public List<UniCP.Models.MsK.SpModels.SSP_TFS_GELISTIRME> TfsRequests { get; set; } = new();
-        public List<UniCP.Models.MsK.SpModels.SpVarunaSiparisResult> FinanceOrders { get; set; } = new();
+        public List<SOS.Models.MsK.SpModels.SSP_N4B_TICKET_DURUM_SAYILARI> Stats { get; set; } = new();
+        public List<SOS.Models.MsK.SpModels.SSP_N4B_SLA_ORAN> SlaData { get; set; } = new();
+        public List<SOS.Models.MsK.SpModels.SSP_N4B_TICKETLARI> OpenTickets { get; set; } = new();
+        public List<SOS.Models.MsK.SpModels.SSP_TFS_GELISTIRME> TfsRequests { get; set; } = new();
+        public List<SOS.Models.MsK.SpModels.SpVarunaSiparisResult> FinanceOrders { get; set; } = new();
     }
 }
+
+

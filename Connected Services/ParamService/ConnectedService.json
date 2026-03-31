@@ -1,7 +1,7 @@
 {
   "ExtendedData": {
     "inputs": [
-      "https://testposws.param.com.tr/turkpos.ws/service_turkpos_prod.asmx?wsdl"
+      "https://posws.param.com.tr/turkpos.ws/service_turkpos_prod.asmx?wsdl"
     ],
     "collectionTypes": [
       "System.Array",

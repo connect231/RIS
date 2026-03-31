@@ -1,10 +1,10 @@
-ï»¿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
-namespace UniCP.Models.MsK;
+namespace SOS.Models.MsK;
 
 [Table("TBL_VARUNA_SOZLESME")]
 public partial class TBL_VARUNA_SOZLESME
@@ -129,4 +129,12 @@ public partial class TBL_VARUNA_SOZLESME
 
     [StringLength(1024)]
     public string? ContractName { get; set; }
+
+    /// <summary>
+    /// Portal'daki VIEW_ORTAK_PROJE_ISIMLERI.LNGKOD ile eþleþen firma kodu.
+    /// String tabanlý AccountTitle eþleþtirmesini ortadan kaldýrýr.
+    /// DatabaseMigrationService tarafýndan kolon oluþturulur, admin tarafýndan doldurulur.
+    /// </summary>
+    public int? LNGORTAKFIRMAKOD { get; set; }
 }
+

@@ -1,10 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
-namespace UniCP.Models.MsK;
+namespace SOS.Models.MsK;
 
 [Table("TBL_MENU_YETKI_GRUBU_MENU")]
 public partial class TBL_MENU_YETKI_GRUBU_MENU
@@ -24,3 +24,4 @@ public partial class TBL_MENU_YETKI_GRUBU_MENU
     [InverseProperty("TBL_MENU_YETKI_GRUBU_MENUs")]
     public virtual TBL_MENU LNGMENUKODNavigation { get; set; } = null!;
 }
+

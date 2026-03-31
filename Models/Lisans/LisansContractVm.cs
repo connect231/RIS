@@ -1,6 +1,6 @@
 using System;
 
-namespace UniCP.Models.Lisans
+namespace SOS.Models.Lisans
 {
     public class LisansContractVm 
     {
@@ -20,3 +20,4 @@ namespace UniCP.Models.Lisans
         public bool HasFiles { get; set; }
     }
 }
+

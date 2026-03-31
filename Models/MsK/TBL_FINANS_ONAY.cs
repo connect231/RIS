@@ -1,10 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
-namespace UniCP.Models.MsK;
+namespace SOS.Models.MsK;
 
 [Table("TBL_FINANS_ONAY")]
 [Index("CreatedBy", Name = "IX_TBL_FINANS_ONAY_CreatedBy")]
@@ -38,3 +38,4 @@ public partial class TBL_FINANS_ONAY
     [InverseProperty("TBL_FINANS_ONAYRevokedByNavigations")]
     public virtual TBL_KULLANICI? RevokedByNavigation { get; set; }
 }
+

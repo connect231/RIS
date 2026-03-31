@@ -1,10 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
-namespace UniCP.Models.MsK;
+namespace SOS.Models.MsK;
 
 [PrimaryKey("UserId", "LoginProvider", "Name")]
 public partial class AspNetUserToken
@@ -24,3 +24,4 @@ public partial class AspNetUserToken
     [InverseProperty("AspNetUserTokens")]
     public virtual AspNetUser User { get; set; } = null!;
 }
+

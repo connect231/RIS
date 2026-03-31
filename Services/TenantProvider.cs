@@ -1,9 +1,9 @@
 using System;
 using Microsoft.AspNetCore.Http;
 using System.Security.Claims;
-using UniCP.Models.MsK;
+using SOS.Models.MsK;
 
-namespace UniCP.Services
+namespace SOS.Services
 {
     public interface ITenantProvider
     {
@@ -54,3 +54,4 @@ namespace UniCP.Services
         }
     }
 }
+

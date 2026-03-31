@@ -2,33 +2,25 @@
     ViewData["Title"] = "Hoşgeldiniz";
 }
 
-<div class="min-h-[60vh] flex items-center justify-center">
-    <div class="text-center p-8 rounded-2xl glass-panel max-w-2xl w-full">
-        <div class="w-20 h-20 bg-indigo-500/10 rounded-full flex items-center justify-center mx-auto mb-6">
-            <i class="bi bi-person-badge text-3xl text-indigo-400"></i>
+<div class="flex items-center justify-center min-h-[calc(100vh-3.5rem)] bg-[#f5f5f7]">
+    <div class="text-center max-w-lg px-6">
+        <!-- Icon -->
+        <div class="mb-6">
+            <svg width="48" height="48" viewBox="0 0 36 36" fill="none" class="mx-auto opacity-20">
+                <rect width="36" height="36" rx="10" fill="#1d1d1f"/>
+                <path d="M22 12.5c0-1.5-1.5-2.5-4-2.5s-4 1-4 2.5c0 2 2.5 2.5 4 3.2s4 1.2 4 3.3c0 1.5-1.5 2.5-4 2.5s-4-1-4-2.5" stroke="white" stroke-width="2" stroke-linecap="round" fill="none"/>
+                <circle cx="27" cy="9" r="2.5" fill="#6366f1"/>
+            </svg>
         </div>
-        
-        <h1 class="text-3xl font-bold text-white mb-3">Univera Connect'e Hoşgeldiniz</h1>
-        <div class="text-indigo-300 font-medium text-lg mb-6">@User.Identity?.Name</div>
-        
-        <p class="text-slate-400 mb-8 text-lg leading-relaxed">
-            Hesabınız başarıyla oluşturuldu ve giriş yaptınız. <br />
-            Ancak şu anda atanmış herhangi bir yetkiniz (rolünüz) bulunmamaktadır.
+
+        <h1 class="text-3xl font-semibold text-[#1d1d1f] mb-2">Hoş geldiniz.</h1>
+        <p class="text-[#86868b] text-base font-light">
+            Sales Operating System'e başarıyla giriş yaptınız.
         </p>
 
-        <div class="bg-slate-900/50 p-6 rounded-xl border border-slate-700/50 mb-8 text-left">
-            <h3 class="text-white font-semibold mb-2 flex items-center gap-2">
-                <i class="bi bi-info-circle text-indigo-400"></i>
-                Ne Yapmalıyım?
-            </h3>
-            <p class="text-slate-400 text-sm">
-                Sistem yöneticinizle iletişime geçerek hesabınıza uygun rollerin (Müşteri, Finans, vb.) tanımlanmasını talep ediniz. Yetkileriniz tanımlandıktan sonra ilgili ekranlara erişim sağlayabileceksiniz.
-            </p>
+        <div class="mt-8 flex items-center justify-center gap-2 text-xs text-[#86868b]/50">
+            <div class="w-1.5 h-1.5 rounded-full bg-indigo-500"></div>
+            <span>Sistem aktif</span>
         </div>
-
-        <a href="/Account/Logout" class="inline-flex items-center px-6 py-3 bg-slate-800 hover:bg-slate-700 text-white rounded-xl transition-colors">
-            <i class="bi bi-box-arrow-left mr-2"></i>
-            Çıkış Yap
-        </a>
     </div>
 </div>

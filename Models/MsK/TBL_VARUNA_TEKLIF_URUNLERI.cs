@@ -1,10 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
-namespace UniCP.Models.MsK;
+namespace SOS.Models.MsK;
 
 [Table("TBL_VARUNA_TEKLIF_URUNLERI")]
 public partial class TBL_VARUNA_TEKLIF_URUNLERI
@@ -194,3 +194,4 @@ public partial class TBL_VARUNA_TEKLIF_URUNLERI
     [Column(TypeName = "decimal(18, 8)")]
     public decimal? StockSalesVatValue { get; set; }
 }
+

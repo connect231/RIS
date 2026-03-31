@@ -1,6 +1,6 @@
 using Microsoft.AspNetCore.Identity;
 
-namespace UniCP.Models.Kullanici;
+namespace SOS.Models.Kullanici;
 
 public class AppUser : IdentityUser<int>
 {

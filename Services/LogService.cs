@@ -2,10 +2,11 @@ using System;
 using System.Security.Claims;
 using System.Threading.Tasks;
 using Microsoft.AspNetCore.Http;
-using UniCP.DbData;
-using UniCP.Models.MsK;
+using Microsoft.Extensions.Logging;
+using SOS.DbData;
+using SOS.Models.MsK;
 
-namespace UniCP.Services
+namespace SOS.Services
 {
     public interface ILogService
     {
@@ -16,11 +17,13 @@ namespace UniCP.Services
     {
         private readonly MskDbContext _context;
         private readonly IHttpContextAccessor _httpContextAccessor;
+        private readonly ILogger<DbLogService> _logger;
 
-        public DbLogService(MskDbContext context, IHttpContextAccessor httpContextAccessor)
+        public DbLogService(MskDbContext context, IHttpContextAccessor httpContextAccessor, ILogger<DbLogService> logger)
         {
             _context = context;
             _httpContextAccessor = httpContextAccessor;
+            _logger = logger;
         }
 
         public async Task LogAsync(string action, string details, string module = null)
@@ -33,6 +36,11 @@ namespace UniCP.Services
                 int? userId = null;
                 if (int.TryParse(userIdStr, out int uid)) userId = uid;
 
+                // Aktif tenant: FirmaKod claim'inden okunur (login sırasında CustomUserClaimsPrincipalFactory tarafından set edilir)
+                int? tenantId = null;
+                var firmaKodStr = user?.FindFirstValue("FirmaKod");
+                if (int.TryParse(firmaKodStr, out int fk)) tenantId = fk;
+
                 string ipAddress = _httpContextAccessor.HttpContext?.Connection?.RemoteIpAddress?.ToString() ?? "Unknown";
 
                 var log = new TBL_SISTEM_LOG
@@ -43,7 +51,8 @@ namespace UniCP.Services
                     TRHKAYIT = DateTime.Now,
                     TXTKULLANICIADI = userName ?? "Anonymous",
                     LNGKULLANICIKOD = userId,
-                    TXTIP = ipAddress
+                    TXTIP = ipAddress,
+                    LNGORTAKFIRMAKOD = tenantId
                 };
 
                 _context.TBL_SISTEM_LOGs.Add(log);
@@ -52,8 +61,9 @@ namespace UniCP.Services
             catch (Exception ex)
             {
                 // Fallback: Don't crash the app if logging fails
-                System.Console.WriteLine($"Logging Failed: {ex.Message}");
+                _logger.LogError(ex, "Logging failed");
             }
         }
     }
 }
+

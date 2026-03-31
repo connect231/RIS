@@ -1,7 +1,7 @@
 using System.Net;
 using System.Net.Mail;
 
-namespace UniCP.Models;
+namespace SOS.Models;
 
 public interface IEmailService
 {
@@ -62,3 +62,4 @@ public class SmtpEmailService : IEmailService
         }
     }
 }
+

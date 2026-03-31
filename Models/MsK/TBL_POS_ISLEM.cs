@@ -1,10 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
-namespace UniCP.Models.MsK;
+namespace SOS.Models.MsK;
 
 [Table("TBL_POS_ISLEM")]
 public partial class TBL_POS_ISLEM
@@ -113,3 +113,4 @@ public partial class TBL_POS_ISLEM
     [Unicode(false)]
     public string? FATURANO { get; set; }
 }
+

@@ -1,10 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
-namespace UniCP.Models.MsK;
+namespace SOS.Models.MsK;
 
 public partial class AspNetRole
 {
@@ -26,3 +26,4 @@ public partial class AspNetRole
     [InverseProperty("Roles")]
     public virtual ICollection<AspNetUser> Users { get; set; } = new List<AspNetUser>();
 }
+

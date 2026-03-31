@@ -1,10 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
-namespace UniCP.Models.MsK;
+namespace SOS.Models.MsK;
 
 [Table("TBL_VARUNA_TEKLIF")]
 public partial class TBL_VARUNA_TEKLIF
@@ -256,3 +256,4 @@ public partial class TBL_VARUNA_TEKLIF
     [StringLength(100)]
     public string? Account_SAPOutReferenceCode { get; set; }
 }
+

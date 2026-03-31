@@ -1,12 +1,11 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
-using UniCP.DbData;
-using UniCP.Models;
-using UniCP.Models.Kullanici;
-using UniCP.Models.MsK;
-using UniCP.Services;
-using UniCP.Models;
+using SOS.DbData;
+using SOS.Models;
+using SOS.Models.Kullanici;
+using SOS.Models.MsK;
+using SOS.Services;
 
 
 var builder = WebApplication.CreateBuilder(args);
@@ -14,10 +13,7 @@ var builder = WebApplication.CreateBuilder(args);
 // Add services to the container.
 builder.Services.AddTransient<IEmailService, SmtpEmailService>();
 builder.Services.AddControllersWithViews().AddRazorRuntimeCompilation();
-builder.Services.AddTransient<UniCP.Services.GeminiService>();
-builder.Services.AddSingleton<UniCP.Services.AI.OllamaService>();
-builder.Services.AddScoped<UniCP.Services.AI.AIService>();
-builder.Services.AddHttpClient<UniCP.Services.ZabbixService>(); // Registered ZabbixService
+builder.Services.AddHttpClient<SOS.Services.ZabbixService>(); // Registered ZabbixService
 builder.Services.AddScoped<ICompanyResolutionService, CompanyResolutionService>();
 builder.Services.AddScoped<IDatabaseMigrationService, DatabaseMigrationService>();
 builder.Services.AddHttpContextAccessor();
@@ -25,6 +21,7 @@ builder.Services.AddScoped<ITenantProvider, TenantProvider>();
 builder.Services.AddSingleton<IUrlEncryptionService, UrlEncryptionService>();
 builder.Services.AddScoped<ILogService, DbLogService>();
 builder.Services.AddMemoryCache();
+builder.Services.AddResponseCaching();
 builder.Services.AddScoped<ParamPosService>();
 
 // Performance Optimization: Response Compression
@@ -46,7 +43,8 @@ builder.Services.AddIdentity<AppUser, AppRole>(options => {
     options.SignIn.RequireConfirmedEmail = true; 
 
 }).AddEntityFrameworkStores<DataContext>().AddDefaultTokenProviders()
-  .AddClaimsPrincipalFactory<UniCP.Services.CustomUserClaimsPrincipalFactory>();
+  .AddErrorDescriber<SOS.Services.CustomIdentityErrorDescriber>()
+  .AddClaimsPrincipalFactory<SOS.Services.CustomUserClaimsPrincipalFactory>();
 
 builder.Services.Configure<IdentityOptions>(options =>
 {
@@ -95,6 +93,7 @@ if (!app.Environment.IsDevelopment())
 }
 
 app.UseResponseCompression(); // Optimized Placement
+app.UseResponseCaching();
 app.UseHttpsRedirection();
 
 app.UseRouting();
@@ -133,3 +132,4 @@ app.MapControllerRoute(
 
 
 app.Run();
+

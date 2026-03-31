@@ -1,4 +1,4 @@
-﻿namespace UniCP.Models.N4BModels
+namespace SOS.Models.N4BModels
 {
     public class IssueDetay
     {
@@ -9,3 +9,4 @@
         
     }
 }
+

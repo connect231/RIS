@@ -1,4 +1,4 @@
-namespace UniCP.Constants
+namespace SOS.Constants
 {
     public static class AppConstants
     {
@@ -35,3 +35,4 @@ namespace UniCP.Constants
         }
     }
 }
+

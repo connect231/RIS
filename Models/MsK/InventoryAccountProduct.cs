@@ -1,10 +1,10 @@
-﻿using System;
+using System;
 using System.Collections.Generic;
 using System.ComponentModel.DataAnnotations;
 using System.ComponentModel.DataAnnotations.Schema;
 using Microsoft.EntityFrameworkCore;
 
-namespace UniCP.Models.MsK;
+namespace SOS.Models.MsK;
 
 public partial class InventoryAccountProduct
 {
@@ -195,3 +195,4 @@ public partial class InventoryAccountProduct
     [StringLength(250)]
     public string? Tags { get; set; }
 }
+

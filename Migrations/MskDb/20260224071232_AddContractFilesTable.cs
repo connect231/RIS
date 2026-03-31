@@ -1,8 +1,8 @@
-﻿using Microsoft.EntityFrameworkCore.Migrations;
+using Microsoft.EntityFrameworkCore.Migrations;
 
 #nullable disable
 
-namespace UniCP.Migrations.MskDb
+namespace SOS.Migrations.MskDb
 {
     /// <inheritdoc />
     public partial class AddContractFilesTable : Migration
@@ -38,3 +38,4 @@ namespace UniCP.Migrations.MskDb
         }
     }
 }
+
