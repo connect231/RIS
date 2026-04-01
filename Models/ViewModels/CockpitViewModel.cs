@@ -1,3 +1,4 @@
+
 using SOS.Models.MsK;
 
 namespace SOS.Models.ViewModels
@@ -74,5 +75,12 @@ namespace SOS.Models.ViewModels
         public List<VIEW_CP_EXCEL_FATURA> FaturaDetaylari { get; set; } = new();
         public List<VIEW_CP_EXCEL_FATURA> TahsilatDetaylari { get; set; } = new();
         public List<TBL_VARUNA_SOZLESME> SozlesmeDetaylari { get; set; } = new();
+        // İzole üst kartlar (global filtrelerden bağımsız)
+        public decimal FixedCurrentMonthTarget { get; set; }
+        public decimal FixedCurrentMonthActual { get; set; }
+        public decimal FixedCurrentMonthPct { get; set; }
+        public decimal FixedYTDTarget { get; set; }
+        public decimal FixedYTDActual { get; set; }
+        public decimal FixedYTDPct { get; set; }
     }
 }

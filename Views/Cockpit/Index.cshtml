@@ -136,7 +136,8 @@
     .detay-tab.active { background:#1e40af; color:white; }
 </style>
 
-<!-- Header -->
+
+<!-- Header (sadece başlık) -->
 <div class="flex items-center justify-between mb-4">
     <div class="flex items-center gap-3">
         <div class="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center">
@@ -149,32 +150,7 @@
     </div>
 </div>
 
-<!-- Tab Sekmeleri -->
-<div class="flex items-center gap-1 mb-5 flex-wrap">
-    <a href="@Url.Action("Index", "Cockpit")" class="px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all @(Model.AktifFiltre == "month" ? "bg-blue-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-100")">Bu ay</a>
-    <a href="@Url.Action("Index", "Cockpit", new { filter = "lastmonth" })" class="px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all @(Model.AktifFiltre == "lastmonth" ? "bg-blue-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-100")">Geçen ay</a>
-    <a href="@Url.Action("Index", "Cockpit", new { filter = "q1" })" class="px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all @(Model.AktifFiltre == "q1" ? "bg-blue-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-100")">Q1</a>
-    <a href="@Url.Action("Index", "Cockpit", new { filter = "q2" })" class="px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all @(Model.AktifFiltre == "q2" ? "bg-blue-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-100")">Q2</a>
-    <a href="@Url.Action("Index", "Cockpit", new { filter = "q3" })" class="px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all @(Model.AktifFiltre == "q3" ? "bg-blue-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-100")">Q3</a>
-    <a href="@Url.Action("Index", "Cockpit", new { filter = "q4" })" class="px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all @(Model.AktifFiltre == "q4" ? "bg-blue-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-100")">Q4</a>
-    <a href="@Url.Action("Index", "Cockpit", new { filter = "ytd" })" class="px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all @(Model.AktifFiltre == "ytd" ? "bg-blue-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-100")">YTD</a>
-    <div class="h-4 w-px bg-slate-200 mx-1"></div>
-    <div class="filter-dropdown">
-        <button onclick="document.getElementById('filterMenu').classList.toggle('show')" class="px-3 py-1.5 rounded-lg text-[11px] font-medium text-slate-500 hover:bg-slate-100 transition-all flex items-center gap-1 @(Model.AktifFiltre == "range" ? "bg-blue-600 text-white shadow-sm" : "")">
-            <i class="bi bi-calendar-range" style="font-size:11px;"></i> Manuel
-        </button>
-        <div id="filterMenu" class="filter-menu">
-            <div class="flex-col gap-2 px-2 py-2" style="display:flex;">
-                <div class="flex items-center gap-2">
-                    <input type="date" id="rangeStart" value="@Model.FiltreBaslangic.ToString("yyyy-MM-dd")" class="flex-1 px-2 py-1.5 text-[11px] border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400" />
-                    <span class="text-slate-300 text-[10px]">—</span>
-                    <input type="date" id="rangeEnd" value="@Model.FiltreBitis.ToString("yyyy-MM-dd")" class="flex-1 px-2 py-1.5 text-[11px] border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400" />
-                </div>
-                <button onclick="applyRange()" class="w-full px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-medium rounded-lg transition-colors">Uygula</button>
-            </div>
-        </div>
-    </div>
-</div>
+
 
 <!-- ═══ UNIFIED DASHBOARD SURFACE ═══ -->
 @{
@@ -190,51 +166,50 @@
     var ytdPct = Model.YtdYuzde > 100 ? 100 : Model.YtdYuzde;
 }
 <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
-    <!-- SOL: Aylık Fatura Hedefi -->
+    <!-- SOL: MEVCUT AY PERFORMANSI (İzole) -->
     <div class="target-container">
-        <p class="text-[9px] font-semibold text-slate-400 tracking-widest uppercase mb-3">@filterLabel fatura hedefi</p>
+        <p class="text-[11px] font-bold text-blue-700 tracking-widest uppercase mb-3">MEVCUT AY PERFORMANSI</p>
         <div class="flex items-end gap-3 mb-1">
-            <p class="text-[2rem] font-extrabold text-blue-600 leading-none tracking-tight">₺@Model.AylikHedef.ToString("N0")</p>
-            <span class="text-[10px] text-slate-400 mb-1">@Model.HedefAySayisi ay &times; ₺50M</span>
+            <p class="text-[2rem] font-extrabold text-blue-600 leading-none tracking-tight">₺@Model.FixedCurrentMonthTarget.ToString("N0")</p>
+            <span class="text-[10px] text-slate-400 mb-1">Nisan 2026 &times; ₺50M</span>
         </div>
         <div class="flex items-center justify-between mb-1.5 mt-3">
-            <span class="text-[10px] font-semibold text-blue-600">%@Model.HedefYuzde.ToString("N0") tamamlandı</span>
-            <span class="text-[10px] text-slate-400">Kalan <span class="font-semibold text-blue-700">₺@Model.HedefKalan.ToString("N0")</span></span>
+            <span class="text-[10px] font-semibold text-blue-600">%@Model.FixedCurrentMonthPct.ToString("N1") tamamlandı</span>
+            <span class="text-[10px] text-slate-400">Kalan <span class="font-semibold text-blue-700">₺@((Model.FixedCurrentMonthTarget-Model.FixedCurrentMonthActual).ToString("N0"))</span></span>
         </div>
         <div class="progress-track">
-            <div class="progress-fill" style="width:@(pct.ToString(System.Globalization.CultureInfo.InvariantCulture))%"></div>
+            <div class="progress-fill" style="width:@(Model.FixedCurrentMonthPct.ToString(System.Globalization.CultureInfo.InvariantCulture))%"></div>
         </div>
         <div class="flex items-center justify-between mt-3">
             <div>
                 <p class="text-[9px] text-slate-400 uppercase tracking-wide">Gerçekleşen</p>
-                <p class="text-lg font-bold text-[#1e293b] leading-none mt-0.5">₺@Model.HedefGerceklesme.ToString("N0")</p>
-                <p class="text-[9px] text-slate-400 mt-0.5">@Model.FaturalarAdet fatura</p>
+                <p class="text-lg font-bold text-[#1e293b] leading-none mt-0.5">₺@Model.FixedCurrentMonthActual.ToString("N0")</p>
             </div>
         </div>
-        <p class="text-[8px] text-slate-400 mt-3 border-t border-slate-100 pt-2">@Model.FiltreBaslangic.ToString("dd.MM.yyyy") — @Model.FiltreBitis.ToString("dd.MM.yyyy")</p>
+        <p class="text-[8px] text-slate-400 mt-3 border-t border-slate-100 pt-2">01.04.2026 — 30.04.2026</p>
     </div>
 
-    <!-- SAĞ: YTD Fatura Hedefi -->
+    <!-- SAĞ: YILLIK (YTD) PERFORMANS (İzole) -->
     <div class="target-container">
-        <p class="text-[9px] font-semibold text-slate-400 tracking-widest uppercase mb-3">YTD fatura hedefi</p>
+        <p class="text-[11px] font-bold text-blue-700 tracking-widest uppercase mb-3">YILLIK (YTD) PERFORMANS</p>
         <div class="flex items-end gap-3 mb-1">
-            <p class="text-[2rem] font-extrabold text-blue-600 leading-none tracking-tight">₺@Model.YtdHedef.ToString("N0")</p>
-            <span class="text-[10px] text-slate-400 mb-1">@((int)(Model.YtdHedef / 50000000)) ay &times; ₺50M</span>
+            <p class="text-[2rem] font-extrabold text-blue-600 leading-none tracking-tight">₺@Model.FixedYTDTarget.ToString("N0")</p>
+            <span class="text-[10px] text-slate-400 mb-1">01.01.2026 — 01.04.2026 &times; ₺200M</span>
         </div>
         <div class="flex items-center justify-between mb-1.5 mt-3">
-            <span class="text-[10px] font-semibold text-blue-600">%@Model.YtdYuzde.ToString("N0") tamamlandı</span>
-            <span class="text-[10px] text-slate-400">Kalan <span class="font-semibold text-blue-700">₺@Model.YtdKalan.ToString("N0")</span></span>
+            <span class="text-[10px] font-semibold text-blue-600">%@Model.FixedYTDPct.ToString("N1") tamamlandı</span>
+            <span class="text-[10px] text-slate-400">Kalan <span class="font-semibold text-blue-700">₺@((Model.FixedYTDTarget-Model.FixedYTDActual).ToString("N0"))</span></span>
         </div>
         <div class="progress-track">
-            <div class="progress-fill" style="width:@(ytdPct.ToString(System.Globalization.CultureInfo.InvariantCulture))%"></div>
+            <div class="progress-fill" style="width:@(Model.FixedYTDPct.ToString(System.Globalization.CultureInfo.InvariantCulture))%"></div>
         </div>
         <div class="flex items-center justify-between mt-3">
             <div>
                 <p class="text-[9px] text-slate-400 uppercase tracking-wide">Gerçekleşen</p>
-                <p class="text-lg font-bold text-[#1e293b] leading-none mt-0.5">₺@Model.YtdGerceklesme.ToString("N0")</p>
+                <p class="text-lg font-bold text-[#1e293b] leading-none mt-0.5">₺@Model.FixedYTDActual.ToString("N0")</p>
             </div>
         </div>
-        <p class="text-[8px] text-slate-400 mt-3 border-t border-slate-100 pt-2">01.01.2026 — @Model.FiltreBitis.ToString("dd.MM.yyyy")</p>
+        <p class="text-[8px] text-slate-400 mt-3 border-t border-slate-100 pt-2">01.01.2026 — 01.04.2026</p>
     </div>
 </div>
 
@@ -246,13 +221,13 @@
     </div>
     <div class="flex items-center gap-1" id="detayFiltre">
         <span class="text-[9px] text-slate-400 mr-1">Detay filtresi:</span>
-        <a href="javascript:void(0)" onclick="setDetayFilter('month',this)" class="detay-tab active px-2.5 py-1 rounded-md text-[10px] font-medium">Bu ay</a>
-        <a href="javascript:void(0)" onclick="setDetayFilter('lastmonth',this)" class="detay-tab px-2.5 py-1 rounded-md text-[10px] font-medium">Geçen ay</a>
-        <a href="javascript:void(0)" onclick="setDetayFilter('q1',this)" class="detay-tab px-2.5 py-1 rounded-md text-[10px] font-medium">Q1</a>
-        <a href="javascript:void(0)" onclick="setDetayFilter('q2',this)" class="detay-tab px-2.5 py-1 rounded-md text-[10px] font-medium">Q2</a>
-        <a href="javascript:void(0)" onclick="setDetayFilter('q3',this)" class="detay-tab px-2.5 py-1 rounded-md text-[10px] font-medium">Q3</a>
-        <a href="javascript:void(0)" onclick="setDetayFilter('q4',this)" class="detay-tab px-2.5 py-1 rounded-md text-[10px] font-medium">Q4</a>
-        <a href="javascript:void(0)" onclick="setDetayFilter('ytd',this)" class="detay-tab px-2.5 py-1 rounded-md text-[10px] font-medium">YTD</a>
+        <a href="/Cockpit/Index" class="detay-tab @(Model.AktifFiltre=="month"?"active":"") px-2.5 py-1 rounded-md text-[10px] font-medium">Bu ay</a>
+        <a href="/Cockpit/Index?filter=lastmonth" class="detay-tab @(Model.AktifFiltre=="lastmonth"?"active":"") px-2.5 py-1 rounded-md text-[10px] font-medium">Geçen ay</a>
+        <a href="/Cockpit/Index?filter=q1" class="detay-tab @(Model.AktifFiltre=="q1"?"active":"") px-2.5 py-1 rounded-md text-[10px] font-medium">Q1</a>
+        <a href="/Cockpit/Index?filter=q2" class="detay-tab @(Model.AktifFiltre=="q2"?"active":"") px-2.5 py-1 rounded-md text-[10px] font-medium">Q2</a>
+        <a href="/Cockpit/Index?filter=q3" class="detay-tab @(Model.AktifFiltre=="q3"?"active":"") px-2.5 py-1 rounded-md text-[10px] font-medium">Q3</a>
+        <a href="/Cockpit/Index?filter=q4" class="detay-tab @(Model.AktifFiltre=="q4"?"active":"") px-2.5 py-1 rounded-md text-[10px] font-medium">Q4</a>
+        <a href="/Cockpit/Index?filter=ytd" class="detay-tab @(Model.AktifFiltre=="ytd"?"active":"") px-2.5 py-1 rounded-md text-[10px] font-medium">YTD</a>
     </div>
 </div>
 
@@ -266,9 +241,9 @@
             </button>
         </div>
         <p class="text-xs font-bold text-slate-500 tracking-wide mb-1 uppercase">Faturalar</p>
-        <p class="text-[1.75rem] font-semibold text-[#1e293b] leading-tight">₺@Model.FaturalarToplam.ToString("N0")</p>
+        <p id="faturalarTutar" class="text-[1.75rem] font-semibold text-[#1e293b] leading-tight">₺@Model.FaturalarToplam.ToString("N0")</p>
         <div class="flex items-center justify-between mt-3">
-            <span class="text-xs text-slate-400">@Model.FaturalarAdet adet</span>
+            <span id="faturalarAdet" class="text-xs text-slate-400">@Model.FaturalarAdet adet</span>
             @if (Model.FaturalarTrend != 0) { <span class="text-xs font-semibold flex items-center gap-1 @(Model.FaturalarTrend > 0 ? "trend-up" : "trend-down")"><i class="bi @(Model.FaturalarTrend > 0 ? "bi-arrow-up-right" : "bi-arrow-down-right")"></i> %@Math.Abs(Model.FaturalarTrend).ToString("N1")</span> }
             else { <span class="text-xs text-slate-300">—</span> }
         </div>
@@ -282,11 +257,11 @@
         </div>
         <p class="text-xs font-bold text-slate-500 tracking-wide mb-1 uppercase">@tahsilatLabel</p>
         <div class="flex items-baseline gap-2">
-            <p class="text-[1.75rem] font-semibold text-[#1e293b] leading-tight">₺@Model.TahsilatlarToplam.ToString("N0")</p>
+            <p id="tahsilatlarTutar" class="text-[1.75rem] font-semibold text-[#1e293b] leading-tight">₺@Model.TahsilatlarToplam.ToString("N0")</p>
             <span class="text-xs text-slate-400">/ ₺@Model.TahsilEdilecek.ToString("N0")</span>
         </div>
         <div class="flex items-center justify-between mt-2">
-            <span class="text-xs text-slate-400">@Model.TahsilatlarAdet adet</span>
+            <span id="tahsilatlarAdet" class="text-xs text-slate-400">@Model.TahsilatlarAdet adet</span>
             @if (Model.TahsilKalan > 0)
             {
                 <span class="text-[10px] text-blue-500 font-medium">Kalan: ₺@Model.TahsilKalan.ToString("N0")</span>
@@ -319,9 +294,9 @@
             </button>
         </div>
         <p class="text-xs font-bold text-slate-500 tracking-wide mb-1 uppercase">Sözleşmeler</p>
-        <p class="text-[1.75rem] font-semibold text-[#1e293b] leading-tight">₺@Model.SozlesmelerToplam.ToString("N0")</p>
+        <p id="sozlesmelerTutar" class="text-[1.75rem] font-semibold text-[#1e293b] leading-tight">₺@Model.SozlesmelerToplam.ToString("N0")</p>
         <div class="flex items-center justify-between mt-3">
-            <span class="text-xs text-slate-400">@Model.SozlesmelerAdet adet &middot; Archived</span>
+            <span id="sozlesmelerAdet" class="text-xs text-slate-400">@Model.SozlesmelerAdet adet &middot; Archived</span>
             <span class="text-xs text-slate-300">—</span>
         </div>
     </div>
@@ -694,7 +669,10 @@
         const prev = activeDetail;
         if (prev) { closeAll(prev); activeDetail = null; }
         drillLoaded = {};
-        // Chart'ları yeniden yükle
+        // Debug: hangi filtre tetiklendi?
+        console.log('Detay filtre değişti:', f);
+        // Kartlar ve grafikler kesin güncellensin
+        if(window.updateDetayCards) window.updateDetayCards(f);
         renderChart('faturalar');
         renderChart('tahsilatlar');
         // Eski açık paneli tekrar aç

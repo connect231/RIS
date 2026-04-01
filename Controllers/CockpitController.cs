@@ -388,11 +388,36 @@ namespace SOS.Controllers
                 ? Math.Round(Math.Min(ytdGerceklesme / ytdHedef * 100, 100), 1)
                 : 0;
 
+
+            // Sabit: Mevcut Ay (Nisan 2026)
+            var fixedMonthStart = new DateTime(2026, 4, 1);
+            var fixedMonthEnd = new DateTime(2026, 4, 30, 23, 59, 59);
+            var fixedMonthTarget = 50_000_000m;
+            var fixedMonthActual = await _context.VIEW_CP_EXCEL_FATURAs
+                .Where(f => (f.Odeme_Sozu_Tarihi.HasValue || f.Tahsil_Tarihi.HasValue)
+                    && (f.Odeme_Sozu_Tarihi ?? f.Tahsil_Tarihi) >= fixedMonthStart
+                    && (f.Odeme_Sozu_Tarihi ?? f.Tahsil_Tarihi) <= fixedMonthEnd
+                    && f.Durum != null && (f.Durum.Trim() == "TAHSİL EDİLDİ" || f.Durum.Trim() == "KREDİ KARTI" || f.Durum.Trim() == "KREDI KARTI"))
+                .SumAsync(f => f.Fatura_Toplam ?? 0);
+            var fixedMonthPct = fixedMonthTarget > 0 ? Math.Round(fixedMonthActual / fixedMonthTarget * 100, 1) : 0;
+
+            // Sabit: YTD (01.01.2026 - 01.04.2026)
+            var fixedYTDStart = new DateTime(2026, 1, 1);
+            var fixedYTDEnd = new DateTime(2026, 4, 1, 23, 59, 59);
+            var fixedYTDTarget = 200_000_000m;
+            var fixedYTDActual = await _context.VIEW_CP_EXCEL_FATURAs
+                .Where(f => (f.Odeme_Sozu_Tarihi.HasValue || f.Tahsil_Tarihi.HasValue)
+                    && (f.Odeme_Sozu_Tarihi ?? f.Tahsil_Tarihi) >= fixedYTDStart
+                    && (f.Odeme_Sozu_Tarihi ?? f.Tahsil_Tarihi) <= fixedYTDEnd
+                    && f.Durum != null && (f.Durum.Trim() == "TAHSİL EDİLDİ" || f.Durum.Trim() == "KREDİ KARTI" || f.Durum.Trim() == "KREDI KARTI"))
+                .SumAsync(f => f.Fatura_Toplam ?? 0);
+            var fixedYTDPct = fixedYTDTarget > 0 ? Math.Round(fixedYTDActual / fixedYTDTarget * 100, 1) : 0;
+
             var vm = new CockpitViewModel
             {
                 FaturalarToplam = fatToplam,
                 FaturalarAdet = faturalar.Count,
-                TahsilatlarToplam = tahToplam,
+                TahsilatlarToplam = tahsilatlar.Sum(f => f.Fatura_Toplam ?? 0),
                 TahsilatlarAdet = tahsilatlar.Count,
                 SozlesmelerToplam = sozToplam,
                 SozlesmelerAdet = sozlesmeler.Count,
@@ -407,7 +432,7 @@ namespace SOS.Controllers
                 YtdHedef = ytdHedef,
                 YtdGerceklesme = ytdGerceklesme,
                 YtdKalan = ytdKalan,
-                YtdYuzde = ytdYuzde,
+                YtdYuzde = ytdHedef > 0 ? Math.Round(Math.Min(ytdGerceklesme / ytdHedef * 100, 100), 1) : 0,
                 AktifFiltre = activeFilter,
                 FiltreBaslangic = start,
                 FiltreBitis = end,
@@ -430,7 +455,15 @@ namespace SOS.Controllers
                 BeklenenAdet = beklenenAdet,
                 BeklenenDetaylari = beklenenList.OrderBy(f => f.Fatura_Vade_Tarihi).ToList(),
                 VadesiGecmisAlacak = vadesiGecmisAlacak,
-                VadesiGecmisAdet = vadesiGecmisAdet
+                VadesiGecmisAdet = vadesiGecmisAdet,
+
+                // İzole üst kartlar
+                FixedCurrentMonthTarget = fixedMonthTarget,
+                FixedCurrentMonthActual = fixedMonthActual,
+                FixedCurrentMonthPct = fixedMonthPct,
+                FixedYTDTarget = fixedYTDTarget,
+                FixedYTDActual = fixedYTDActual,
+                FixedYTDPct = fixedYTDPct
             };
 
             return View(vm);
