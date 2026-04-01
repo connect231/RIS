@@ -60,4 +60,20 @@ public class VIEW_CP_EXCEL_FATURA
 
     [Column(TypeName = "datetime")]
     public DateTime? KayitTarihi { get; set; }
+
+    [Column(TypeName = "datetime")]
+    public DateTime? Odeme_Sozu_Tarihi { get; set; }
+
+    // JOIN ile dolan alanlar (NotMapped — LINQ tarafında set edilir)
+    [NotMapped]
+    public string? MusteriUnvan { get; set; }
+
+    [NotMapped]
+    public string? UrunAdi { get; set; }
+
+    [NotMapped]
+    public decimal? Miktar { get; set; }
+
+    [NotMapped]
+    public decimal KumulatifToplam { get; set; }
 }

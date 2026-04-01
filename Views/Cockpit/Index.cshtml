@@ -6,148 +6,266 @@
     var done = Model.HedefGerceklesme >= Model.AylikHedef;
     var filterLabel = Model.AktifFiltre switch {
         "ytd" => "YTD",
-        "q1" => "Q1 (Oca-Nis)",
-        "q2" => "Q2 (May-Ağu)",
-        "q3" => "Q3 (Eyl-Ara)",
-        "range" => "Manuel aralık",
-        _ => "Bu ay"
+        "q1" => "Q1",
+        "q2" => "Q2",
+        "q3" => "Q3",
+        "q4" => "Q4",
+        "lastmonth" => "Geçen ay",
+        "range" => "Manuel",
+        _ => "Mevcut ay"
+    };
+    var tahsilatLabel = Model.AktifFiltre switch {
+        "ytd" => "Yıllık tahsilat",
+        "q1" => "Q1 tahsilat (Oca-Mar)",
+        "q2" => "Q2 tahsilat (Nis-Haz)",
+        "q3" => "Q3 tahsilat (Tem-Eyl)",
+        "q4" => "Q4 tahsilat (Eki-Ara)",
+        "lastmonth" => "Geçen ay tahsilat",
+        "range" => "Dönemsel tahsilat",
+        _ => "Aylık tahsilat"
     };
     var dateRange = Model.FiltreBaslangic.ToString("dd.MM.yyyy") + " — " + Model.FiltreBitis.ToString("dd.MM.yyyy");
     var headerDateRange = Model.FiltreBaslangic.ToString("dd.MM") + " – " + Model.FiltreBitis.ToString("dd.MM.yyyy");
 }
 
 <style>
-    .card{background:white;border-radius:24px;border:1px solid rgba(0,0,0,0.05);box-shadow:0 2px 8px rgba(0,0,0,0.03);transition:all 0.3s ease-in-out;position:relative;overflow:hidden}
-    .card:hover{box-shadow:0 8px 32px rgba(0,0,0,0.07);transform:translateY(-1px)}
-    .accent-blue::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#2563eb,#3b82f6);border-radius:24px 24px 0 0}
-    .accent-violet::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#7c3aed,#8b5cf6);border-radius:24px 24px 0 0}
-    .accent-indigo::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:linear-gradient(90deg,#4f46e5,#6366f1);border-radius:24px 24px 0 0}
-    .trend-up{color:#10b981}.trend-down{color:#ef4444}
-    .target-container{background:white;border-radius:24px;border:1px solid rgba(0,0,0,0.05);box-shadow:0 4px 20px rgba(0,0,0,0.04);padding:32px}
-    .target-divider{width:1px;background:rgba(0,0,0,0.06);align-self:stretch}
-    .progress-track{height:10px;background:#f1f5f9;border-radius:99px;overflow:hidden}
-    .progress-fill{height:100%;border-radius:99px;background:#8b5cf6;transition:width 1.5s cubic-bezier(0.25,0.46,0.45,0.94);box-shadow:0 0 12px rgba(139,92,246,0.3)}
-    .drill-panel{background:rgba(255,255,255,0.85);backdrop-filter:blur(16px);-webkit-backdrop-filter:blur(16px);border-radius:24px;border:1px solid rgba(0,0,0,0.05);overflow:hidden;max-height:0;opacity:0;transition:max-height 0.5s cubic-bezier(0.25,0.46,0.45,0.94),opacity 0.3s ease-in-out,margin 0.3s ease-in-out,padding 0.3s ease-in-out;margin-bottom:0;padding:0 28px}
-    .drill-panel.open{max-height:800px;opacity:1;margin-bottom:24px;padding:28px}
-    .shimmer{background:linear-gradient(90deg,#f1f5f9 25%,#e2e8f0 50%,#f1f5f9 75%);background-size:200% 100%;animation:shimmer 1.5s infinite;border-radius:8px}
-    @@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}
-    .chevron-btn{transition:transform 0.3s ease-in-out}.chevron-btn.rotated{transform:rotate(180deg)}
-    .detail-table thead th{position:sticky;top:0;background:white;z-index:5;box-shadow:0 1px 0 #e2e8f0}
+    /* Floating card system */
+    .card {
+        background: white;
+        border-radius: 16px;
+        border: 1px solid rgba(30,58,138,0.06);
+        box-shadow: 0 1px 3px rgba(30,58,138,0.04), 0 4px 12px rgba(30,58,138,0.03);
+        transition: all 0.3s ease-in-out;
+        position: relative;
+        overflow: hidden;
+    }
+    .card:hover {
+        box-shadow: 0 4px 16px rgba(30,58,138,0.08), 0 12px 40px rgba(30,58,138,0.06);
+        transform: translateY(-2px);
+    }
+
+    /* Accent strips - Deep Blue (primary cards, unused now but kept) */
+    .accent-blue::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(90deg,#1d4ed8,#3b82f6); border-radius:16px 16px 0 0; }
+    .accent-navy::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(90deg,#1e3a8a,#1d4ed8); border-radius:16px 16px 0 0; }
+    .accent-sky::before { content:''; position:absolute; top:0; left:0; right:0; height:3px; background:linear-gradient(90deg,#0284c7,#0ea5e9); border-radius:16px 16px 0 0; }
+
+    /* Detail card accents - Green & Yellow */
+    .accent-emerald::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:#10b981; opacity:0.75; border-radius:16px 16px 0 0; }
+    .accent-amber::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:#f59e0b; opacity:0.75; border-radius:16px 16px 0 0; }
+    .accent-red::before { content:''; position:absolute; top:0; left:0; right:0; height:2px; background:#ef4444; opacity:0.75; border-radius:16px 16px 0 0; }
+
+    .trend-up { color:#10b981; }
+    .trend-down { color:#ef4444; }
+
+    /* PRIMARY: Target container — unified surface */
+    .target-container {
+        background: #ffffff;
+        border-radius: 16px;
+        border: 1px solid #dbeafe;
+        box-shadow: 0 4px 12px rgba(30,58,138,0.06), 0 12px 32px rgba(30,58,138,0.05);
+        padding: 28px 32px;
+    }
+
+    /* SECONDARY: Summary cards — tinted background, lighter presence */
+    .card-secondary {
+        background: #f1f5f9;
+        border-radius: 16px;
+        border: 1px solid #cbd5e1;
+        box-shadow: none;
+        transition: all 0.3s ease-in-out;
+        position: relative;
+        overflow: hidden;
+    }
+    .card-secondary:hover {
+        background: #e2e8f0;
+        box-shadow: 0 4px 16px rgba(30,58,138,0.06);
+        transform: translateY(-1px);
+    }
+
+
+    /* Progress bar */
+    .progress-track { height:10px; background:#e0e7ff; border-radius:99px; overflow:hidden; }
+    .progress-fill { height:100%; border-radius:99px; background:linear-gradient(90deg,#1d4ed8,#3b82f6); transition:width 1.5s cubic-bezier(0.25,0.46,0.45,0.94); box-shadow:0 0 12px rgba(29,78,216,0.3); }
+
+    /* Drill panels */
+    .drill-panel {
+        background: white;
+        border-radius: 16px;
+        border: 1px solid rgba(30,58,138,0.06);
+        box-shadow: 0 1px 3px rgba(30,58,138,0.04);
+        overflow: hidden;
+        max-height: 0;
+        opacity: 0;
+        transition: max-height 0.5s cubic-bezier(0.25,0.46,0.45,0.94), opacity 0.3s ease-in-out, margin 0.3s ease-in-out, padding 0.3s ease-in-out;
+        margin-bottom: 0;
+        padding: 0 28px;
+    }
+    .drill-panel.open { max-height:800px; opacity:1; margin-bottom:20px; padding:28px; }
+
+    .shimmer { background:linear-gradient(90deg,#f1f5f9 25%,#e2e8f0 50%,#f1f5f9 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; border-radius:8px; }
+    @@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+    .chevron-btn { transition:transform 0.3s ease-in-out; }
+    .chevron-btn.rotated { transform:rotate(180deg); }
+
+    .detail-table thead th { position:sticky; top:0; background:white; z-index:5; box-shadow:0 1px 0 #e2e8f0; }
+
     /* Filter dropdown */
-    .filter-dropdown{position:relative}
-    .filter-menu{position:absolute;top:100%;right:0;margin-top:8px;background:white;border-radius:16px;border:1px solid rgba(0,0,0,0.06);box-shadow:0 12px 40px rgba(0,0,0,0.1);padding:8px;min-width:220px;z-index:50;opacity:0;transform:translateY(-4px);pointer-events:none;transition:all 0.2s ease-in-out}
-    .filter-menu.show{opacity:1;transform:translateY(0);pointer-events:auto}
-    .filter-opt{display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:10px;cursor:pointer;transition:all 0.15s ease;font-size:13px;color:#475569;text-decoration:none}
-    .filter-opt:hover{background:#f1f5f9;color:#1e293b}
-    .filter-opt.active{background:#ede9fe;color:#6d28d9;font-weight:600}
+    .filter-dropdown { position:relative; }
+    .filter-menu {
+        position:absolute; top:100%; right:0; margin-top:8px;
+        background:white; border-radius:14px;
+        border:1px solid rgba(30,58,138,0.08);
+        box-shadow:0 8px 32px rgba(30,58,138,0.12);
+        padding:6px; min-width:200px; z-index:50;
+        opacity:0; transform:translateY(-4px); pointer-events:none;
+        transition:all 0.2s ease-in-out;
+    }
+    .filter-menu.show { opacity:1; transform:translateY(0); pointer-events:auto; }
+    .filter-opt {
+        display:flex; align-items:center; gap:8px;
+        padding:9px 14px; border-radius:8px; cursor:pointer;
+        transition:all 0.15s ease; font-size:13px; font-weight:500;
+        color:#475569; text-decoration:none;
+    }
+    .filter-opt:hover { background:#eff6ff; color:#1e40af; }
+    .filter-opt.active { background:#1e40af; color:white; font-weight:600; }
+    /* Detay tab */
+    .detay-tab { color:#94a3b8; transition:all 0.15s ease; cursor:pointer; text-decoration:none; }
+    .detay-tab:hover { background:#f1f5f9; color:#1e293b; }
+    .detay-tab.active { background:#1e40af; color:white; }
 </style>
 
-<!-- Header + Filter -->
-<div class="flex items-center justify-between mb-8">
+<!-- Header -->
+<div class="flex items-center justify-between mb-4">
     <div class="flex items-center gap-3">
-        <div class="w-10 h-10 rounded-xl bg-indigo-100 flex items-center justify-center">
-            <i class="bi bi-bar-chart-line text-indigo-600 text-xl"></i>
+        <div class="w-9 h-9 rounded-lg bg-blue-100 flex items-center justify-center">
+            <i class="bi bi-bar-chart-line text-blue-700" style="font-size:16px;"></i>
         </div>
         <div>
-            <h1 class="text-2xl font-semibold text-[#1e293b] tracking-tight">Finansal Cockpit <span class="text-base font-normal text-slate-400">| @headerDateRange</span></h1>
-            <p class="text-xs text-slate-400 mt-0.5">Canlı veri &middot; @filterLabel</p>
+            <h1 class="text-xl font-semibold text-[#1e293b] tracking-tight">Finansal Cockpit</h1>
+            <p class="text-[10px] text-slate-400">@headerDateRange &middot; Canlı veri</p>
         </div>
     </div>
+</div>
 
-    <!-- Filter: Range Picker + Presets -->
+<!-- Tab Sekmeleri -->
+<div class="flex items-center gap-1 mb-5 flex-wrap">
+    <a href="@Url.Action("Index", "Cockpit")" class="px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all @(Model.AktifFiltre == "month" ? "bg-blue-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-100")">Bu ay</a>
+    <a href="@Url.Action("Index", "Cockpit", new { filter = "lastmonth" })" class="px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all @(Model.AktifFiltre == "lastmonth" ? "bg-blue-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-100")">Geçen ay</a>
+    <a href="@Url.Action("Index", "Cockpit", new { filter = "q1" })" class="px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all @(Model.AktifFiltre == "q1" ? "bg-blue-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-100")">Q1</a>
+    <a href="@Url.Action("Index", "Cockpit", new { filter = "q2" })" class="px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all @(Model.AktifFiltre == "q2" ? "bg-blue-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-100")">Q2</a>
+    <a href="@Url.Action("Index", "Cockpit", new { filter = "q3" })" class="px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all @(Model.AktifFiltre == "q3" ? "bg-blue-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-100")">Q3</a>
+    <a href="@Url.Action("Index", "Cockpit", new { filter = "q4" })" class="px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all @(Model.AktifFiltre == "q4" ? "bg-blue-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-100")">Q4</a>
+    <a href="@Url.Action("Index", "Cockpit", new { filter = "ytd" })" class="px-3 py-1.5 rounded-lg text-[11px] font-medium transition-all @(Model.AktifFiltre == "ytd" ? "bg-blue-600 text-white shadow-sm" : "text-slate-500 hover:bg-slate-100")">YTD</a>
+    <div class="h-4 w-px bg-slate-200 mx-1"></div>
     <div class="filter-dropdown">
-        <button onclick="document.getElementById('filterMenu').classList.toggle('show')" class="flex items-center gap-2 px-4 py-2.5 bg-white border border-slate-200 rounded-xl text-sm font-medium text-[#1e293b] hover:border-indigo-300 transition-all">
-            <i class="bi bi-calendar-range text-indigo-500"></i>
-            @filterLabel
-            <i class="bi bi-chevron-down text-slate-400 text-xs"></i>
+        <button onclick="document.getElementById('filterMenu').classList.toggle('show')" class="px-3 py-1.5 rounded-lg text-[11px] font-medium text-slate-500 hover:bg-slate-100 transition-all flex items-center gap-1 @(Model.AktifFiltre == "range" ? "bg-blue-600 text-white shadow-sm" : "")">
+            <i class="bi bi-calendar-range" style="font-size:11px;"></i> Manuel
         </button>
         <div id="filterMenu" class="filter-menu">
-            <a href="@Url.Action("Index", "Cockpit", new { filter = "month" })" class="filter-opt @(Model.AktifFiltre == "month" ? "active" : "")">
-                <i class="bi bi-calendar-day"></i> Bu ay
-            </a>
-            <a href="@Url.Action("Index", "Cockpit", new { filter = "ytd" })" class="filter-opt @(Model.AktifFiltre == "ytd" ? "active" : "")">
-                <i class="bi bi-calendar-range"></i> YTD (yılbaşından bugüne)
-            </a>
-            <div class="h-px bg-slate-100 mx-2 my-1"></div>
-            <a href="@Url.Action("Index", "Cockpit", new { filter = "q1" })" class="filter-opt @(Model.AktifFiltre == "q1" ? "active" : "")">
-                <i class="bi bi-1-circle"></i> Q1 — Ocak › Nisan
-            </a>
-            <a href="@Url.Action("Index", "Cockpit", new { filter = "q2" })" class="filter-opt @(Model.AktifFiltre == "q2" ? "active" : "")">
-                <i class="bi bi-2-circle"></i> Q2 — Mayıs › Ağustos
-            </a>
-            <a href="@Url.Action("Index", "Cockpit", new { filter = "q3" })" class="filter-opt @(Model.AktifFiltre == "q3" ? "active" : "")">
-                <i class="bi bi-3-circle"></i> Q3 — Eylül › Aralık
-            </a>
-            <div class="px-3 pt-3 pb-1">
-                <div class="h-px bg-slate-100 mb-3"></div>
-                <label class="text-[10px] font-medium text-slate-400 uppercase tracking-wider mb-2 block">Manuel aralık</label>
+            <div class="flex-col gap-2 px-2 py-2" style="display:flex;">
                 <div class="flex items-center gap-2">
-                    <input type="date" id="rangeStart" value="@Model.FiltreBaslangic.ToString("yyyy-MM-dd")"
-                           class="flex-1 px-2.5 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-400 transition-colors" />
-                    <span class="text-slate-300 text-xs">—</span>
-                    <input type="date" id="rangeEnd" value="@Model.FiltreBitis.ToString("yyyy-MM-dd")"
-                           class="flex-1 px-2.5 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:border-indigo-400 transition-colors" />
+                    <input type="date" id="rangeStart" value="@Model.FiltreBaslangic.ToString("yyyy-MM-dd")" class="flex-1 px-2 py-1.5 text-[11px] border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400" />
+                    <span class="text-slate-300 text-[10px]">—</span>
+                    <input type="date" id="rangeEnd" value="@Model.FiltreBitis.ToString("yyyy-MM-dd")" class="flex-1 px-2 py-1.5 text-[11px] border border-slate-200 rounded-lg focus:outline-none focus:border-blue-400" />
                 </div>
-                <button onclick="applyRange()" class="w-full mt-2 px-3 py-2 bg-indigo-500 hover:bg-indigo-600 text-white text-xs font-medium rounded-lg transition-colors">
-                    Uygula
-                </button>
+                <button onclick="applyRange()" class="w-full px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white text-[11px] font-medium rounded-lg transition-colors">Uygula</button>
             </div>
         </div>
     </div>
 </div>
 
-<!-- ═══ UNIFIED TARGET CONTAINER ═══ -->
-<div class="target-container mb-8">
-    <div class="flex flex-col md:flex-row md:items-center gap-8 md:gap-0">
-        <div class="flex-1">
-            <p class="text-xs font-medium text-slate-400 tracking-wide mb-2">Gerçekleşen</p>
-            <p class="text-[2.25rem] font-semibold text-[#1e293b] leading-none tracking-tight">₺@Model.HedefGerceklesme.ToString("N0")</p>
-            <p class="text-sm text-slate-400 mt-2">@Model.FaturalarAdet fatura</p>
+<!-- ═══ UNIFIED DASHBOARD SURFACE ═══ -->
+@{
+    var beklenenLabel = Model.AktifFiltre switch {
+        "q1" or "q2" or "q3" or "q4" => "Çeyrek kalanında beklenen",
+        "ytd" => "Yıl kalanında beklenen",
+        "lastmonth" => "—",
+        "range" => "Dönem kalanında beklenen",
+        _ => "Ayın kalanında beklenen"
+    };
+}
+@{
+    var ytdPct = Model.YtdYuzde > 100 ? 100 : Model.YtdYuzde;
+}
+<div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-6">
+    <!-- SOL: Aylık Fatura Hedefi -->
+    <div class="target-container">
+        <p class="text-[9px] font-semibold text-slate-400 tracking-widest uppercase mb-3">@filterLabel fatura hedefi</p>
+        <div class="flex items-end gap-3 mb-1">
+            <p class="text-[2rem] font-extrabold text-blue-600 leading-none tracking-tight">₺@Model.AylikHedef.ToString("N0")</p>
+            <span class="text-[10px] text-slate-400 mb-1">@Model.HedefAySayisi ay &times; ₺50M</span>
         </div>
-        <div class="target-divider hidden md:block"></div>
-        <div class="flex-1 md:px-8">
-            <p class="text-xs font-medium text-slate-400 tracking-wide mb-2">Dönem hedefi <span class="text-violet-400">(@Model.HedefAySayisi ay &times; ₺45M = ₺@Model.AylikHedef.ToString("N0"))</span></p>
-            <p class="text-[2.25rem] font-semibold text-indigo-500 leading-none tracking-tight">₺@Model.AylikHedef.ToString("N0")</p>
-            <div class="mt-4">
-                <div class="flex items-center justify-between mb-2">
-                    <span class="text-xs font-medium text-violet-500">%@Model.HedefYuzde.ToString("N0") tamamlandı</span>
-                    <span class="text-xs text-slate-400">@Model.FiltreBaslangic.ToString("dd.MM.yyyy") — @Model.FiltreBitis.ToString("dd.MM.yyyy")</span>
-                </div>
-                <div class="progress-track">
-                    <div class="progress-fill" style="width:@(pct)%"></div>
-                </div>
+        <div class="flex items-center justify-between mb-1.5 mt-3">
+            <span class="text-[10px] font-semibold text-blue-600">%@Model.HedefYuzde.ToString("N0") tamamlandı</span>
+            <span class="text-[10px] text-slate-400">Kalan <span class="font-semibold text-blue-700">₺@Model.HedefKalan.ToString("N0")</span></span>
+        </div>
+        <div class="progress-track">
+            <div class="progress-fill" style="width:@(pct.ToString(System.Globalization.CultureInfo.InvariantCulture))%"></div>
+        </div>
+        <div class="flex items-center justify-between mt-3">
+            <div>
+                <p class="text-[9px] text-slate-400 uppercase tracking-wide">Gerçekleşen</p>
+                <p class="text-lg font-bold text-[#1e293b] leading-none mt-0.5">₺@Model.HedefGerceklesme.ToString("N0")</p>
+                <p class="text-[9px] text-slate-400 mt-0.5">@Model.FaturalarAdet fatura</p>
             </div>
         </div>
-        <div class="target-divider hidden md:block"></div>
-        <div class="flex-1 md:pl-8">
-            @if (done)
-            {
-                <p class="text-xs font-medium text-blue-400 tracking-wide mb-2">Durum</p>
-                <p class="text-[2.25rem] font-semibold text-blue-600 leading-none tracking-tight flex items-center gap-3">
-                    <i class="bi bi-check-circle-fill text-2xl"></i> Tamamlandı
-                </p>
-                <p class="text-sm text-blue-400 mt-2">Hedef başarıyla aşıldı</p>
-            }
-            else
-            {
-                <p class="text-xs font-medium text-violet-400 tracking-wide mb-2">Kalan fark</p>
-                <p class="text-[2.25rem] font-semibold text-violet-600 leading-none tracking-tight">₺@Model.HedefKalan.ToString("N0")</p>
-                <p class="text-sm text-violet-400 mt-2">Hedefe ulaşmak için gerekli tutar</p>
-            }
+        <p class="text-[8px] text-slate-400 mt-3 border-t border-slate-100 pt-2">@Model.FiltreBaslangic.ToString("dd.MM.yyyy") — @Model.FiltreBitis.ToString("dd.MM.yyyy")</p>
+    </div>
+
+    <!-- SAĞ: YTD Fatura Hedefi -->
+    <div class="target-container">
+        <p class="text-[9px] font-semibold text-slate-400 tracking-widest uppercase mb-3">YTD fatura hedefi</p>
+        <div class="flex items-end gap-3 mb-1">
+            <p class="text-[2rem] font-extrabold text-blue-600 leading-none tracking-tight">₺@Model.YtdHedef.ToString("N0")</p>
+            <span class="text-[10px] text-slate-400 mb-1">@((int)(Model.YtdHedef / 50000000)) ay &times; ₺50M</span>
         </div>
+        <div class="flex items-center justify-between mb-1.5 mt-3">
+            <span class="text-[10px] font-semibold text-blue-600">%@Model.YtdYuzde.ToString("N0") tamamlandı</span>
+            <span class="text-[10px] text-slate-400">Kalan <span class="font-semibold text-blue-700">₺@Model.YtdKalan.ToString("N0")</span></span>
+        </div>
+        <div class="progress-track">
+            <div class="progress-fill" style="width:@(ytdPct.ToString(System.Globalization.CultureInfo.InvariantCulture))%"></div>
+        </div>
+        <div class="flex items-center justify-between mt-3">
+            <div>
+                <p class="text-[9px] text-slate-400 uppercase tracking-wide">Gerçekleşen</p>
+                <p class="text-lg font-bold text-[#1e293b] leading-none mt-0.5">₺@Model.YtdGerceklesme.ToString("N0")</p>
+            </div>
+        </div>
+        <p class="text-[8px] text-slate-400 mt-3 border-t border-slate-100 pt-2">01.01.2026 — @Model.FiltreBitis.ToString("dd.MM.yyyy")</p>
     </div>
 </div>
 
-<!-- ═══ SUMMARY CARDS ═══ -->
+<!-- Section divider + Detay filtresi -->
+<div class="flex items-center justify-between mb-5">
+    <div class="flex items-center gap-2">
+        <div class="h-px w-8 bg-slate-200"></div>
+        <span class="text-[10px] font-semibold text-slate-400 uppercase tracking-widest">Detay kartları</span>
+    </div>
+    <div class="flex items-center gap-1" id="detayFiltre">
+        <span class="text-[9px] text-slate-400 mr-1">Detay filtresi:</span>
+        <a href="javascript:void(0)" onclick="setDetayFilter('month',this)" class="detay-tab active px-2.5 py-1 rounded-md text-[10px] font-medium">Bu ay</a>
+        <a href="javascript:void(0)" onclick="setDetayFilter('lastmonth',this)" class="detay-tab px-2.5 py-1 rounded-md text-[10px] font-medium">Geçen ay</a>
+        <a href="javascript:void(0)" onclick="setDetayFilter('q1',this)" class="detay-tab px-2.5 py-1 rounded-md text-[10px] font-medium">Q1</a>
+        <a href="javascript:void(0)" onclick="setDetayFilter('q2',this)" class="detay-tab px-2.5 py-1 rounded-md text-[10px] font-medium">Q2</a>
+        <a href="javascript:void(0)" onclick="setDetayFilter('q3',this)" class="detay-tab px-2.5 py-1 rounded-md text-[10px] font-medium">Q3</a>
+        <a href="javascript:void(0)" onclick="setDetayFilter('q4',this)" class="detay-tab px-2.5 py-1 rounded-md text-[10px] font-medium">Q4</a>
+        <a href="javascript:void(0)" onclick="setDetayFilter('ytd',this)" class="detay-tab px-2.5 py-1 rounded-md text-[10px] font-medium">YTD</a>
+    </div>
+</div>
+
+<!-- ═══ SUMMARY CARDS (Secondary layer) ═══ -->
 <div class="grid grid-cols-1 md:grid-cols-3 gap-5 mb-6">
-    <div class="card accent-blue p-6">
+    <div class="card-secondary accent-emerald p-4">
         <div class="flex items-start justify-between mb-4">
-            <div class="w-11 h-11 rounded-2xl bg-blue-50 flex items-center justify-center"><i class="bi bi-receipt text-blue-600 text-lg"></i></div>
-            <button onclick="toggleDrill('faturalar')" class="w-8 h-8 rounded-xl bg-slate-50 hover:bg-blue-50 flex items-center justify-center transition-all group">
-                <i class="bi bi-chevron-down text-slate-400 group-hover:text-blue-600 chevron-btn" id="arrow-faturalar"></i>
+            <div class="w-9 h-9 rounded-xl bg-blue-100 flex items-center justify-center"><i class="bi bi-receipt text-blue-700 text-lg"></i></div>
+            <button onclick="toggleDrill('faturalar')" class="w-8 h-8 rounded-xl bg-white/60 hover:bg-blue-100 flex items-center justify-center transition-all group">
+                <i class="bi bi-chevron-down text-slate-400 group-hover:text-blue-700 chevron-btn" id="arrow-faturalar"></i>
             </button>
         </div>
-        <p class="text-xs font-medium text-slate-400 tracking-wide mb-1">Faturalar</p>
+        <p class="text-xs font-bold text-slate-500 tracking-wide mb-1 uppercase">Faturalar</p>
         <p class="text-[1.75rem] font-semibold text-[#1e293b] leading-tight">₺@Model.FaturalarToplam.ToString("N0")</p>
         <div class="flex items-center justify-between mt-3">
             <span class="text-xs text-slate-400">@Model.FaturalarAdet adet</span>
@@ -155,29 +273,52 @@
             else { <span class="text-xs text-slate-300">—</span> }
         </div>
     </div>
-    <div class="card accent-violet p-6">
+    <div class="card-secondary accent-amber p-4">
         <div class="flex items-start justify-between mb-4">
-            <div class="w-11 h-11 rounded-2xl bg-violet-50 flex items-center justify-center"><i class="bi bi-cash-stack text-violet-600 text-lg"></i></div>
-            <button onclick="toggleDrill('tahsilatlar')" class="w-8 h-8 rounded-xl bg-slate-50 hover:bg-violet-50 flex items-center justify-center transition-all group">
-                <i class="bi bi-chevron-down text-slate-400 group-hover:text-violet-600 chevron-btn" id="arrow-tahsilatlar"></i>
+            <div class="w-9 h-9 rounded-xl bg-indigo-100 flex items-center justify-center"><i class="bi bi-cash-stack text-indigo-700 text-lg"></i></div>
+            <button onclick="toggleDrill('tahsilatlar')" class="w-8 h-8 rounded-xl bg-white/60 hover:bg-indigo-100 flex items-center justify-center transition-all group">
+                <i class="bi bi-chevron-down text-slate-400 group-hover:text-indigo-700 chevron-btn" id="arrow-tahsilatlar"></i>
             </button>
         </div>
-        <p class="text-xs font-medium text-slate-400 tracking-wide mb-1">Tahsilatlar</p>
-        <p class="text-[1.75rem] font-semibold text-[#1e293b] leading-tight">₺@Model.TahsilatlarToplam.ToString("N0")</p>
-        <div class="flex items-center justify-between mt-3">
+        <p class="text-xs font-bold text-slate-500 tracking-wide mb-1 uppercase">@tahsilatLabel</p>
+        <div class="flex items-baseline gap-2">
+            <p class="text-[1.75rem] font-semibold text-[#1e293b] leading-tight">₺@Model.TahsilatlarToplam.ToString("N0")</p>
+            <span class="text-xs text-slate-400">/ ₺@Model.TahsilEdilecek.ToString("N0")</span>
+        </div>
+        <div class="flex items-center justify-between mt-2">
             <span class="text-xs text-slate-400">@Model.TahsilatlarAdet adet</span>
+            @if (Model.TahsilKalan > 0)
+            {
+                <span class="text-[10px] text-blue-500 font-medium">Kalan: ₺@Model.TahsilKalan.ToString("N0")</span>
+            }
+            else
+            {
+                <span class="text-[10px] text-green-500 font-medium flex items-center gap-1"><i class="bi bi-check-circle-fill"></i> Hedef tamamlandı</span>
+            }
+        </div>
+        <div class="flex items-center justify-between mt-1">
+            <span class="text-xs text-slate-400"></span>
             @if (Model.TahsilatlarTrend != 0) { <span class="text-xs font-semibold flex items-center gap-1 @(Model.TahsilatlarTrend > 0 ? "trend-up" : "trend-down")"><i class="bi @(Model.TahsilatlarTrend > 0 ? "bi-arrow-up-right" : "bi-arrow-down-right")"></i> %@Math.Abs(Model.TahsilatlarTrend).ToString("N1")</span> }
             else { <span class="text-xs text-slate-300">—</span> }
         </div>
+        <!-- Vadesi Geçmiş Alacak -->
+        <div class="mt-3 pt-3 border-t border-slate-200/60">
+            <div class="flex items-center justify-between">
+                <span class="text-[10px] text-amber-600 font-semibold flex items-center gap-1"><i class="bi bi-exclamation-triangle-fill" style="font-size:10px;"></i> Vadesi geçmiş</span>
+                <span class="text-[10px] text-slate-400">@Model.VadesiGecmisAdet fatura</span>
+            </div>
+            <p class="text-sm font-bold text-red-500 mt-1">₺@Model.VadesiGecmisAlacak.ToString("N2")</p>
+            <p class="text-[9px] text-slate-400 mt-0.5">01.01.2025 — @Model.FiltreBaslangic.ToString("dd.MM.yyyy") arası açık bakiye</p>
+        </div>
     </div>
-    <div class="card accent-indigo p-6">
+    <div class="card-secondary accent-red p-4">
         <div class="flex items-start justify-between mb-4">
-            <div class="w-11 h-11 rounded-2xl bg-indigo-50 flex items-center justify-center"><i class="bi bi-file-earmark-check text-indigo-600 text-lg"></i></div>
-            <button onclick="toggleDrill('sozlesmeler')" class="w-8 h-8 rounded-xl bg-slate-50 hover:bg-indigo-50 flex items-center justify-center transition-all group">
-                <i class="bi bi-chevron-down text-slate-400 group-hover:text-indigo-600 chevron-btn" id="arrow-sozlesmeler"></i>
+            <div class="w-9 h-9 rounded-xl bg-sky-100 flex items-center justify-center"><i class="bi bi-file-earmark-check text-sky-700 text-lg"></i></div>
+            <button onclick="toggleDrill('sozlesmeler')" class="w-8 h-8 rounded-xl bg-white/60 hover:bg-sky-100 flex items-center justify-center transition-all group">
+                <i class="bi bi-chevron-down text-slate-400 group-hover:text-sky-700 chevron-btn" id="arrow-sozlesmeler"></i>
             </button>
         </div>
-        <p class="text-xs font-medium text-slate-400 tracking-wide mb-1">Sözleşmeler</p>
+        <p class="text-xs font-bold text-slate-500 tracking-wide mb-1 uppercase">Sözleşmeler</p>
         <p class="text-[1.75rem] font-semibold text-[#1e293b] leading-tight">₺@Model.SozlesmelerToplam.ToString("N0")</p>
         <div class="flex items-center justify-between mt-3">
             <span class="text-xs text-slate-400">@Model.SozlesmelerAdet adet &middot; Archived</span>
@@ -186,52 +327,137 @@
     </div>
 </div>
 
-<!-- ═══ DRILL-DOWN: Chart + Günlük Tablo ═══ -->
-<div id="drill-faturalar" class="drill-panel">
-    <div class="flex items-center justify-between mb-5">
-        <h3 class="text-sm font-semibold text-[#1e293b] flex items-center gap-2"><i class="bi bi-receipt text-blue-600"></i> Faturalar — Günlük dağılım</h3>
-        <span class="text-xs text-slate-400">@dateRange</span>
+<!-- ═══ ÜÇLÜ TAHSİLAT BAŞARI ANALİZİ ═══ -->
+@{
+    var ceiDPct = Model.CeiDonemOran > 100 ? 100 : Model.CeiDonemOran;
+    var ceiAPct = Model.CeiAylikOran > 100 ? 100 : Model.CeiAylikOran;
+    var ceiYPct = Model.CeiYillikOran > 100 ? 100 : Model.CeiYillikOran;
+    string ceiDColor = Model.CeiDonemOran >= 80 ? "#10b981" : Model.CeiDonemOran >= 50 ? "#f59e0b" : "#ef4444";
+    string ceiAColor = Model.CeiAylikOran >= 80 ? "#10b981" : Model.CeiAylikOran >= 50 ? "#f59e0b" : "#ef4444";
+    string ceiYColor = Model.CeiYillikOran >= 80 ? "#10b981" : Model.CeiYillikOran >= 50 ? "#f59e0b" : "#ef4444";
+}
+<div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-6">
+    <!-- 1: Dönem Başarısı -->
+    <div class="card p-3" style="background:rgba(255,255,255,0.7); backdrop-filter:blur(12px); border-top:3px solid @ceiDColor;">
+        <div class="flex items-center justify-between mb-2">
+            <span class="text-[9px] font-semibold text-slate-500 uppercase tracking-wide">Dönem başarısı</span>
+            <span class="text-base font-bold" style="color:@ceiDColor;">%@Model.CeiDonemOran.ToString("N0")</span>
+        </div>
+        <div class="h-1.5 rounded-full overflow-hidden mb-2" style="background:rgba(0,0,0,0.04);">
+            <div class="h-full rounded-full transition-all duration-1000" style="width:@(ceiDPct.ToString(System.Globalization.CultureInfo.InvariantCulture))%; background:@ceiDColor;"></div>
+        </div>
+        <div class="text-[8px] text-slate-400">
+            <span>₺@Model.CeiDonemTahsilat.ToString("N0") / ₺@((Model.CeiDonemTahsilat + Model.CeiDonemVadesiGecmis).ToString("N0"))</span>
+        </div>
+        <p class="text-[7px] text-slate-400 mt-0.5">@Model.FiltreBaslangic.ToString("dd.MM") → @Model.FiltreBitis.ToString("dd.MM.yyyy")</p>
     </div>
-    <div style="height:240px"><canvas id="chart-faturalar"></canvas></div>
-    <div id="data-faturalar"></div>
-</div>
-<div id="drill-tahsilatlar" class="drill-panel">
-    <div class="flex items-center justify-between mb-5">
-        <h3 class="text-sm font-semibold text-[#1e293b] flex items-center gap-2"><i class="bi bi-cash-stack text-violet-600"></i> Tahsilatlar — Günlük dağılım</h3>
-        <span class="text-xs text-slate-400">@dateRange</span>
+
+    <!-- 2: Aylık Başarı -->
+    <div class="card p-3" style="background:rgba(255,255,255,0.7); backdrop-filter:blur(12px); border-top:3px solid @ceiAColor;">
+        <div class="flex items-center justify-between mb-2">
+            <span class="text-[9px] font-semibold text-slate-500 uppercase tracking-wide">Aylık başarı</span>
+            <span class="text-base font-bold" style="color:@ceiAColor;">%@Model.CeiAylikOran.ToString("N0")</span>
+        </div>
+        <div class="h-1.5 rounded-full overflow-hidden mb-2" style="background:rgba(0,0,0,0.04);">
+            <div class="h-full rounded-full transition-all duration-1000" style="width:@(ceiAPct.ToString(System.Globalization.CultureInfo.InvariantCulture))%; background:@ceiAColor;"></div>
+        </div>
+        <div class="text-[8px] text-slate-400">
+            <span>₺@Model.CeiAylikTahsilat.ToString("N0") / ₺@((Model.CeiAylikTahsilat + Model.CeiAylikVadesiGecmis).ToString("N0"))</span>
+        </div>
+        <p class="text-[7px] text-slate-400 mt-0.5">@DateTime.Now.ToString("MMMM yyyy", new System.Globalization.CultureInfo("tr-TR"))</p>
     </div>
-    <div style="height:240px"><canvas id="chart-tahsilatlar"></canvas></div>
-    <div id="data-tahsilatlar"></div>
+
+    <!-- 3: YTD Başarı -->
+    <div class="card p-3" style="background:rgba(255,255,255,0.7); backdrop-filter:blur(12px); border-top:3px solid @ceiYColor;">
+        <div class="flex items-center justify-between mb-2">
+            <span class="text-[9px] font-semibold text-slate-500 uppercase tracking-wide">YTD başarı</span>
+            <span class="text-base font-bold" style="color:@ceiYColor;">%@Model.CeiYillikOran.ToString("N0")</span>
+        </div>
+        <div class="h-1.5 rounded-full overflow-hidden mb-2" style="background:rgba(0,0,0,0.04);">
+            <div class="h-full rounded-full transition-all duration-1000" style="width:@(ceiYPct.ToString(System.Globalization.CultureInfo.InvariantCulture))%; background:@ceiYColor;"></div>
+        </div>
+        <div class="flex items-center justify-between text-[8px] text-slate-400">
+            <span>₺@Model.CeiYillikTahsilat.ToString("N0") / ₺@((Model.CeiYillikTahsilat + Model.CeiYillikVadesiGecmis).ToString("N0"))</span>
+            <span class="text-red-500 font-semibold">2025: ₺@Model.Legacy2025Bakiye.ToString("N0")</span>
+        </div>
+        <p class="text-[7px] text-slate-400 mt-0.5">01.01.2026 → @DateTime.Now.ToString("dd.MM.yyyy")</p>
+    </div>
 </div>
+
+<!-- ═══ ANALİTİK SATIRI (Default Visible) ═══ -->
+<div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+    <!-- Fatura Günlük Dağılım -->
+    <div class="card px-4 pt-3 pb-2">
+        <div class="flex items-center justify-between mb-2">
+            <h3 class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5"><i class="bi bi-receipt text-blue-600" style="font-size:11px;"></i> Fatura dağılımı</h3>
+            <span class="text-[9px] text-slate-400">@dateRange</span>
+        </div>
+        <div style="height:160px"><canvas id="chart-faturalar"></canvas></div>
+    </div>
+    <!-- Tahsilat Günlük Dağılım -->
+    <div class="card px-4 pt-3 pb-2">
+        <div class="flex items-center justify-between mb-2">
+            <h3 class="text-[10px] font-semibold text-slate-500 uppercase tracking-wide flex items-center gap-1.5"><i class="bi bi-cash-stack text-amber-500" style="font-size:11px;"></i> Tahsilat dağılımı</h3>
+            <span class="text-[9px] text-slate-400">@dateRange</span>
+        </div>
+        <div style="height:160px"><canvas id="chart-tahsilatlar"></canvas></div>
+    </div>
+</div>
+
+<!-- Hidden drill panels (sadece tablo, chart yok) -->
+<div id="drill-faturalar" class="drill-panel"><div id="data-faturalar"></div></div>
+<div id="drill-tahsilatlar" class="drill-panel"><div id="data-tahsilatlar"></div></div>
 <div id="drill-sozlesmeler" class="drill-panel">
-    <div class="flex items-center justify-between mb-5">
-        <h3 class="text-sm font-semibold text-[#1e293b] flex items-center gap-2"><i class="bi bi-file-earmark-check text-indigo-600"></i> Sözleşmeler — Tarih bazlı dağılım</h3>
-        <span class="text-xs text-slate-400">Archived</span>
-    </div>
-    <div style="height:240px"><canvas id="chart-sozlesmeler"></canvas></div>
+    <div style="height:200px"><canvas id="chart-sozlesmeler"></canvas></div>
     <div id="data-sozlesmeler"></div>
 </div>
 
 <!-- ═══ DETAIL TABLES (hidden, toggle with drill) ═══ -->
 <div id="detail-faturalar" class="drill-panel">
-    <h3 class="text-sm font-semibold text-[#1e293b] mb-4 flex items-center gap-2">
-        <i class="bi bi-receipt text-blue-600"></i> Fatura detayları
-        <span class="text-xs font-normal text-slate-400 ml-auto">@Model.FaturaDetaylari.Count kayıt</span>
-    </h3>
-    <div class="overflow-y-auto max-h-[360px] rounded-xl">
-        <table class="w-full text-sm detail-table">
+    <div class="flex items-center justify-between mb-4">
+        <h3 class="text-sm font-semibold text-[#1e293b] flex items-center gap-2">
+            <i class="bi bi-receipt text-blue-600"></i> Fatura detayları
+        </h3>
+        <div class="flex items-center gap-4">
+            <span class="flex items-center gap-1.5 text-[10px] text-slate-400"><span class="inline-block w-2 h-2 rounded-full bg-green-400"></span> Satış</span>
+            <span class="flex items-center gap-1.5 text-[10px] text-slate-400"><span class="inline-block w-2 h-2 rounded-full bg-amber-400"></span> İade</span>
+            <span class="flex items-center gap-1.5 text-[10px] text-slate-400"><span class="inline-block w-2 h-2 rounded-full bg-red-400"></span> Ret</span>
+            <span class="text-[10px] text-slate-400">@Model.FaturaDetaylari.Count kayıt</span>
+        </div>
+    </div>
+    <div class="overflow-y-auto max-h-[420px] rounded-xl">
+        <table class="w-full text-[11px] detail-table">
             <thead><tr>
-                <th class="text-left py-3 px-3 text-xs font-semibold text-slate-400 tracking-wide w-[35%]">Fatura no</th>
-                <th class="text-center py-3 px-3 text-xs font-semibold text-slate-400 tracking-wide w-[30%]">Tarih</th>
-                <th class="text-right py-3 px-3 text-xs font-semibold text-slate-400 tracking-wide w-[35%]">Tutar</th>
+                <th class="py-2.5 px-2 text-center" style="width:20px;"></th>
+                <th class="text-left py-2.5 px-2 font-semibold text-slate-400">Fatura no</th>
+                <th class="text-left py-2.5 px-2 font-semibold text-slate-400">Müşteri</th>
+                <th class="text-center py-2.5 px-2 font-semibold text-slate-400">Tarih</th>
+                <th class="text-right py-2.5 px-2 font-semibold text-slate-400">Tutar</th>
+                <th class="text-right py-2.5 px-2 font-semibold text-slate-400">Kümülatif toplam</th>
+                <th class="py-2.5 px-2 text-center" style="width:28px;"></th>
             </tr></thead>
             <tbody>
                 @foreach (var f in Model.FaturaDetaylari)
                 {
+                    var dotColor = "bg-green-400";
+                    var durumTrim = f.Durum?.Trim().ToUpper() ?? "";
+                    if (durumTrim == "İADE" || durumTrim == "IADE") { dotColor = "bg-amber-400"; }
+                    else if (durumTrim == "RET") { dotColor = "bg-red-400"; }
                     <tr class="border-t border-slate-50 hover:bg-blue-50/20 transition-colors">
-                        <td class="py-2.5 px-3 text-[#1e293b] font-medium text-xs">@f.Fatura_No</td>
-                        <td class="py-2.5 px-3 text-slate-500 text-xs text-center">@(f.Fatura_Tarihi?.ToString("dd.MM.yyyy") ?? "—")</td>
-                        <td class="py-2.5 px-3 text-right font-semibold text-[#1e293b] text-xs">₺@((f.Fatura_Toplam ?? 0).ToString("N0"))</td>
+                        <td class="py-2 px-2 text-center"><span class="inline-block w-2 h-2 rounded-full @dotColor"></span></td>
+                        <td class="py-2 px-2 text-[#1e293b] font-medium">@f.Fatura_No</td>
+                        <td class="py-2 px-2 text-slate-500 max-w-[140px] truncate" title="@(f.MusteriUnvan ?? "")">@(f.MusteriUnvan ?? "—")</td>
+                        <td class="py-2 px-2 text-slate-500 text-center">@(f.Fatura_Tarihi?.ToString("dd.MM.yyyy") ?? "—")</td>
+                        <td class="py-2 px-2 text-right font-semibold text-[#1e293b]">₺@((f.Fatura_Toplam ?? 0).ToString("N0"))</td>
+                        <td class="py-2 px-2 text-right font-medium text-blue-600">₺@f.KumulatifToplam.ToString("N0")</td>
+                        <td class="py-2 px-2 text-center">
+                            <button onclick="showKalem('@f.Fatura_No', this)" class="w-6 h-6 rounded-lg bg-slate-50 hover:bg-blue-100 flex items-center justify-center transition-all" title="Kalem detayı">
+                                <i class="bi bi-eye text-slate-400 hover:text-blue-600" style="font-size:12px;"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    <tr class="kalem-row hidden border-t border-blue-50" data-fatura="@f.Fatura_No">
+                        <td colspan="7" class="py-0 px-2"><div class="kalem-content"></div></td>
                     </tr>
                 }
             </tbody>
@@ -240,24 +466,46 @@
 </div>
 
 <div id="detail-tahsilatlar" class="drill-panel">
-    <h3 class="text-sm font-semibold text-[#1e293b] mb-4 flex items-center gap-2">
-        <i class="bi bi-cash-stack text-violet-600"></i> Tahsilat detayları
-        <span class="text-xs font-normal text-slate-400 ml-auto">@Model.TahsilatDetaylari.Count kayıt</span>
-    </h3>
-    <div class="overflow-y-auto max-h-[360px] rounded-xl">
-        <table class="w-full text-sm detail-table">
+    <div class="flex items-center justify-between mb-4">
+        <h3 class="text-sm font-semibold text-[#1e293b] flex items-center gap-2">
+            <i class="bi bi-cash-stack text-blue-700"></i> Tahsilat detayları
+        </h3>
+        <div class="flex items-center gap-4">
+            <span class="flex items-center gap-1.5 text-[10px] text-slate-400"><span class="inline-block w-2 h-2 rounded-full bg-green-400"></span> Tahsil edildi</span>
+            <span class="flex items-center gap-1.5 text-[10px] text-slate-400"><span class="inline-block w-2 h-2 rounded-full bg-blue-400"></span> Kredi kartı</span>
+            <span class="text-[10px] text-slate-400">@Model.TahsilatDetaylari.Count kayıt</span>
+        </div>
+    </div>
+    <div class="overflow-y-auto max-h-[420px] rounded-xl">
+        <table class="w-full text-[11px] detail-table">
             <thead><tr>
-                <th class="text-left py-3 px-3 text-xs font-semibold text-slate-400 tracking-wide w-[35%]">Fatura no</th>
-                <th class="text-center py-3 px-3 text-xs font-semibold text-slate-400 tracking-wide w-[30%]">Vade tarihi</th>
-                <th class="text-right py-3 px-3 text-xs font-semibold text-slate-400 tracking-wide w-[35%]">Tutar</th>
+                <th class="py-2.5 px-2 text-center" style="width:20px;"></th>
+                <th class="text-left py-2.5 px-2 font-semibold text-slate-400">Fatura no</th>
+                <th class="text-left py-2.5 px-2 font-semibold text-slate-400">Müşteri</th>
+                <th class="text-center py-2.5 px-2 font-semibold text-slate-400">Tarih</th>
+                <th class="text-right py-2.5 px-2 font-semibold text-slate-400">Tutar</th>
+                <th class="py-2.5 px-2 text-center" style="width:28px;"></th>
             </tr></thead>
             <tbody>
                 @foreach (var t in Model.TahsilatDetaylari)
                 {
-                    <tr class="border-t border-slate-50 hover:bg-violet-50/20 transition-colors">
-                        <td class="py-2.5 px-3 text-[#1e293b] font-medium text-xs">@t.Fatura_No</td>
-                        <td class="py-2.5 px-3 text-slate-500 text-xs text-center">@(t.Fatura_Vade_Tarihi?.ToString("dd.MM.yyyy") ?? "—")</td>
-                        <td class="py-2.5 px-3 text-right font-semibold text-[#1e293b] text-xs">₺@((t.Fatura_Toplam ?? 0).ToString("N0"))</td>
+                    var tDot = "bg-green-400";
+                    var tDurum = t.Durum?.Trim().ToUpper() ?? "";
+                    if (tDurum.Contains("KREDİ") || tDurum.Contains("KREDI")) { tDot = "bg-blue-400"; }
+                    <tr class="border-t border-slate-50 hover:bg-blue-50/20 transition-colors">
+                        <td class="py-2 px-2 text-center"><span class="inline-block w-2 h-2 rounded-full @tDot"></span></td>
+                        <td class="py-2 px-2 text-[#1e293b] font-medium">@t.Fatura_No</td>
+                        <td class="py-2 px-2 text-slate-500 max-w-[140px] truncate" title="@(t.MusteriUnvan ?? "")">@(t.MusteriUnvan ?? "—")</td>
+                        <td class="py-2 px-2 text-slate-500 text-center">@((t.Odeme_Sozu_Tarihi ?? t.Tahsil_Tarihi)?.ToString("dd.MM.yyyy") ?? "—")</td>
+                        <td class="py-2 px-2 text-right font-semibold text-[#1e293b]">₺@((t.Fatura_Toplam ?? 0).ToString("N0"))</td>
+                        <td class="py-2 px-2 text-center">
+                            <button onclick="showKalem('@t.Fatura_No', this)" class="w-6 h-6 rounded-lg bg-slate-50 hover:bg-blue-100 flex items-center justify-center transition-all" title="Kalem detayı">
+                                <i class="bi bi-eye text-slate-400 hover:text-blue-600" style="font-size:12px;"></i>
+                            </button>
+                        </td>
+                    </tr>
+                    <tr class="kalem-row hidden border-t border-blue-50" data-fatura="@t.Fatura_No">
+                        <td colspan="6" class="py-0 px-2"><div class="kalem-content"></div></td>
                     </tr>
                 }
             </tbody>
@@ -285,7 +533,7 @@
                         <td class="py-2.5 px-3 text-[#1e293b] font-medium text-xs">@(s.ContractNo ?? "—")</td>
                         <td class="py-2.5 px-3 text-slate-500 text-xs truncate max-w-[200px]">@(s.AccountTitle ?? "—")</td>
                         <td class="py-2.5 px-3 text-right font-semibold text-[#1e293b] text-xs">₺@((s.TotalAmount ?? 0).ToString("N0"))</td>
-                        <td class="py-2.5 px-3 text-center"><span class="inline-flex px-2 py-0.5 rounded-full bg-indigo-50 text-indigo-600 text-[10px] font-medium">@(s.ContractStatus ?? "—")</span></td>
+                        <td class="py-2.5 px-3 text-center"><span class="inline-flex px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 text-[10px] font-medium">@(s.ContractStatus ?? "—")</span></td>
                     </tr>
                 }
             </tbody>
@@ -297,7 +545,55 @@
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
 <script>
     const fmt=new Intl.NumberFormat('tr-TR',{style:'currency',currency:'TRY',maximumFractionDigits:0});
-    const drillLoaded={},charts={};
+    const fmtN=new Intl.NumberFormat('tr-TR',{maximumFractionDigits:0});
+    let drillLoaded={};
+    const charts={};
+    const kalemLoaded={};
+
+    async function showKalem(faturaNo, btn) {
+        // Find the kalem-row for this fatura
+        const rows = document.querySelectorAll('tr.kalem-row[data-fatura="'+faturaNo+'"]');
+        if (!rows.length) return;
+        const row = rows[rows.length-1]; // closest to button context
+        // Find correct row: traverse from button
+        const parentRow = btn.closest('tr');
+        const kalemRow = parentRow.nextElementSibling;
+        if (!kalemRow || !kalemRow.classList.contains('kalem-row')) return;
+
+        // Toggle
+        if (!kalemRow.classList.contains('hidden')) {
+            kalemRow.classList.add('hidden');
+            return;
+        }
+        kalemRow.classList.remove('hidden');
+
+        const content = kalemRow.querySelector('.kalem-content');
+        if (kalemLoaded[faturaNo]) return;
+
+        content.innerHTML = '<div class="py-3"><div class="shimmer h-4 w-full mb-2"></div><div class="shimmer h-4 w-3/4"></div></div>';
+
+        try {
+            const res = await fetch('/Cockpit/GetKalemDetay?faturaNo='+encodeURIComponent(faturaNo));
+            if (!res.ok) throw 0;
+            const data = await res.json();
+
+            if (!data || !data.length) {
+                content.innerHTML = '<p class="text-[10px] text-slate-400 py-2">Kalem bulunamadı</p>';
+                kalemLoaded[faturaNo] = true;
+                return;
+            }
+
+            let h = '<table class="w-full text-[10px] my-2"><thead><tr class="text-slate-400"><th class="text-left py-1 px-2 font-medium">Ürün</th><th class="text-left py-1 px-2 font-medium">Stok kodu</th><th class="text-center py-1 px-2 font-medium">Miktar</th><th class="text-right py-1 px-2 font-medium">Birim fiyat</th><th class="text-right py-1 px-2 font-medium">KDV</th><th class="text-right py-1 px-2 font-medium">Toplam</th></tr></thead><tbody>';
+            data.forEach(d => {
+                h += '<tr class="border-t border-blue-50/50"><td class="py-1.5 px-2 text-slate-600 max-w-[180px] truncate">'+(d.urunAdi||'—')+'</td><td class="py-1.5 px-2 text-slate-400">'+(d.stokKodu||'—')+'</td><td class="py-1.5 px-2 text-center text-slate-500">'+fmtN.format(d.miktar||0)+'</td><td class="py-1.5 px-2 text-right text-slate-600">'+fmt.format(d.birimFiyat||0)+'</td><td class="py-1.5 px-2 text-right text-slate-400">'+fmt.format(d.kdv||0)+'</td><td class="py-1.5 px-2 text-right font-medium text-[#1e293b]">'+fmt.format(d.toplam||0)+'</td></tr>';
+            });
+            h += '</tbody></table>';
+            content.innerHTML = h;
+            kalemLoaded[faturaNo] = true;
+        } catch {
+            content.innerHTML = '<p class="text-[10px] text-red-400 py-2">Yüklenirken hata oluştu</p>';
+        }
+    }
     const activeFilter='@Model.AktifFiltre';
     const filterStart='@Model.FiltreBaslangic.ToString("yyyy-MM-dd")';
     const filterEnd='@Model.FiltreBitis.ToString("yyyy-MM-dd")';
@@ -309,7 +605,7 @@
     }
 
     function grad(ctx,c1,c2){const g=ctx.createLinearGradient(0,0,0,240);g.addColorStop(0,c1);g.addColorStop(1,c2);return g;}
-    const cMap={faturalar:{from:'rgba(37,99,235,0.35)',to:'rgba(37,99,235,0.03)',border:'#2563eb',hover:'rgba(37,99,235,0.5)'},tahsilatlar:{from:'rgba(124,58,237,0.35)',to:'rgba(124,58,237,0.03)',border:'#7c3aed',hover:'rgba(124,58,237,0.5)'},sozlesmeler:{from:'rgba(79,70,229,0.35)',to:'rgba(79,70,229,0.03)',border:'#4f46e5',hover:'rgba(79,70,229,0.5)'}};
+    const cMap={faturalar:{from:'rgba(29,78,216,0.6)',to:'rgba(29,78,216,0.08)',border:'#1d4ed8',hover:'rgba(29,78,216,0.75)'},tahsilatlar:{from:'rgba(245,158,11,0.55)',to:'rgba(245,158,11,0.08)',border:'#f59e0b',hover:'rgba(245,158,11,0.7)'},sozlesmeler:{from:'rgba(2,132,199,0.55)',to:'rgba(2,132,199,0.08)',border:'#0284c7',hover:'rgba(2,132,199,0.7)'}};
 
     function fmtDate(s){const d=new Date(s);return String(d.getDate()).padStart(2,'0')+'.'+String(d.getMonth()+1).padStart(2,'0')+'.'+d.getFullYear();}
     function skel(id){document.getElementById(id).innerHTML='<div class="space-y-3 mt-4"><div class="shimmer h-5 w-full"></div><div class="shimmer h-5 w-4/5"></div><div class="shimmer h-5 w-11/12"></div><div class="shimmer h-5 w-3/5"></div></div>';}
@@ -324,26 +620,111 @@
     // Close filter menu on outside click
     document.addEventListener('click',e=>{const m=document.getElementById('filterMenu');if(m&&!e.target.closest('.filter-dropdown'))m.classList.remove('show');});
 
-    async function load(type){
-        const el=document.getElementById('data-'+type),cv=document.getElementById('chart-'+type),wp=cv.parentElement;
+    // Chart-only render (for default analytic row)
+    async function renderChart(type){
+        const cv=document.getElementById('chart-'+type);
+        if(!cv)return;
+        const wp=cv.parentElement;
+        // Önceki "veri yok" mesajını temizle, canvas'ı göster
+        const oldMsg=wp.querySelector('.no-data-msg');
+        if(oldMsg)oldMsg.remove();
+        cv.style.display='block';
         try{
-            const url='/Cockpit/GetDailyBreakdown?type='+type+'&filter='+activeFilter+'&startDate='+filterStart+'&endDate='+filterEnd;
+            const url='/Cockpit/GetDailyBreakdown?type='+type+'&'+getDetayParams();
             const r=await fetch(url);if(!r.ok)throw 0;const data=await r.json();
-            if(!data||!data.length){wp.style.display='none';el.innerHTML='<p class="text-sm text-slate-400 text-center py-6">Veri bulunamadı.</p>';drillLoaded[type]=true;return;}
+            if(!data||!data.length){
+                cv.style.display='none';
+                if(charts[type]){charts[type].destroy();delete charts[type];}
+                const msg=document.createElement('p');msg.className='no-data-msg text-[11px] text-slate-400 text-center py-8';msg.textContent='Bu dönemde veri bulunamadı.';wp.appendChild(msg);
+                return;
+            }
 
             const labels=data.map(d=>{const dt=new Date(d.tarih);return dt.getDate()+'.'+String(dt.getMonth()+1).padStart(2,'0');}),vals=data.map(d=>d.toplam),cnts=data.map(d=>d.adet),c=cMap[type],ctx=cv.getContext('2d');
             if(charts[type])charts[type].destroy();
-            charts[type]=new Chart(cv,{type:'bar',data:{labels,datasets:[{data:vals,backgroundColor:grad(ctx,c.from,c.to),hoverBackgroundColor:c.hover,borderColor:c.border,borderWidth:1.5,borderRadius:10,borderSkipped:false,barPercentage:0.7,categoryPercentage:0.8}]},
+            charts[type]=new Chart(cv,{type:'line',data:{labels,datasets:[{data:vals,fill:true,backgroundColor:grad(ctx,c.from,c.to),borderColor:c.border,borderWidth:2,pointBackgroundColor:c.border,pointRadius:3,pointHoverRadius:6,tension:0.4}]},
             options:{responsive:true,maintainAspectRatio:false,animation:{duration:800,easing:'easeOutQuart'},
-                plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(30,27,75,0.92)',titleFont:{family:'Inter',size:13,weight:'600'},bodyFont:{family:'Inter',size:12},padding:14,cornerRadius:14,displayColors:false,
+                plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(30,27,75,0.92)',titleFont:{family:'Inter',size:12,weight:'600'},bodyFont:{family:'Inter',size:11},padding:12,cornerRadius:12,displayColors:false,
                     callbacks:{title:x=>fmtDate(data[x[0].dataIndex].tarih),label:x=>fmt.format(x.raw),afterLabel:x=>cnts[x.dataIndex]+' adet'}}},
-                scales:{x:{grid:{display:false},border:{display:false},ticks:{font:{family:'Inter',size:10,weight:'500'},color:'#94a3b8',padding:8}},
-                    y:{grid:{color:'rgba(0,0,0,0.03)',drawBorder:false},border:{display:false},ticks:{font:{family:'Inter',size:10},color:'#94a3b8',padding:8,callback:v=>v>=1e6?(v/1e6).toFixed(1)+'M':v>=1e3?(v/1e3).toFixed(0)+'K':v}}}}});
-
-            let h='<div class="overflow-x-auto mt-5"><table class="w-full text-sm"><thead><tr class="border-b border-slate-100"><th class="text-left py-2.5 px-3 text-xs font-semibold text-slate-400 tracking-wide w-[35%]">Tarih</th><th class="text-right py-2.5 px-3 text-xs font-semibold text-slate-400 tracking-wide w-[35%]">Tutar</th><th class="text-right py-2.5 px-3 text-xs font-semibold text-slate-400 tracking-wide w-[30%]">Adet</th></tr></thead><tbody>';
-            data.forEach((d,i)=>{h+='<tr class="'+(i%2===0?'bg-slate-50/30':'')+' hover:bg-indigo-50/20 transition-colors"><td class="py-2.5 px-3 text-slate-600">'+fmtDate(d.tarih)+'</td><td class="py-2.5 px-3 text-right font-semibold text-[#1e293b]">'+fmt.format(d.toplam)+'</td><td class="py-2.5 px-3 text-right text-slate-500">'+d.adet+'</td></tr>';});
-            h+='</tbody></table></div>';el.innerHTML=h;drillLoaded[type]=true;
-        }catch{wp.style.display='none';el.innerHTML='<p class="text-sm text-red-400 text-center py-4"><i class="bi bi-exclamation-triangle me-1"></i> Hata oluştu.</p>';}
+                scales:{x:{grid:{display:false},border:{display:false},ticks:{font:{family:'Inter',size:8},color:'#94a3b8',padding:3,maxRotation:0}},
+                    y:{grid:{color:'rgba(0,0,0,0.04)',drawBorder:false,borderDash:[3,3]},border:{display:false},ticks:{font:{family:'Inter',size:8},color:'#94a3b8',padding:4,callback:v=>v>=1e6?(v/1e6).toFixed(1)+'M':v>=1e3?(v/1e3).toFixed(0)+'K':v}}}}});
+        }catch{wp.innerHTML='<p class="text-[11px] text-red-400 text-center py-4">Hata oluştu.</p>';}
     }
+
+    // Drill-down table loader (no chart)
+    async function load(type){
+        const el=document.getElementById('data-'+type);
+        if(!el){return;}
+        // Sözleşmeler hala chart var
+        const cv=document.getElementById('chart-'+type);
+        if(cv && type==='sozlesmeler'){
+            const wp=cv.parentElement;
+            try{
+                const url='/Cockpit/GetDailyBreakdown?type='+type+'&'+getDetayParams();
+                const r=await fetch(url);if(!r.ok)throw 0;const data=await r.json();
+                if(data&&data.length){
+                    const labels=data.map(d=>{const dt=new Date(d.tarih);return dt.getDate()+'.'+String(dt.getMonth()+1).padStart(2,'0');}),vals=data.map(d=>d.toplam),cnts=data.map(d=>d.adet),c=cMap[type],ctx=cv.getContext('2d');
+                    if(charts[type])charts[type].destroy();
+                    charts[type]=new Chart(cv,{type:'line',data:{labels,datasets:[{data:vals,fill:true,backgroundColor:grad(ctx,c.from,c.to),borderColor:c.border,borderWidth:2,pointBackgroundColor:c.border,pointRadius:3,pointHoverRadius:6,tension:0.4}]},
+                    options:{responsive:true,maintainAspectRatio:false,animation:{duration:800,easing:'easeOutQuart'},plugins:{legend:{display:false},tooltip:{backgroundColor:'rgba(30,27,75,0.92)',titleFont:{family:'Inter',size:12,weight:'600'},bodyFont:{family:'Inter',size:11},padding:12,cornerRadius:12,displayColors:false,callbacks:{title:x=>fmtDate(data[x[0].dataIndex].tarih),label:x=>fmt.format(x.raw),afterLabel:x=>cnts[x.dataIndex]+' adet'}}},scales:{x:{grid:{display:false},border:{display:false},ticks:{font:{family:'Inter',size:8},color:'#94a3b8',padding:3}},y:{grid:{color:'rgba(0,0,0,0.04)',drawBorder:false,borderDash:[3,3]},border:{display:false},ticks:{font:{family:'Inter',size:8},color:'#94a3b8',padding:4,callback:v=>v>=1e6?(v/1e6).toFixed(1)+'M':v>=1e3?(v/1e3).toFixed(0)+'K':v}}}}});
+                }
+            }catch{}
+        }
+        // Günlük tablo
+        try{
+            const url='/Cockpit/GetDailyBreakdown?type='+type+'&'+getDetayParams();
+            const r=await fetch(url);if(!r.ok)throw 0;const data=await r.json();
+            if(!data||!data.length){el.innerHTML='<p class="text-[11px] text-slate-400 text-center py-4">Veri bulunamadı.</p>';drillLoaded[type]=true;return;}
+            let h='<div class="overflow-x-auto mt-3"><table class="w-full text-[11px]"><thead><tr class="border-b border-slate-100"><th class="text-left py-2 px-2 font-semibold text-slate-400">Tarih</th><th class="text-right py-2 px-2 font-semibold text-slate-400">Tutar</th><th class="text-right py-2 px-2 font-semibold text-slate-400">Adet</th></tr></thead><tbody>';
+            data.forEach((d,i)=>{h+='<tr class="'+(i%2===0?'bg-slate-50/30':'')+' hover:bg-blue-50/20 transition-colors"><td class="py-1.5 px-2 text-slate-600">'+fmtDate(d.tarih)+'</td><td class="py-1.5 px-2 text-right font-semibold text-[#1e293b]">'+fmt.format(d.toplam)+'</td><td class="py-1.5 px-2 text-right text-slate-500">'+d.adet+'</td></tr>';});
+            h+='</tbody></table></div>';el.innerHTML=h;drillLoaded[type]=true;
+        }catch{el.innerHTML='<p class="text-[11px] text-red-400 text-center py-4">Hata oluştu.</p>';}
+    }
+
+    // Sayfa açıldığında default chart'ları yükle
+    // Detay filtre (bağımsız)
+    let detayFilter = 'month';
+    function setDetayFilter(f, el) {
+        detayFilter = f;
+        // Tab aktif state
+        document.querySelectorAll('.detay-tab').forEach(t => t.classList.remove('active'));
+        el.classList.add('active');
+        // Kalem cache temizle
+        for (let k in kalemLoaded) delete kalemLoaded[k];
+        // Açık detay panellerini kapat ve yeniden yükle
+        const prev = activeDetail;
+        if (prev) { closeAll(prev); activeDetail = null; }
+        drillLoaded = {};
+        // Chart'ları yeniden yükle
+        renderChart('faturalar');
+        renderChart('tahsilatlar');
+        // Eski açık paneli tekrar aç
+        if (prev) { setTimeout(() => toggleDrill(prev), 150); }
+    }
+
+    // Override filter params for detay
+    function getDetayParams() {
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = now.getMonth() + 1;
+        switch(detayFilter) {
+            case 'lastmonth': {
+                const lm = m === 1 ? 12 : m - 1;
+                const ly = m === 1 ? y - 1 : y;
+                const ld = new Date(ly, lm, 0).getDate();
+                return 'startDate=' + ly + '-' + String(lm).padStart(2,'0') + '-01&endDate=' + ly + '-' + String(lm).padStart(2,'0') + '-' + ld;
+            }
+            case 'q1': return 'startDate=' + y + '-01-01&endDate=' + y + '-03-31';
+            case 'q2': return 'startDate=' + y + '-04-01&endDate=' + y + '-06-30';
+            case 'q3': return 'startDate=' + y + '-07-01&endDate=' + y + '-09-30';
+            case 'q4': return 'startDate=' + y + '-10-01&endDate=' + y + '-12-31';
+            case 'ytd': return 'filter=ytd';
+            default: return 'startDate=' + y + '-' + String(m).padStart(2,'0') + '-01&endDate=' + y + '-' + String(m).padStart(2,'0') + '-' + new Date(y, m, 0).getDate();
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', function(){
+        renderChart('faturalar');
+        renderChart('tahsilatlar');
+    });
 </script>
 }
