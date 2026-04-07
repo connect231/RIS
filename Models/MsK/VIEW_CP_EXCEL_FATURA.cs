@@ -61,8 +61,7 @@ public class VIEW_CP_EXCEL_FATURA
     [Column(TypeName = "datetime")]
     public DateTime? KayitTarihi { get; set; }
 
-    [Column(TypeName = "datetime")]
-    public DateTime? Odeme_Sozu_Tarihi { get; set; }
+    // NOT: Odeme_Sozu_Tarihi tamamen kaldırıldı — tahsilat hesapları sadece Fatura_Vade_Tarihi kullanır
 
     // JOIN ile dolan alanlar (NotMapped — LINQ tarafında set edilir)
     [NotMapped]
@@ -76,4 +75,13 @@ public class VIEW_CP_EXCEL_FATURA
 
     [NotMapped]
     public decimal KumulatifToplam { get; set; }
+
+    [NotMapped]
+    public decimal? NetTutar { get; set; }
+
+    [NotMapped]
+    public decimal? KdvDahilTutar { get; set; }
+
+    [NotMapped]
+    public bool VarunaEslesti { get; set; }
 }

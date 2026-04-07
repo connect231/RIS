@@ -3,41 +3,54 @@ using Microsoft.AspNetCore.Authorization;
 using SOS.DbData;
 using Microsoft.EntityFrameworkCore;
 using SOS.Models.ViewModels;
+using SOS.Models.MsK;
+using Microsoft.Extensions.Caching.Memory;
 
 namespace SOS.Controllers
 {
     [Authorize]
     public class CockpitController : Controller
     {
-        private readonly MskDbContext _context;
-        private const decimal AYLIK_HEDEF = 50_000_000m;
+        private readonly IDbContextFactory<MskDbContext> _contextFactory;
+        private readonly IMemoryCache _cache;
+        private const string CACHE_KEY_FATURALAR = "cockpit_faturalar";
+        private const string CACHE_KEY_SIPARISLER = "cockpit_siparisler";
+        private const string CACHE_KEY_URUNLER = "cockpit_urunler";
+        private const string CACHE_KEY_SOZLESMELER = "cockpit_sozlesmeler";
+        private const string CACHE_KEY_URUN_MAP = "cockpit_urun_map";
+        private const string CACHE_KEY_MUSTERI_MAP = "cockpit_musteri_map";
+        private const string CACHE_KEY_HEDEFLER = "cockpit_hedefler";
+        private const string CACHE_KEY_VARUNA_TUTAR = "cockpit_varuna_tutar";
+        private const string CACHE_KEY_URUN_GRUP_MAP = "cockpit_urun_grup_map"; // StockCode → AnaUrunAd
 
-        public CockpitController(MskDbContext context)
+        private static readonly SemaphoreSlim _cacheLock = new(1, 1);
+
+        public CockpitController(IDbContextFactory<MskDbContext> contextFactory, IMemoryCache cache)
         {
-            _context = context;
+            _contextFactory = contextFactory;
+            _cache = cache;
         }
+
+        #region Filter Parsing
 
         private (DateTime start, DateTime end, string filter, int months) ParseFilter(string? filter, string? startDate, string? endDate)
         {
             var now = DateTime.Now;
-            var today = now.Date.AddHours(23).AddMinutes(59).AddSeconds(59);
+            var today = now.Date.AddDays(1).AddSeconds(-1); // 23:59:59
             var year = now.Year;
-            DateTime start;
-            DateTime end;
+            DateTime start, end;
             int months;
             var fmtP = System.Globalization.CultureInfo.InvariantCulture;
             var style = System.Globalization.DateTimeStyles.None;
 
-            // Manuel aralık (öncelikli)
             if (!string.IsNullOrEmpty(startDate) && !string.IsNullOrEmpty(endDate)
                 && DateTime.TryParseExact(startDate, "yyyy-MM-dd", fmtP, style, out var sd)
                 && DateTime.TryParseExact(endDate, "yyyy-MM-dd", fmtP, style, out var ed))
             {
-                filter = "range";
                 start = sd.Date;
-                end = ed.Date.AddHours(23).AddMinutes(59).AddSeconds(59);
+                end = ed.Date.AddDays(1).AddSeconds(-1);
                 months = Math.Max(1, (end.Year - start.Year) * 12 + end.Month - start.Month + 1);
-                return (start, end, filter, months);
+                return (start, end, "range", months);
             }
 
             switch (filter?.ToLowerInvariant())
@@ -47,41 +60,37 @@ namespace SOS.Controllers
                     end = today;
                     months = now.Month;
                     break;
-                case "q1": // Ocak - Mart
+                case "q1":
                     start = new DateTime(year, 1, 1);
                     end = new DateTime(year, 3, 31, 23, 59, 59);
-                    if (end > today) end = today;
                     months = 3;
                     break;
-                case "q2": // Nisan - Haziran
+                case "q2":
                     start = new DateTime(year, 4, 1);
                     end = new DateTime(year, 6, 30, 23, 59, 59);
-                    if (end > today) end = today;
                     months = 3;
                     break;
-                case "q3": // Temmuz - Eylül
+                case "q3":
                     start = new DateTime(year, 7, 1);
                     end = new DateTime(year, 9, 30, 23, 59, 59);
-                    if (end > today) end = today;
                     months = 3;
                     break;
-                case "q4": // Ekim - Aralık
+                case "q4":
                     start = new DateTime(year, 10, 1);
                     end = new DateTime(year, 12, 31, 23, 59, 59);
-                    if (end > today) end = today;
                     months = 3;
                     break;
-                case "lastmonth": // Geçen ay
+                case "lastmonth":
                     var lmMonth = now.Month == 1 ? 12 : now.Month - 1;
                     var lmYear = now.Month == 1 ? year - 1 : year;
                     start = new DateTime(lmYear, lmMonth, 1);
                     end = new DateTime(lmYear, lmMonth, DateTime.DaysInMonth(lmYear, lmMonth), 23, 59, 59);
                     months = 1;
                     break;
-                default: // "month" veya null → Bulunduğumuz ay (default)
+                default:
                     filter = "month";
                     start = new DateTime(year, now.Month, 1);
-                    end = today;
+                    end = new DateTime(year, now.Month, DateTime.DaysInMonth(year, now.Month), 23, 59, 59);
                     months = 1;
                     break;
             }
@@ -89,455 +98,1146 @@ namespace SOS.Controllers
             return (start, end, filter ?? "month", months);
         }
 
-        // Negatif durumlar: İADE, İPTAL → para çıkışı (NULL = pozitif)
-        private static readonly string[] _negativeDurumlar = { "İADE", "IADE", "İPTAL", "IPTAL" };
+        #endregion
 
-        // RET: toplama dahil edilmez (ne pozitif ne negatif), sadece detay listesinde gösterilir
+        #region Status Helpers
+
+        private static readonly HashSet<string> _negativeDurumSet = new(StringComparer.OrdinalIgnoreCase)
+        {
+            "İADE", "IADE", "İPTAL", "IPTAL"
+        };
+
         private static bool IsRetDurum(string? durum)
             => !string.IsNullOrWhiteSpace(durum)
-               && durum.Trim().Equals("RET", StringComparison.OrdinalIgnoreCase);
+               && durum.AsSpan().Trim().Equals("RET".AsSpan(), StringComparison.OrdinalIgnoreCase);
 
         private static bool IsNegatifDurum(string? durum)
             => !string.IsNullOrWhiteSpace(durum)
-               && _negativeDurumlar.Any(d => durum!.Trim().Equals(d, StringComparison.OrdinalIgnoreCase));
-
-        private static bool IsTahsilat(string? durum)
-            => !string.IsNullOrWhiteSpace(durum)
-               && durum.Trim().Equals("TAHSİL EDİLDİ", StringComparison.OrdinalIgnoreCase);
+               && _negativeDurumSet.Contains(durum.Trim());
 
         private static bool IsTahsilatOrKrediKarti(string? durum)
-            => !string.IsNullOrWhiteSpace(durum)
-               && (durum.Trim().Equals("TAHSİL EDİLDİ", StringComparison.OrdinalIgnoreCase)
-                   || durum.Trim().Equals("KREDİ KARTI", StringComparison.OrdinalIgnoreCase)
-                   || durum.Trim().Equals("KREDI KARTI", StringComparison.OrdinalIgnoreCase));
-
-        // Kümülatif toplam hesaplama
-        private static List<Models.MsK.VIEW_CP_EXCEL_FATURA> KumulatifHesapla(List<Models.MsK.VIEW_CP_EXCEL_FATURA> list)
         {
-            decimal running = 0;
-            foreach (var f in list)
-            {
-                if (!IsRetDurum(f.Durum))
-                {
-                    var tutar = IsNegatifDurum(f.Durum) ? -(f.Fatura_Toplam ?? 0) : (f.Fatura_Toplam ?? 0);
-                    running += tutar;
-                }
-                f.KumulatifToplam = running;
-            }
-            return list;
+            if (string.IsNullOrWhiteSpace(durum)) return false;
+            var trimmed = durum.AsSpan().Trim();
+            return trimmed.Equals("TAHSİL EDİLDİ".AsSpan(), StringComparison.OrdinalIgnoreCase)
+                || trimmed.Equals("KREDİ KARTI".AsSpan(), StringComparison.OrdinalIgnoreCase)
+                || trimmed.Equals("KREDI KARTI".AsSpan(), StringComparison.OrdinalIgnoreCase);
         }
 
-        // Net tutar: RET hariç, negatif durumlar düşülür, diğerleri pozitif
-        private static decimal NetTutar(IEnumerable<Models.MsK.VIEW_CP_EXCEL_FATURA> kayitlar)
-            => kayitlar.Where(f => !IsRetDurum(f.Durum))
-                       .Sum(f => IsNegatifDurum(f.Durum) ? -(f.Fatura_Toplam ?? 0) : (f.Fatura_Toplam ?? 0));
+        private static bool IsDurumBos(string? durum)
+            => string.IsNullOrWhiteSpace(durum);
+
+        private static decimal NetTutarSingle(VIEW_CP_EXCEL_FATURA f)
+        {
+            if (IsRetDurum(f.Durum)) return 0;
+            var tutar = f.Fatura_Toplam ?? 0;
+            return IsNegatifDurum(f.Durum) ? -tutar : tutar;
+        }
+
+        #endregion
+
+        #region Cache (Parallel Loading)
+
+        /// <summary>
+        /// Cache'den veri yükler. Cold start'ta SemaphoreSlim ile race condition önlenir.
+        /// Cache warm ise lock'a girmeden döner (hot path = 0 overhead).
+        /// </summary>
+        // Public static: hem controller hem CockpitCacheWarmer (BackgroundService) tarafından çağrılır.
+        // forceRefresh=true → cache bypass (warmer background refresh için kullanır).
+        internal static async Task<(List<VIEW_CP_EXCEL_FATURA> faturalar,
+                            Dictionary<string, (string? AccountTitle, string? ProductName, decimal? Quantity)> urunMap,
+                            Dictionary<string, string?> musteriMap,
+                            List<TBL_VARUNA_SOZLESME> sozlesmeler,
+                            Dictionary<int, decimal> hedefler,
+                            Dictionary<string, decimal> varunaTutarMap,
+                            Dictionary<string, List<(string Grup, decimal TlTutar)>> urunGrupMap)> LoadAllCachedDataAsync(
+                            IDbContextFactory<MskDbContext> contextFactory,
+                            IMemoryCache cache,
+                            bool forceRefresh = false)
+        {
+            // Hot path — cache warm, lock'a gerek yok
+            if (!forceRefresh
+                && cache.TryGetValue(CACHE_KEY_FATURALAR, out List<VIEW_CP_EXCEL_FATURA>? cf) && cf != null
+                && cache.TryGetValue(CACHE_KEY_URUN_MAP, out Dictionary<string, (string?, string?, decimal?)>? um) && um != null
+                && cache.TryGetValue(CACHE_KEY_MUSTERI_MAP, out Dictionary<string, string?>? mm) && mm != null
+                && cache.TryGetValue(CACHE_KEY_SOZLESMELER, out List<TBL_VARUNA_SOZLESME>? cs) && cs != null
+                && cache.TryGetValue(CACHE_KEY_HEDEFLER, out Dictionary<int, decimal>? ch) && ch != null
+                && cache.TryGetValue(CACHE_KEY_VARUNA_TUTAR, out Dictionary<string, decimal>? vt) && vt != null
+                && cache.TryGetValue(CACHE_KEY_URUN_GRUP_MAP, out Dictionary<string, List<(string Grup, decimal TlTutar)>>? ug) && ug != null)
+            {
+                return (cf, um, mm, cs, ch, vt, ug);
+            }
+
+            // Cold path — lock ile tek thread DB'ye gider, diğerleri bekler
+            await _cacheLock.WaitAsync();
+            try
+            {
+                // Double-check: lock beklerken başka thread doldurmuş olabilir (force refresh'te skip)
+                if (!forceRefresh
+                    && cache.TryGetValue(CACHE_KEY_FATURALAR, out List<VIEW_CP_EXCEL_FATURA>? cf2) && cf2 != null
+                    && cache.TryGetValue(CACHE_KEY_URUN_MAP, out Dictionary<string, (string?, string?, decimal?)>? um2) && um2 != null
+                    && cache.TryGetValue(CACHE_KEY_MUSTERI_MAP, out Dictionary<string, string?>? mm2) && mm2 != null
+                    && cache.TryGetValue(CACHE_KEY_SOZLESMELER, out List<TBL_VARUNA_SOZLESME>? cs2) && cs2 != null
+                    && cache.TryGetValue(CACHE_KEY_HEDEFLER, out Dictionary<int, decimal>? ch2) && ch2 != null
+                    && cache.TryGetValue(CACHE_KEY_VARUNA_TUTAR, out Dictionary<string, decimal>? vt2) && vt2 != null
+                    && cache.TryGetValue(CACHE_KEY_URUN_GRUP_MAP, out Dictionary<string, List<(string Grup, decimal TlTutar)>>? ug2) && ug2 != null)
+                {
+                    return (cf2, um2, mm2, cs2, ch2, vt2, ug2);
+                }
+
+                // Kendi bağımsız context'i oluştur — scoped context ile çakışma olmaz
+                using var db = contextFactory.CreateDbContext();
+
+                // VIEW'da aynı Fatura_No tekrarlayabiliyor — Fatura_No bazlı deduplicate
+                var faturalar = (await db.VIEW_CP_EXCEL_FATURAs.AsNoTracking().ToListAsync())
+                    .GroupBy(f => f.Fatura_No ?? f.GetHashCode().ToString())
+                    .Select(g => g.First())
+                    .ToList();
+
+                var siparisler = await db.TBL_VARUNA_SIPARIs.AsNoTracking()
+                    .Where(s => s.SerialNumber != null)
+                    .Select(s => new SiparisDto
+                    {
+                        SerialNumber = s.SerialNumber,
+                        OrderId = s.OrderId,
+                        AccountTitle = s.AccountTitle,
+                        OrderStatus = s.OrderStatus,
+                        TotalNetAmount = s.TotalNetAmount
+                    })
+                    .ToListAsync();
+
+                // CrmOrderId + StockCode bazlı dedupe — CLAUDE.md kuralı: aynı sipariş+stock bir satır olmalı
+                var urunler = (await db.TBL_VARUNA_SIPARIS_URUNLERIs.AsNoTracking()
+                    .Where(u => u.CrmOrderId != null)
+                    .Select(u => new UrunDto { CrmOrderId = u.CrmOrderId, ProductName = u.ProductName, StockCode = u.StockCode, Quantity = u.Quantity, Total = u.Total })
+                    .ToListAsync())
+                    .GroupBy(u => new { u.CrmOrderId, u.StockCode })
+                    .Select(g => new UrunDto
+                    {
+                        CrmOrderId = g.Key.CrmOrderId,
+                        StockCode = g.Key.StockCode,
+                        ProductName = g.First().ProductName,
+                        Quantity = g.Sum(x => x.Quantity ?? 0),
+                        Total = g.Sum(x => x.Total ?? 0)
+                    })
+                    .ToList();
+
+                var sozlesmeler = await db.TBL_VARUNA_SOZLESMEs.AsNoTracking()
+                    .Where(s => s.RenewalDate.HasValue)
+                    .ToListAsync();
+
+                // Lookup map'leri oluştur
+                var urunMap = siparisler
+                    .Join(urunler, s => s.OrderId, u => u.CrmOrderId,
+                          (s, u) => new { s.SerialNumber, s.AccountTitle, u.ProductName, u.Quantity })
+                    .Where(x => x.SerialNumber != null)
+                    .GroupBy(x => x.SerialNumber!)
+                    .ToDictionary(g => g.Key, g => (g.First().AccountTitle, g.First().ProductName, g.First().Quantity));
+
+                var musteriMap = siparisler
+                    .Where(s => s.SerialNumber != null)
+                    .GroupBy(s => s.SerialNumber!)
+                    .ToDictionary(g => g.Key, g => g.First().AccountTitle);
+
+                // Varuna KDV hariç tutar map'i: Closed siparişlerin TotalNetAmount'u
+                // Fatura_No (SerialNumber) → KDV hariç tutar
+                var varunaTutarMap = siparisler
+                    .Where(s => s.SerialNumber != null
+                        && s.TotalNetAmount.HasValue && s.TotalNetAmount.Value > 0
+                        && string.Equals(s.OrderStatus, "Closed", StringComparison.OrdinalIgnoreCase))
+                    .GroupBy(s => s.SerialNumber!)
+                    .ToDictionary(g => g.Key, g => g.First().TotalNetAmount!.Value);
+
+                // Aylık hedefler (Ay → HedefTutar) — 2026 GENEL
+                var hedefler = await db.TBLSOS_HEDEF_AYLIKs
+                    .AsNoTracking()
+                    .Where(h => h.Yil == DateTime.Now.Year && h.Tip == "GENEL" && h.Aktif)
+                    .ToDictionaryAsync(h => h.Ay, h => h.HedefTutar);
+
+                // Her faturaya NetTutar (Varuna KDV hariç) ve KdvDahilTutar (Excel) ata
+                foreach (var f in faturalar)
+                {
+                    var excelTutar = f.Fatura_Toplam ?? 0;
+                    f.KdvDahilTutar = excelTutar;
+                    if (f.Fatura_No != null && varunaTutarMap.TryGetValue(f.Fatura_No, out var vNet))
+                    {
+                        f.NetTutar = vNet;
+                        f.VarunaEslesti = true;
+                    }
+                    else
+                    {
+                        f.NetTutar = excelTutar; // Varuna'da yoksa Excel tutarı fallback
+                        f.VarunaEslesti = false;
+                    }
+                }
+
+                // Ürün grup eşleştirme: StockCode → AnaUrunAd
+                // NOT: DB'de nadiren duplicate StokKodu olabiliyor (EH.02.018 gibi) — GroupBy ilk kaydı alır
+                var eslestirmeler = (await db.TBLSOS_URUN_ESLESTIRMEs.AsNoTracking()
+                    .Include(e => e.AnaUrun)
+                    .ToListAsync())
+                    .GroupBy(e => e.StokKodu)
+                    .ToDictionary(g => g.Key, g => g.First().AnaUrun?.Ad ?? "Diğer");
+
+                // Fatura_No (SerialNumber) → kalem bazlı ürün grubu TL dağılımı
+                // Her kalem için: (kalem.Total / toplamDöviz) * TotalNetAmount → ürün grubuna
+                var urunGrupMap = new Dictionary<string, List<(string Grup, decimal TlTutar)>>();
+                var urunByCrmOrder = urunler.Where(u => u.CrmOrderId != null)
+                    .GroupBy(u => u.CrmOrderId!).ToDictionary(g => g.Key, g => g.ToList());
+                foreach (var siparis in siparisler.Where(s => s.SerialNumber != null && s.OrderId != null
+                    && s.TotalNetAmount.HasValue && s.TotalNetAmount.Value > 0
+                    && string.Equals(s.OrderStatus, "Closed", StringComparison.OrdinalIgnoreCase)))
+                {
+                    if (urunGrupMap.ContainsKey(siparis.SerialNumber!)) continue;
+                    if (!urunByCrmOrder.TryGetValue(siparis.OrderId!, out var sipUrunleri)) continue;
+                    var toplamDoviz = sipUrunleri.Sum(u => u.Total ?? 0);
+                    if (toplamDoviz == 0) continue;
+                    var kalemler = new List<(string Grup, decimal TlTutar)>();
+                    foreach (var u in sipUrunleri)
+                    {
+                        var grup = (u.StockCode != null && eslestirmeler.TryGetValue(u.StockCode, out var ad)) ? ad : "Diğer";
+                        var tlTutar = (u.Total ?? 0) / toplamDoviz * siparis.TotalNetAmount!.Value;
+                        kalemler.Add((grup, tlTutar));
+                    }
+                    urunGrupMap[siparis.SerialNumber!] = kalemler;
+                }
+
+                // Cache'e yaz — TTL 15 dk (CacheWarmer her 4 dk'da refresh eder, bu sliding buffer)
+                var ttl = TimeSpan.FromMinutes(15);
+                cache.Set(CACHE_KEY_FATURALAR, faturalar, ttl);
+                cache.Set(CACHE_KEY_SOZLESMELER, sozlesmeler, ttl);
+                cache.Set(CACHE_KEY_URUN_MAP, urunMap, ttl);
+                cache.Set(CACHE_KEY_MUSTERI_MAP, musteriMap, ttl);
+                cache.Set(CACHE_KEY_HEDEFLER, hedefler, ttl);
+                cache.Set(CACHE_KEY_VARUNA_TUTAR, varunaTutarMap, ttl);
+                cache.Set(CACHE_KEY_URUN_GRUP_MAP, urunGrupMap, ttl);
+
+                return (faturalar, urunMap, musteriMap, sozlesmeler, hedefler, varunaTutarMap, urunGrupMap);
+            }
+            finally
+            {
+                _cacheLock.Release();
+            }
+        }
+
+        private static void MapMusteriUrun(
+            IEnumerable<VIEW_CP_EXCEL_FATURA> kayitlar,
+            Dictionary<string, (string? AccountTitle, string? ProductName, decimal? Quantity)> urunMap,
+            Dictionary<string, string?> musteriMap)
+        {
+            foreach (var f in kayitlar)
+            {
+                if (f.Fatura_No == null) continue;
+                if (urunMap.TryGetValue(f.Fatura_No, out var urun))
+                {
+                    f.MusteriUnvan = urun.AccountTitle;
+                    f.UrunAdi = urun.ProductName;
+                    f.Miktar = urun.Quantity;
+                }
+                else if (musteriMap.TryGetValue(f.Fatura_No, out var musteri))
+                {
+                    f.MusteriUnvan = musteri;
+                }
+            }
+        }
+
+        // DTO'lar
+        private class SiparisDto
+        {
+            public string? SerialNumber { get; set; }
+            public string? OrderId { get; set; }
+            public string? AccountTitle { get; set; }
+            public string? OrderStatus { get; set; }
+            public decimal? TotalNetAmount { get; set; }
+        }
+
+        private class UrunDto
+        {
+            public string? CrmOrderId { get; set; }
+            public string? ProductName { get; set; }
+            public string? StockCode { get; set; }
+            public decimal? Quantity { get; set; }
+            public decimal? Total { get; set; }
+        }
+
+        #endregion
+
+        #region Single-Pass Metrics
+
+        /// <summary>
+        /// allFaturalar üzerinde TEK geçişte tüm metrikleri hesaplar.
+        /// 15+ ayrı LINQ iterasyonu yerine O(n) tek döngü.
+        /// </summary>
+        private struct FaturaMetrics
+        {
+            // Dönem fatura
+            public decimal FatToplam;
+            public int FatAdet;
+            // Dönem tahsilat
+            public decimal TahEdilen;      // PAY: Tahsil_Tarihi dönemde → SUM(Tahsil_Edilen)
+            public decimal TahBakiye;      // Bekleyen_Bakiye toplamı (vade ≤ dönem sonu)
+            public int TahAdet;
+            public decimal TahGecmisTahsilat; // Tahsil_Tarihi dönem ÖNCESI → SUM(Tahsil_Edilen)
+            // Önceki dönem (trend)
+            public decimal PrevFatToplam;
+            public decimal PrevTahToplam;
+            // CEI Dönem
+            public decimal CeiDonemVgBakiye;
+            // CEI Haftalık (PAY: Tahsil_Tarihi hafta içi, PAYDA: efektif ≤ hafta sonu bakiye + pay)
+            public decimal HaftalikTah;       // PAY: SUM(Tahsil_Edilen) where Tahsil_Tarihi in hafta
+            public decimal HaftalikBakiye;    // SUM(Bekleyen_Bakiye) where efektif ≤ hafta sonu & bakiye > 0
+            // CEI Aylık
+            public decimal AylikTah;
+            public decimal AylikBakiye;
+            // CEI YTD
+            public decimal YtdTahToplam;
+            public decimal YtdBakiye;
+            public decimal YtdVgBakiye;
+            // Legacy 2025
+            public decimal Legacy2025Bakiye;
+            // Vadesi geçmiş
+            public decimal VadesiGecmisAlacak;
+            public int VadesiGecmisAdet;
+            // Beklenen
+            public decimal BeklenenTahsilat;
+            public int BeklenenAdet;
+            // Fixed cards
+            public decimal FixedMonthActual;
+            public decimal FixedYTDActual;
+            // YTD Fatura
+            public decimal YtdFatGerceklesme;
+            // Varuna dışı (not için)
+            public decimal VarunaDisiToplam;
+            public int VarunaDisiAdet;
+        }
+
+        private static FaturaMetrics ComputeMetrics(
+            List<VIEW_CP_EXCEL_FATURA> allFaturalar,
+            DateTime start, DateTime end,
+            DateTime prevStart, DateTime prevEnd,
+            DateTime donemSonuCei,
+            DateTime haftaBaslangic, DateTime haftaSonu,
+            DateTime ayBaslangic, DateTime aySonu,
+            DateTime ytdStart, DateTime ytdEnd, DateTime bugun,
+            DateTime fixedMonthStart, DateTime fixedMonthEnd,
+            DateTime fixedYTDStart, DateTime fixedYTDEnd)
+        {
+            var m = new FaturaMetrics();
+
+            // ── Fatura toplamları: UNIQUE Fatura_No bazında (mükerrer sayım önleme) ──
+            // Aynı Fatura_No birden fazla satırda olabilir (farklı Durum ile) → sadece 1 kez say
+            var fatNoDonem = new HashSet<string>();
+            var fatNoPrev = new HashSet<string>();
+            var fatNoYtd = new HashSet<string>();
+            var fatNoFixedMonth = new HashSet<string>();
+            var fatNoFixedYTD = new HashSet<string>();
+
+            for (int i = 0; i < allFaturalar.Count; i++)
+            {
+                var f = allFaturalar[i];
+                // NetTutar: Varuna KDV hariç (yoksa Excel fallback) — LoadAllCachedDataAsync'te atandı
+                var tutar = f.NetTutar ?? 0m;
+                var netTutar = IsRetDurum(f.Durum) ? 0m : (IsNegatifDurum(f.Durum) ? -tutar : tutar);
+                var durumBos = IsDurumBos(f.Durum);
+                var isTahsilat = IsTahsilatOrKrediKarti(f.Durum);
+                // Bakiye: Fatura_Toplam - Tahsil_Edilen (finans mantığı)
+                var bakiye = (f.Fatura_Toplam ?? 0) - (f.Tahsil_Edilen ?? 0);
+
+                // ── Fatura tarihi bazlı metrikler (unique Fatura_No bazında) ──
+                if (f.Fatura_Tarihi.HasValue)
+                {
+                    var ft = f.Fatura_Tarihi.Value;
+                    var fNo = f.Fatura_No ?? $"__row_{i}"; // Fatura_No yoksa satır bazlı say
+
+                    // Dönem fatura — unique Fatura_No bazında
+                    if (ft >= start && ft <= end && fatNoDonem.Add(fNo))
+                    {
+                        m.FatToplam += netTutar;
+                        m.FatAdet++;
+                        if (!f.VarunaEslesti)
+                        {
+                            m.VarunaDisiToplam += netTutar;
+                            m.VarunaDisiAdet++;
+                        }
+                    }
+
+                    // Önceki dönem fatura (trend) — unique
+                    if (ft >= prevStart && ft <= prevEnd && fatNoPrev.Add(fNo))
+                        m.PrevFatToplam += netTutar;
+
+                    // YTD fatura gerçekleşme — unique
+                    if (ft >= ytdStart && ft <= end && fatNoYtd.Add(fNo))
+                        m.YtdFatGerceklesme += netTutar;
+
+                    // Fixed month — unique
+                    if (ft >= fixedMonthStart && ft <= fixedMonthEnd && fatNoFixedMonth.Add(fNo))
+                        m.FixedMonthActual += netTutar;
+
+                    // Fixed YTD — unique
+                    if (ft >= fixedYTDStart && ft <= fixedYTDEnd && fatNoFixedYTD.Add(fNo))
+                        m.FixedYTDActual += netTutar;
+                }
+
+                // ── Efektif tarih: Ödeme sözü varsa O, yoksa vade tarihi ──
+                // İade/Ret hariç — tahsilat + vadesi geçmiş + beklenen hepsi bu tarihe göre
+                // ── Tahsilat hesapları: İADE/RET hariç tüm faturalar ──
+                if (!IsNegatifDurum(f.Durum) && !IsRetDurum(f.Durum))
+                {
+                    var tahsil = f.Tahsil_Edilen ?? 0;
+                    var bekleyenBakiye = f.Bekleyen_Bakiye ?? ((f.Fatura_Toplam ?? 0) - tahsil);
+                    var tahsilTarihi = f.Tahsil_Tarihi;
+                    var vt = f.Fatura_Vade_Tarihi;
+
+                    // ── PAY: Tahsil_Tarihi dönemde → SUM(Tahsil_Edilen) ──
+                    if (tahsilTarihi.HasValue)
+                    {
+                        var tt = tahsilTarihi.Value;
+                        // Dönem kartı
+                        if (tt >= start && tt <= end) { m.TahEdilen += tahsil; m.TahAdet++; }
+                        // Geçmiş dönem tahsilat (dönem başından önce)
+                        if (tt < start) m.TahGecmisTahsilat += tahsil;
+                        // Önceki dönem (trend)
+                        if (tt >= prevStart && tt <= prevEnd) m.PrevTahToplam += tahsil;
+                        // Haftalık
+                        if (tt >= haftaBaslangic && tt <= haftaSonu) m.HaftalikTah += tahsil;
+                        // Aylık
+                        if (tt >= ayBaslangic && tt <= aySonu) m.AylikTah += tahsil;
+                        // YTD
+                        if (tt >= ytdStart && tt <= ytdEnd) m.YtdTahToplam += tahsil;
+                    }
+
+                    // ── PAYDA bakiye: Fatura_Vade_Tarihi ≤ dönem sonu & bekleyenBakiye > 0 ──
+                    if (vt.HasValue && bekleyenBakiye > 0)
+                    {
+                        if (vt.Value <= end) m.TahBakiye += bekleyenBakiye;
+                        if (vt.Value <= haftaSonu) m.HaftalikBakiye += bekleyenBakiye;
+                        if (vt.Value <= aySonu) m.AylikBakiye += bekleyenBakiye;
+                        if (vt.Value <= ytdEnd) m.YtdBakiye += bekleyenBakiye;
+                    }
+
+                    // ── Vadesi geçmiş / beklenen: Fatura_Vade_Tarihi bazlı, sadece durum boş ──
+                    if (f.Fatura_Vade_Tarihi.HasValue && bakiye > 0 && durumBos)
+                    {
+                        var vd = f.Fatura_Vade_Tarihi.Value;
+
+                        if (vd >= start && vd < bugun) m.CeiDonemVgBakiye += bakiye;
+                        if (vd >= ytdStart && vd < bugun) m.YtdVgBakiye += bakiye;
+                        if (vd >= new DateTime(2025, 1, 1) && vd < new DateTime(2026, 1, 1)) m.Legacy2025Bakiye += bakiye;
+
+                        if (vd < start) { m.VadesiGecmisAlacak += bakiye; m.VadesiGecmisAdet++; }
+                        if (vd > bugun && vd <= end) { m.BeklenenTahsilat += bakiye; m.BeklenenAdet++; }
+                    }
+                }
+            }
+
+            return m;
+        }
+
+        #endregion
+
+        #region Actions
+
+        /// <summary>
+        /// Cache warmer durumu — UI "güncelleme X dk önce" göstergesi için.
+        /// Class-level [Authorize] devralır.
+        /// </summary>
+        [HttpGet]
+        public IActionResult CacheStats([FromServices] SOS.Services.CockpitCacheWarmerState state)
+        {
+            var now = DateTime.UtcNow;
+            int? ageSeconds = state.LastRefreshAt.HasValue
+                ? (int)(now - state.LastRefreshAt.Value).TotalSeconds
+                : null;
+            return Json(new
+            {
+                lastRefreshAt = state.LastRefreshAt,
+                lastRefreshAtLocal = state.LastRefreshAt?.ToLocalTime().ToString("HH:mm:ss"),
+                ageSeconds,
+                lastRefreshDurationMs = state.LastRefreshDurationMs,
+                refreshCount = state.RefreshCount,
+                failureCount = state.FailureCount,
+                lastError = state.LastError,
+                lastErrorAt = state.LastErrorAt
+            });
+        }
 
         public async Task<IActionResult> Index(string? filter, string? startDate, string? endDate)
         {
             var (start, end, activeFilter, months) = ParseFilter(filter, startDate, endDate);
+            var now = DateTime.Now;
+            var bugun = now.Date;
+            var today = bugun.AddDays(1).AddSeconds(-1);
 
-            // Faturalar: Fatura_Tarihi bazlı filtreleme
-            var allFaturalar = await _context.VIEW_CP_EXCEL_FATURAs
-                .Where(f => f.Fatura_Tarihi.HasValue
-                         && f.Fatura_Tarihi.Value >= start
-                         && f.Fatura_Tarihi.Value <= end)
-                .ToListAsync();
+            // ══════════════════════════════════════════════════════════════
+            // Parallel cache load — tüm DB sorguları eşzamanlı
+            // ══════════════════════════════════════════════════════════════
+            var (allFaturalar, urunMap, musteriMap, sozlesmeler, hedefler, varunaTutarMap, urunGrupMap) = await LoadAllCachedDataAsync(_contextFactory, _cache);
 
-            // Tüm fatura kayıtları (tahsilat dahil) — brüt toplam
-            var faturalar = allFaturalar.ToList();
-
-            // Ürün detayları: JOIN Fatura_No → SerialNumber → OrderId → CrmOrderId
-            var faturaNoList = faturalar.Select(f => f.Fatura_No).Where(n => n != null).Distinct().ToList();
-            var siparisler = await _context.TBL_VARUNA_SIPARIs
-                .Where(s => s.SerialNumber != null && faturaNoList.Contains(s.SerialNumber))
-                .Select(s => new { s.SerialNumber, s.OrderId, s.AccountTitle })
-                .ToListAsync();
-
-            var orderIds = siparisler.Select(s => s.OrderId).Where(o => o != null).Distinct().ToList();
-            var urunler = await _context.TBL_VARUNA_SIPARIS_URUNLERIs
-                .Where(u => u.CrmOrderId != null && orderIds.Contains(u.CrmOrderId))
-                .Select(u => new { u.CrmOrderId, u.ProductName, u.Quantity })
-                .ToListAsync();
-
-            // Fatura → Müşteri + Ürün mapping
-            var faturaUrunMap = siparisler
-                .Join(urunler, s => s.OrderId, u => u.CrmOrderId,
-                      (s, u) => new { s.SerialNumber, s.AccountTitle, u.ProductName, u.Quantity })
-                .GroupBy(x => x.SerialNumber)
-                .ToDictionary(g => g.Key!, g => g.First());
-
-            // Müşteri bilgisi (ürün eşleşmesi olmasa bile)
-            var faturaMusteriMap = siparisler
-                .GroupBy(s => s.SerialNumber)
-                .ToDictionary(g => g.Key!, g => g.First().AccountTitle);
-
-            foreach (var f in faturalar)
-            {
-                if (f.Fatura_No != null)
-                {
-                    if (faturaUrunMap.TryGetValue(f.Fatura_No, out var urun))
-                    {
-                        f.MusteriUnvan = urun.AccountTitle;
-                        f.UrunAdi = urun.ProductName;
-                        f.Miktar = urun.Quantity;
-                    }
-                    else if (faturaMusteriMap.TryGetValue(f.Fatura_No, out var musteri))
-                    {
-                        f.MusteriUnvan = musteri;
-                    }
-                }
-            }
-
-            // Tahsilatlar: Tahsil Edildi + Kredi Kartı
-            // Tarih önceliği: Odeme_Sozu_Tarihi dolu ise onu, yoksa Tahsil_Tarihi kullan
-            var allTahsilatKayitlari = await _context.VIEW_CP_EXCEL_FATURAs
-                .Where(f => (f.Odeme_Sozu_Tarihi.HasValue || f.Tahsil_Tarihi.HasValue))
-                .ToListAsync();
-
-            var tahsilatlar = allTahsilatKayitlari
-                .Where(f => IsTahsilatOrKrediKarti(f.Durum))
-                .Where(f => {
-                    var tarih = f.Odeme_Sozu_Tarihi ?? f.Tahsil_Tarihi;
-                    return tarih.HasValue && tarih.Value >= start && tarih.Value <= end;
-                })
-                .ToList();
-
-            // Tahsilatlara da müşteri + ürün mapping uygula
-            foreach (var t in tahsilatlar)
-            {
-                if (t.Fatura_No != null)
-                {
-                    if (faturaUrunMap.TryGetValue(t.Fatura_No, out var turun))
-                    {
-                        t.MusteriUnvan = turun.AccountTitle;
-                        t.UrunAdi = turun.ProductName;
-                        t.Miktar = turun.Quantity;
-                    }
-                    else if (faturaMusteriMap.TryGetValue(t.Fatura_No, out var tmusteri))
-                    {
-                        t.MusteriUnvan = tmusteri;
-                    }
-                }
-            }
-
-            // Sözleşmeler (Archived — tarih bağımsız)
-            var sozlesmeler = await _context.TBL_VARUNA_SOZLESMEs
-                .Where(s => s.ContractStatus == "Archived")
-                .ToListAsync();
-
-            // Trend: önceki eşdeğer dönem
+            // ══════════════════════════════════════════════════════════════
+            // Single-pass: Tüm KPI'lar TEK döngüde hesaplanır
+            // ══════════════════════════════════════════════════════════════
             var prevDuration = end - start;
             var prevStart = start.AddDays(-prevDuration.TotalDays);
             var prevEnd = start.AddSeconds(-1);
 
-            var prevFaturalar = await _context.VIEW_CP_EXCEL_FATURAs
-                .Where(f => f.Fatura_Tarihi.HasValue
-                         && f.Fatura_Tarihi.Value >= prevStart
-                         && f.Fatura_Tarihi.Value <= prevEnd)
-                .ToListAsync();
-
-            var prevTahsilatlar = await _context.VIEW_CP_EXCEL_FATURAs
-                .Where(f => f.Odeme_Sozu_Tarihi.HasValue || f.Tahsil_Tarihi.HasValue)
-                .ToListAsync();
-
-            var prevFatToplam = NetTutar(prevFaturalar);
-            var prevTahToplam = prevTahsilatlar
-                .Where(f => IsTahsilatOrKrediKarti(f.Durum))
-                .Where(f => {
-                    var t = f.Odeme_Sozu_Tarihi ?? f.Tahsil_Tarihi;
-                    return t.HasValue && t.Value >= prevStart && t.Value <= prevEnd;
-                })
-                .Sum(f => f.Fatura_Toplam ?? 0);
-
-            var fatToplam = NetTutar(faturalar);
-            var tahToplam = tahsilatlar.Sum(f => f.Fatura_Toplam ?? 0);
-            var sozToplam = sozlesmeler.Sum(s => s.TotalAmount ?? 0);
-
-            // ═══ CEI 1: DÖNEM BAŞARISI (filtre start → bugün) ═══
+            // CEI dönem sonu: seçili filtrenin TAM dönem sonu
+            // Bu ay → 30 Nisan, Geçen ay → 31 Mart, Q1 → 31 Mart, YTD → bugün
             var donemSonuCei = end;
-            if (activeFilter == "month")
+            if (activeFilter == "month" || activeFilter == "lastmonth")
                 donemSonuCei = new DateTime(end.Year, end.Month, DateTime.DaysInMonth(end.Year, end.Month), 23, 59, 59);
 
-            var ceiDonemVgNull = await _context.VIEW_CP_EXCEL_FATURAs
-                .Where(f => f.Fatura_Vade_Tarihi.HasValue
-                         && f.Fatura_Vade_Tarihi.Value >= start
-                         && f.Fatura_Vade_Tarihi.Value <= donemSonuCei
-                         && (f.Durum == null || f.Durum.Trim() == ""))
-                .ToListAsync();
-            var ceiDonemVgBakiye = ceiDonemVgNull.Sum(f => (f.Fatura_Toplam ?? 0) - (f.Tahsil_Edilen ?? 0));
-            var ceiDonemTahsilat = tahToplam;
-            var tahsilEdilecek = ceiDonemTahsilat + ceiDonemVgBakiye;
-            var tahsilKalan = Math.Max(tahsilEdilecek - ceiDonemTahsilat, 0);
-            var ceiDonemOran = tahsilEdilecek > 0
-                ? Math.Round(ceiDonemTahsilat / tahsilEdilecek * 100, 1)
-                : 0;
+            var ayBaslangic = new DateTime(now.Year, now.Month, 1);
+            var aySonu = new DateTime(now.Year, now.Month, DateTime.DaysInMonth(now.Year, now.Month), 23, 59, 59);
+            var ytdStart = new DateTime(now.Year, 1, 1);
 
-            // ═══ CEI 2: AYLIK BAŞARI (mevcut takvim ayı) ═══
-            var now2 = DateTime.Now;
-            var ayBaslangic = new DateTime(now2.Year, now2.Month, 1);
-            var aySonu = new DateTime(now2.Year, now2.Month, DateTime.DaysInMonth(now2.Year, now2.Month), 23, 59, 59);
+            // Hafta başlangıcı (Pazartesi) ve sonu (Cuma) — 5 iş günü
+            var dayOfWeek = bugun.DayOfWeek == DayOfWeek.Sunday ? 6 : (int)bugun.DayOfWeek - 1;
+            var haftaBaslangic = bugun.AddDays(-dayOfWeek);
+            var haftaSonu = haftaBaslangic.AddDays(4).AddHours(23).AddMinutes(59).AddSeconds(59);
 
-            var allTahData = await _context.VIEW_CP_EXCEL_FATURAs
-                .Where(f => f.Odeme_Sozu_Tarihi.HasValue || f.Tahsil_Tarihi.HasValue)
-                .ToListAsync();
+            var fixedMonthStart = ayBaslangic;
+            var fixedMonthEnd = aySonu;
+            var fixedYTDStart = ytdStart;
+            var fixedYTDEnd = today; // Ocak 1 → bugün (Nisan dahil)
 
-            var aylikTah = allTahData
-                .Where(f => IsTahsilatOrKrediKarti(f.Durum))
-                .Where(f => { var t = f.Odeme_Sozu_Tarihi ?? f.Tahsil_Tarihi; return t.HasValue && t.Value >= ayBaslangic && t.Value <= aySonu; })
-                .Sum(f => f.Fatura_Toplam ?? 0);
-            var aylikVg = await _context.VIEW_CP_EXCEL_FATURAs
-                .Where(f => f.Fatura_Vade_Tarihi.HasValue
-                         && f.Fatura_Vade_Tarihi.Value >= ayBaslangic
-                         && f.Fatura_Vade_Tarihi.Value <= aySonu
-                         && (f.Durum == null || f.Durum.Trim() == ""))
-                .SumAsync(f => (f.Fatura_Toplam ?? 0) - (f.Tahsil_Edilen ?? 0));
-            var ceiAylikOran = (aylikTah + aylikVg) > 0
-                ? Math.Round(aylikTah / (aylikTah + aylikVg) * 100, 1) : 0;
-
-            // ═══ CEI 3: YTD BAŞARI (01.01.2026 → bugün) ═══
-            var ytdCeiStart = new DateTime(2026, 1, 1);
-            var ytdCeiEnd = DateTime.Now.Date.AddHours(23).AddMinutes(59).AddSeconds(59);
-            var ytdTahToplam = allTahData
-                .Where(f => IsTahsilatOrKrediKarti(f.Durum))
-                .Where(f => { var t = f.Odeme_Sozu_Tarihi ?? f.Tahsil_Tarihi; return t.HasValue && t.Value >= ytdCeiStart && t.Value <= ytdCeiEnd; })
-                .Sum(f => f.Fatura_Toplam ?? 0);
-            var ytdVgBakiye = await _context.VIEW_CP_EXCEL_FATURAs
-                .Where(f => f.Fatura_Vade_Tarihi.HasValue
-                         && f.Fatura_Vade_Tarihi.Value >= ytdCeiStart
-                         && f.Fatura_Vade_Tarihi.Value < DateTime.Now.Date
-                         && (f.Durum == null || f.Durum.Trim() == ""))
-                .SumAsync(f => (f.Fatura_Toplam ?? 0) - (f.Tahsil_Edilen ?? 0));
-            var ceiYillikOran = (ytdTahToplam + ytdVgBakiye) > 0
-                ? Math.Round(ytdTahToplam / (ytdTahToplam + ytdVgBakiye) * 100, 1) : 0;
-
-            // 2025 mirası (sadece gösterim amaçlı)
-            var legacy2025Bakiye = await _context.VIEW_CP_EXCEL_FATURAs
-                .Where(f => f.Fatura_Vade_Tarihi.HasValue
-                         && f.Fatura_Vade_Tarihi.Value >= new DateTime(2025, 1, 1)
-                         && f.Fatura_Vade_Tarihi.Value < new DateTime(2026, 1, 1)
-                         && (f.Durum == null || f.Durum.Trim() == ""))
-                .SumAsync(f => (f.Fatura_Toplam ?? 0) - (f.Tahsil_Edilen ?? 0));
-
-            // Vadesi Geçmiş Alacak: 01.01.2025 → seçilen dönemin ilk günü (kümülatif backlog)
-            var vadesiGecmisBaslangic = new DateTime(2025, 1, 1);
-            var vadesiGecmisReferans = start; // Filtrenin başlangıç tarihi (örn: Mart → 01.03.2026)
-            var vadesiGecmisAlacaklar = await _context.VIEW_CP_EXCEL_FATURAs
-                .Where(f => f.Fatura_Vade_Tarihi.HasValue
-                         && f.Fatura_Vade_Tarihi.Value >= vadesiGecmisBaslangic
-                         && f.Fatura_Vade_Tarihi.Value < vadesiGecmisReferans
-                         && (f.Durum == null || f.Durum.Trim() == ""))
-                .ToListAsync();
-
-            var vadesiGecmisAlacak = vadesiGecmisAlacaklar.Sum(f => (f.Fatura_Toplam ?? 0) - (f.Tahsil_Edilen ?? 0));
-            var vadesiGecmisAdet = vadesiGecmisAlacaklar.Count;
-
-            // Beklenen tahsilat: Vade > bugün AND Vade <= dönem gerçek sonu AND Durum NULL
-            var bugun = DateTime.Now.Date;
-            // Dönem sonu: filtre end'i bugün ise ayın son gününe genişlet
             var donemSonu = end;
             if (activeFilter == "month" || activeFilter == "lastmonth")
-            {
                 donemSonu = new DateTime(end.Year, end.Month, DateTime.DaysInMonth(end.Year, end.Month), 23, 59, 59);
-            }
-            var beklenenList = await _context.VIEW_CP_EXCEL_FATURAs
-                .Where(f => f.Fatura_Vade_Tarihi.HasValue
-                         && f.Fatura_Vade_Tarihi.Value > bugun
-                         && f.Fatura_Vade_Tarihi.Value <= donemSonu
-                         && (f.Durum == null || f.Durum.Trim() == ""))
-                .ToListAsync();
-            // Beklenen faturalar için müşteri mapping (ana sorguya dahil olmayabilirler)
-            var beklenenNoList = beklenenList.Select(f => f.Fatura_No).Where(n => n != null && !faturaMusteriMap.ContainsKey(n)).Distinct().ToList();
-            if (beklenenNoList.Count > 0)
-            {
-                var beklenenSiparisler = await _context.TBL_VARUNA_SIPARIs
-                    .Where(s => s.SerialNumber != null && beklenenNoList.Contains(s.SerialNumber))
-                    .Select(s => new { s.SerialNumber, s.AccountTitle })
-                    .ToListAsync();
-                foreach (var bs in beklenenSiparisler)
-                    if (bs.SerialNumber != null && !faturaMusteriMap.ContainsKey(bs.SerialNumber))
-                        faturaMusteriMap[bs.SerialNumber] = bs.AccountTitle;
-            }
-            foreach (var b in beklenenList)
-            {
-                if (b.Fatura_No != null && faturaMusteriMap.TryGetValue(b.Fatura_No, out var bmusteri))
-                    b.MusteriUnvan = bmusteri;
-            }
-            var beklenenTahsilat = beklenenList.Sum(f => (f.Fatura_Toplam ?? 0) - (f.Tahsil_Edilen ?? 0));
-            var beklenenAdet = beklenenList.Count;
 
-            // Dinamik hedef: aylık 50M × ay sayısı — Gerçekleşen = Fatura
-            var donemHedef = AYLIK_HEDEF * months;
-            var hedefGerceklesme = fatToplam;
-            var hedefKalan = Math.Max(donemHedef - hedefGerceklesme, 0);
+            var m = ComputeMetrics(allFaturalar, start, end, prevStart, prevEnd,
+                donemSonuCei, haftaBaslangic, haftaSonu,
+                ayBaslangic, aySonu, ytdStart, today, bugun,
+                fixedMonthStart, fixedMonthEnd, fixedYTDStart, fixedYTDEnd);
+
+            // Tahsilat kartı: PAYDA = bekleyen bakiye + tahsil edilen (toplam alacak)
+            var tahsilEdilecek = m.TahBakiye + m.TahEdilen;  // PAYDA
+            var tahsilKalan = m.TahBakiye;                    // Kalan = bekleyen bakiye
+
+            // CEI hesapları
+            var ceiDonemTahsilat = m.TahEdilen;  // dönemde gerçek tahsil edilen
+            var ceiDonemOran = tahsilEdilecek > 0
+                ? Math.Round(ceiDonemTahsilat / tahsilEdilecek * 100, 1) : 0;
+            // CEI: PAYDA = bekleyen bakiye + tahsil edilen (dönem sonuna kadar vadesi gelen tüm alacak)
+            var haftalikPayda = m.HaftalikBakiye + m.HaftalikTah;
+            var aylikPayda = m.AylikBakiye + m.AylikTah;
+            var ytdPayda = m.YtdBakiye + m.YtdTahToplam;
+            var ceiHaftalikOran = haftalikPayda > 0
+                ? Math.Round(m.HaftalikTah / haftalikPayda * 100, 1) : 0;
+            var ceiAylikOran = aylikPayda > 0
+                ? Math.Round(m.AylikTah / aylikPayda * 100, 1) : 0;
+            var ceiYillikOran = ytdPayda > 0
+                ? Math.Round(m.YtdTahToplam / ytdPayda * 100, 1) : 0;
+
+            // Hedefler — DB'den ay bazlı (TBLSOS_HEDEF_AYLIK)
+            // Helper: belirli ay aralığı için hedef toplamı
+            decimal HedefToplam(int ayBas, int aySon) =>
+                Enumerable.Range(ayBas, aySon - ayBas + 1).Sum(ay => hedefler.GetValueOrDefault(ay, 0));
+
+            // Dönem hedefi: filtredeki aylar
+            var donemBasAy = start.Month;
+            var donemSonAy = end.Month;
+            var donemHedef = HedefToplam(donemBasAy, donemSonAy);
+            var hedefKalan = Math.Max(donemHedef - m.FatToplam, 0);
             var hedefYuzde = donemHedef > 0
-                ? Math.Round(Math.Min(hedefGerceklesme / donemHedef * 100, 100), 1)
-                : 0;
+                ? Math.Round(Math.Min(m.FatToplam / donemHedef * 100, 100), 1) : 0;
 
-            // YTD Hedef: 01.01.2026 → filtrenin bitiş tarihine kadar kümülatif
-            var ytdAySayisi = Math.Max(1, (end.Year - 2026) * 12 + end.Month);
-            var ytdHedef = AYLIK_HEDEF * ytdAySayisi;
-            // YTD fatura toplamı (yıl başından filtrenin bitiş tarihine kadar)
-            var ytdFaturalar = await _context.VIEW_CP_EXCEL_FATURAs
-                .Where(f => f.Fatura_Tarihi.HasValue
-                         && f.Fatura_Tarihi.Value >= ytdCeiStart
-                         && f.Fatura_Tarihi.Value <= end)
-                .ToListAsync();
-            var ytdGerceklesme = NetTutar(ytdFaturalar);
-            var ytdKalan = Math.Max(ytdHedef - ytdGerceklesme, 0);
-            var ytdYuzde = ytdHedef > 0
-                ? Math.Round(Math.Min(ytdGerceklesme / ytdHedef * 100, 100), 1)
-                : 0;
+            // YTD hedef: Ocak → filtrenin bitiş ayı
+            var ytdAySayisi = Math.Max(1, end.Month);
+            var ytdHedef = HedefToplam(1, end.Month);
+            var ytdKalan = Math.Max(ytdHedef - m.YtdFatGerceklesme, 0);
 
+            // Bu ay hedefi
+            var fixedMonthTarget = hedefler.GetValueOrDefault(now.Month, 0);
+            var fixedMonthPct = fixedMonthTarget > 0 ? Math.Round(m.FixedMonthActual / fixedMonthTarget * 100, 1) : 0;
 
-            // Sabit: Mevcut Ay (Nisan 2026)
-            var fixedMonthStart = new DateTime(2026, 4, 1);
-            var fixedMonthEnd = new DateTime(2026, 4, 30, 23, 59, 59);
-            var fixedMonthTarget = 50_000_000m;
-            var fixedMonthActual = await _context.VIEW_CP_EXCEL_FATURAs
-                .Where(f => (f.Odeme_Sozu_Tarihi.HasValue || f.Tahsil_Tarihi.HasValue)
-                    && (f.Odeme_Sozu_Tarihi ?? f.Tahsil_Tarihi) >= fixedMonthStart
-                    && (f.Odeme_Sozu_Tarihi ?? f.Tahsil_Tarihi) <= fixedMonthEnd
-                    && f.Durum != null && (f.Durum.Trim() == "TAHSİL EDİLDİ" || f.Durum.Trim() == "KREDİ KARTI" || f.Durum.Trim() == "KREDI KARTI"))
-                .SumAsync(f => f.Fatura_Toplam ?? 0);
-            var fixedMonthPct = fixedMonthTarget > 0 ? Math.Round(fixedMonthActual / fixedMonthTarget * 100, 1) : 0;
+            // Yıllık hedef: tüm 12 ay toplamı (₺600M)
+            var fixedAnnualTarget = HedefToplam(1, 12);
+            var fixedAnnualActual = m.FixedYTDActual;
+            var fixedAnnualPct = fixedAnnualTarget > 0 ? Math.Round(fixedAnnualActual / fixedAnnualTarget * 100, 1) : 0;
 
-            // Sabit: YTD (01.01.2026 - 01.04.2026)
-            var fixedYTDStart = new DateTime(2026, 1, 1);
-            var fixedYTDEnd = new DateTime(2026, 4, 1, 23, 59, 59);
-            var fixedYTDTarget = 200_000_000m;
-            var fixedYTDActual = await _context.VIEW_CP_EXCEL_FATURAs
-                .Where(f => (f.Odeme_Sozu_Tarihi.HasValue || f.Tahsil_Tarihi.HasValue)
-                    && (f.Odeme_Sozu_Tarihi ?? f.Tahsil_Tarihi) >= fixedYTDStart
-                    && (f.Odeme_Sozu_Tarihi ?? f.Tahsil_Tarihi) <= fixedYTDEnd
-                    && f.Durum != null && (f.Durum.Trim() == "TAHSİL EDİLDİ" || f.Durum.Trim() == "KREDİ KARTI" || f.Durum.Trim() == "KREDI KARTI"))
-                .SumAsync(f => f.Fatura_Toplam ?? 0);
-            var fixedYTDPct = fixedYTDTarget > 0 ? Math.Round(fixedYTDActual / fixedYTDTarget * 100, 1) : 0;
+            // Çeyrek hesabı
+            var currentQuarter = (now.Month - 1) / 3 + 1;
+            var quarterStartMonth = (currentQuarter - 1) * 3 + 1;
+            var fixedQuarterTarget = HedefToplam(quarterStartMonth, quarterStartMonth + 2);
+            var fixedQuarterMonths = now.Month - quarterStartMonth + 1;
+
+            // Kalan ay
+            var remainingMonths = 12 - now.Month;
+
+            // Eski fixedYTD alanlarını annual ile eşle (ViewModel uyumu)
+            var fixedYTDTarget = fixedAnnualTarget;
+            var fixedYTDActual = fixedAnnualActual;
+            var fixedYTDPct = fixedAnnualPct;
+
+            // Sözleşmeler: seçili dönemde RenewalDate olanlar
+            var sozDonem = sozlesmeler.Where(s => s.RenewalDate!.Value >= start && s.RenewalDate!.Value <= end).ToList();
+            var sozToplam = sozDonem.Sum(s => s.TotalAmount ?? 0);
+            var sozArchivedList = sozDonem.Where(s => string.Equals(s.ContractStatus, "Archived", StringComparison.OrdinalIgnoreCase)).ToList();
+            var sozArchivedToplam = sozArchivedList.Sum(s => s.TotalAmount ?? 0);
+            var sozArchivedAdet = sozArchivedList.Count;
+
+            // Gecikmiş sözleşmeler: RenewalDate < dönem başı, hâlâ Archived değil
+            var sozGecikmisList = sozlesmeler.Where(s => s.RenewalDate!.Value < start
+                && !string.Equals(s.ContractStatus, "Archived", StringComparison.OrdinalIgnoreCase)).ToList();
+            var sozGecikmisToplam = sozGecikmisList.Sum(s => s.TotalAmount ?? 0);
+            var sozGecikmiAdet = sozGecikmisList.Count;
+
+            // Ürün grubu kırılımı: dönemdeki faturalar → kalem bazlı TL dağılımı → ürün grubu toplam
+            var urunKirilimDict = new Dictionary<string, (decimal toplam, int adet)>();
+            foreach (var f in allFaturalar.Where(f => f.Fatura_Tarihi.HasValue
+                && f.Fatura_Tarihi.Value >= start && f.Fatura_Tarihi.Value <= end
+                && !IsRetDurum(f.Durum)))
+            {
+                var isNegatif = IsNegatifDurum(f.Durum);
+                if (f.Fatura_No != null && urunGrupMap.TryGetValue(f.Fatura_No, out var kalemler))
+                {
+                    foreach (var (grup, tlTutar) in kalemler)
+                    {
+                        var tutar = isNegatif ? -tlTutar : tlTutar;
+                        if (urunKirilimDict.TryGetValue(grup, out var mevcut))
+                            urunKirilimDict[grup] = (mevcut.toplam + tutar, mevcut.adet + 1);
+                        else
+                            urunKirilimDict[grup] = (tutar, 1);
+                    }
+                }
+                // Varuna'da eşleşmeyen faturalar ürün kırılımına dahil edilmez
+            }
+            var urunKirilim = urunKirilimDict
+                .Select(kv => new { grup = kv.Key, toplam = kv.Value.toplam, adet = kv.Value.adet })
+                .OrderByDescending(x => x.toplam)
+                .ToList();
+
+            // ══════════════════════════════════════════════════════════════
+            // AJAX: Sadece summary JSON döndür (detay listesi YOK)
+            // ══════════════════════════════════════════════════════════════
+            if (Request.Headers["X-Requested-With"] == "XMLHttpRequest")
+            {
+                return Json(new
+                {
+                    faturalarToplam = m.FatToplam,
+                    faturalarAdet = m.FatAdet,
+                    varunaDisiToplam = m.VarunaDisiToplam,
+                    varunaDisiAdet = m.VarunaDisiAdet,
+                    tahsilatlarToplam = tahsilEdilecek,    // PAYDA = bakiye + tahsil
+                    tahsilatEdilen = m.TahEdilen,        // Tahsil_Edilen
+                    tahsilatlarAdet = m.TahAdet,
+                    sozlesmelerToplam = sozToplam,
+                    sozlesmelerAdet = sozDonem.Count,
+                    sozArchivedToplam,
+                    sozArchivedAdet,
+                    sozGecikmisToplam,
+                    sozGecikmiAdet,
+                    urunKirilim,
+                    faturalarTrend = m.PrevFatToplam > 0 ? Math.Round((m.FatToplam - m.PrevFatToplam) / m.PrevFatToplam * 100, 1) : 0,
+                    tahsilatlarTrend = m.PrevTahToplam > 0 ? Math.Round((m.TahEdilen - m.PrevTahToplam) / m.PrevTahToplam * 100, 1) : 0,
+                    prevFaturalarToplam = m.PrevFatToplam,
+                    prevTahsilatlarToplam = m.PrevTahToplam,
+                    // CEI
+                    ceiDonemOran,
+                    ceiDonemTahsilat,
+                    ceiDonemVadesiGecmis = m.CeiDonemVgBakiye,
+                    tahsilEdilecek,
+                    tahsilKalan,
+                    ceiHaftalikOran,
+                    ceiHaftalikTahsilat = m.HaftalikTah,
+                    ceiHaftalikToplam = haftalikPayda,
+                    haftaBaslangicStr = haftaBaslangic.ToString("dd.MM"),
+                    haftaSonuStr = haftaSonu.ToString("dd.MM.yyyy"),
+                    ceiAylikOran,
+                    ceiAylikTahsilat = m.AylikTah,
+                    ceiAylikToplam = aylikPayda,
+                    ceiYillikOran,
+                    ceiYillikTahsilat = m.YtdTahToplam,
+                    ceiYillikToplam = ytdPayda,
+                    legacy2025Bakiye = m.Legacy2025Bakiye,
+                    // Hedef
+                    aylikHedef = donemHedef,
+                    hedefGerceklesme = m.FatToplam,
+                    hedefKalan,
+                    hedefYuzde,
+                    // Üst kartlar (DB bazlı)
+                    fixedCurrentMonthTarget = fixedMonthTarget,
+                    fixedCurrentMonthActual = m.FixedMonthActual,
+                    fixedCurrentMonthPct = fixedMonthPct,
+                    fixedYTDTarget = fixedYTDTarget,
+                    fixedYTDActual = fixedYTDActual,
+                    fixedYTDPct = fixedYTDPct,
+                    fixedQuarterTarget,
+                    currentQuarter,
+                    // Vadesi geçmiş & beklenen
+                    vadesiGecmisAlacak = m.VadesiGecmisAlacak,
+                    vadesiGecmisAdet = m.VadesiGecmisAdet,
+                    beklenenTahsilat = m.BeklenenTahsilat,
+                    beklenenAdet = m.BeklenenAdet,
+                    // Dönem/Geçmiş bakiye (NaN fix)
+                    tahDonemBakiye = m.TahBakiye,
+                    tahGecmisBakiye = m.VadesiGecmisAlacak,
+                    tahGecmisAdet = m.VadesiGecmisAdet,
+                    tahGecmisTahsilat = m.TahGecmisTahsilat,
+                    // Filtre
+                    filtreBaslangic = start.ToString("dd.MM.yyyy"),
+                    filtreBitis = end.ToString("dd.MM.yyyy"),
+                });
+            }
+
+            // ══════════════════════════════════════════════════════════════
+            // Full page: Detay listelerini hazırla (sadece ilk yükleme)
+            // ══════════════════════════════════════════════════════════════
+            var faturalar = allFaturalar
+                .Where(f => f.Fatura_Tarihi.HasValue && f.Fatura_Tarihi.Value >= start && f.Fatura_Tarihi.Value <= end)
+                .ToList();
+            MapMusteriUrun(faturalar, urunMap, musteriMap);
+
+            // Tahsilat listesi: Fatura_Vade_Tarihi dönemde olan faturalar, iade/ret hariç
+            var tahsilatlar = allFaturalar
+                .Where(f => !IsNegatifDurum(f.Durum) && !IsRetDurum(f.Durum))
+                .Where(f => f.Fatura_Vade_Tarihi.HasValue)
+                .Where(f => f.Fatura_Vade_Tarihi!.Value >= start && f.Fatura_Vade_Tarihi!.Value <= end)
+                .ToList();
+            MapMusteriUrun(tahsilatlar, urunMap, musteriMap);
+
+            // Beklenen tahsilat: Fatura_Vade_Tarihi bugün → dönem sonu, bakiye > 0
+            var beklenenList = allFaturalar
+                .Where(f => {
+                    if (!f.Fatura_Vade_Tarihi.HasValue) return false;
+                    var bakiye = (f.Fatura_Toplam ?? 0) - (f.Tahsil_Edilen ?? 0);
+                    return f.Fatura_Vade_Tarihi.Value > bugun && f.Fatura_Vade_Tarihi.Value <= donemSonu && bakiye > 0;
+                })
+                .ToList();
+            MapMusteriUrun(beklenenList, urunMap, musteriMap);
+
+            // Kümülatif hesaplama
+            var orderedFaturalar = faturalar.OrderBy(f => f.Fatura_Tarihi).ToList();
+            decimal running = 0;
+            foreach (var f in orderedFaturalar)
+            {
+                if (!IsRetDurum(f.Durum))
+                {
+                    running += IsNegatifDurum(f.Durum) ? -(f.NetTutar ?? 0m) : (f.NetTutar ?? 0m);
+                }
+                f.KumulatifToplam = running;
+            }
 
             var vm = new CockpitViewModel
             {
-                FaturalarToplam = fatToplam,
-                FaturalarAdet = faturalar.Count,
-                TahsilatlarToplam = tahsilatlar.Sum(f => f.Fatura_Toplam ?? 0),
-                TahsilatlarAdet = tahsilatlar.Count,
+                FaturalarToplam = m.FatToplam,
+                FaturalarAdet = m.FatAdet,
+                VarunaDisiToplam = m.VarunaDisiToplam,
+                VarunaDisiAdet = m.VarunaDisiAdet,
+                TahsilatlarToplam = tahsilEdilecek,
+                TahsilatlarAdet = m.TahAdet,
                 SozlesmelerToplam = sozToplam,
-                SozlesmelerAdet = sozlesmeler.Count,
-                FaturalarTrend = prevFatToplam > 0 ? Math.Round((fatToplam - prevFatToplam) / prevFatToplam * 100, 1) : 0,
-                TahsilatlarTrend = prevTahToplam > 0 ? Math.Round((tahToplam - prevTahToplam) / prevTahToplam * 100, 1) : 0,
+                SozlesmelerAdet = sozDonem.Count,
+                SozArchivedToplam = sozArchivedToplam,
+                SozArchivedAdet = sozArchivedAdet,
+                SozGecikmisToplam = sozGecikmisToplam,
+                SozGecikmiAdet = sozGecikmiAdet,
+                FaturalarTrend = m.PrevFatToplam > 0 ? Math.Round((m.FatToplam - m.PrevFatToplam) / m.PrevFatToplam * 100, 1) : 0,
+                PrevFaturalarToplam = m.PrevFatToplam,
+                PrevTahsilatlarToplam = m.PrevTahToplam,
+                TahsilatlarTrend = m.PrevTahToplam > 0 ? Math.Round((m.TahEdilen - m.PrevTahToplam) / m.PrevTahToplam * 100, 1) : 0,
                 SozlesmelerTrend = 0,
                 AylikHedef = donemHedef,
-                HedefGerceklesme = hedefGerceklesme,
+                HedefTutar = donemHedef,
+                HedefGerceklesme = m.FatToplam,
                 HedefKalan = hedefKalan,
                 HedefYuzde = hedefYuzde,
                 HedefAySayisi = months,
                 YtdHedef = ytdHedef,
-                YtdGerceklesme = ytdGerceklesme,
+                YtdGerceklesme = m.YtdFatGerceklesme,
                 YtdKalan = ytdKalan,
-                YtdYuzde = ytdHedef > 0 ? Math.Round(Math.Min(ytdGerceklesme / ytdHedef * 100, 100), 1) : 0,
+                YtdYuzde = ytdHedef > 0 ? Math.Round(Math.Min(m.YtdFatGerceklesme / ytdHedef * 100, 100), 1) : 0,
                 AktifFiltre = activeFilter,
                 FiltreBaslangic = start,
                 FiltreBitis = end,
-                FaturaDetaylari = KumulatifHesapla(faturalar.OrderBy(f => f.Fatura_Tarihi).ToList()),
-                TahsilatDetaylari = tahsilatlar.OrderByDescending(f => f.Odeme_Sozu_Tarihi ?? f.Tahsil_Tarihi).ToList(),
-                SozlesmeDetaylari = sozlesmeler.OrderByDescending(s => s.TotalAmount).ToList(),
+                FaturaDetaylari = orderedFaturalar,
+                TahsilatDetaylari = tahsilatlar.OrderByDescending(f => f.Fatura_Vade_Tarihi).ToList(),
+                SozlesmeDetaylari = sozDonem.OrderByDescending(s => s.TotalAmount).ToList(),
                 TahsilEdilecek = tahsilEdilecek,
+                TahsilatEdilen = m.TahEdilen,
                 TahsilKalan = tahsilKalan,
                 CeiDonemTahsilat = ceiDonemTahsilat,
-                CeiDonemVadesiGecmis = ceiDonemVgBakiye,
+                CeiDonemVadesiGecmis = m.CeiDonemVgBakiye,
                 CeiDonemOran = ceiDonemOran,
-                CeiAylikTahsilat = aylikTah,
-                CeiAylikVadesiGecmis = aylikVg,
+                CeiHaftalikTahsilat = m.HaftalikTah,
+                CeiHaftalikToplam = haftalikPayda,
+                CeiHaftalikOran = ceiHaftalikOran,
+                HaftaBaslangic = haftaBaslangic,
+                HaftaSonu = haftaSonu,
+                CeiAylikTahsilat = m.AylikTah,
+                CeiAylikToplam = aylikPayda,
                 CeiAylikOran = ceiAylikOran,
-                CeiYillikTahsilat = ytdTahToplam,
-                CeiYillikVadesiGecmis = ytdVgBakiye,
+                CeiYillikTahsilat = m.YtdTahToplam,
+                CeiYillikToplam = ytdPayda,
                 CeiYillikOran = ceiYillikOran,
-                Legacy2025Bakiye = legacy2025Bakiye,
-                BeklenenTahsilat = beklenenTahsilat,
-                BeklenenAdet = beklenenAdet,
+                Legacy2025Bakiye = m.Legacy2025Bakiye,
+                BeklenenTahsilat = m.BeklenenTahsilat,
+                BeklenenAdet = m.BeklenenAdet,
                 BeklenenDetaylari = beklenenList.OrderBy(f => f.Fatura_Vade_Tarihi).ToList(),
-                VadesiGecmisAlacak = vadesiGecmisAlacak,
-                VadesiGecmisAdet = vadesiGecmisAdet,
-
-                // İzole üst kartlar
+                VadesiGecmisAlacak = m.VadesiGecmisAlacak,
+                VadesiGecmisAdet = m.VadesiGecmisAdet,
+                TahDonemBakiye = m.TahBakiye,
+                TahGecmisTahsilat = m.TahGecmisTahsilat,
+                TahGecmisBakiye = m.VadesiGecmisAlacak,
+                TahGecmisAdet = m.VadesiGecmisAdet,
                 FixedCurrentMonthTarget = fixedMonthTarget,
-                FixedCurrentMonthActual = fixedMonthActual,
+                FixedCurrentMonthActual = m.FixedMonthActual,
                 FixedCurrentMonthPct = fixedMonthPct,
                 FixedYTDTarget = fixedYTDTarget,
-                FixedYTDActual = fixedYTDActual,
-                FixedYTDPct = fixedYTDPct
+                FixedYTDActual = m.FixedYTDActual,
+                FixedYTDPct = fixedYTDPct,
+                FixedQuarterTarget = fixedQuarterTarget,
+                RemainingMonths = remainingMonths,
+                CurrentQuarter = currentQuarter
             };
 
             return View(vm);
+        }
+
+        /// <summary>
+        /// Hiyerarşik detay: Yıl → Ay → Hafta → Gün → Fatura detayları
+        /// Tahsilat: + haftalık alınması gereken vs alınan
+        /// </summary>
+        [HttpGet]
+        public async Task<IActionResult> GetDetailTable(string type, string? filter, string? startDate, string? endDate, int page = 1, int pageSize = 50)
+        {
+            var (start, end, activeFilter, _) = ParseFilter(filter, startDate, endDate);
+            var (allFaturalar, urunMap, musteriMap, sozlesmeler, hedefler, varunaTutarMap, urunGrupMap) = await LoadAllCachedDataAsync(_contextFactory, _cache);
+            var bugun = DateTime.Now.Date;
+
+            // Hangi seviyeden başla: month/lastmonth → ay, q1-q4 → çeyrek, ytd/range → yıl
+            var startLevel = activeFilter switch
+            {
+                "month" or "lastmonth" => "ay",
+                "q1" or "q2" or "q3" or "q4" => "ceyrek",
+                _ => "yil"
+            };
+
+            // ISO week hesaplama
+            static int GetIsoWeek(DateTime d) => System.Globalization.ISOWeek.GetWeekOfYear(d);
+
+            switch (type?.ToLowerInvariant())
+            {
+                case "faturalar":
+                {
+                    var filtered = allFaturalar
+                        .Where(f => f.Fatura_Tarihi.HasValue && f.Fatura_Tarihi.Value >= start && f.Fatura_Tarihi.Value <= end)
+                        .OrderBy(f => f.Fatura_Tarihi)
+                        .ToList();
+                    MapMusteriUrun(filtered, urunMap, musteriMap);
+
+                    // Kümülatif (NetTutar bazlı)
+                    decimal running = 0;
+                    foreach (var f in filtered)
+                    {
+                        if (!IsRetDurum(f.Durum))
+                            running += IsNegatifDurum(f.Durum) ? -(f.NetTutar ?? 0m) : (f.NetTutar ?? 0m);
+                        f.KumulatifToplam = running;
+                    }
+
+                    // Net tutar helper (Varuna KDV hariç bazlı)
+                    decimal FatNet(IEnumerable<VIEW_CP_EXCEL_FATURA> grp) =>
+                        grp.Where(f => !IsRetDurum(f.Durum)).Sum(f => IsNegatifDurum(f.Durum) ? -(f.NetTutar ?? 0m) : (f.NetTutar ?? 0m));
+                    // KDV dahil toplam helper
+                    decimal FatBrut(IEnumerable<VIEW_CP_EXCEL_FATURA> grp) =>
+                        grp.Where(f => !IsRetDurum(f.Durum)).Sum(f => IsNegatifDurum(f.Durum) ? -(f.KdvDahilTutar ?? 0m) : (f.KdvDahilTutar ?? 0m));
+
+                    // Hiyerarşi: Yıl → Çeyrek → Ay → Hafta → Gün → Detay
+                    var hierarchy = filtered
+                        .GroupBy(f => f.Fatura_Tarihi!.Value.Year)
+                        .OrderBy(y => y.Key)
+                        .Select(yGrp => new
+                        {
+                            yil = yGrp.Key,
+                            toplam = FatNet(yGrp),
+                            kdvDahilToplam = FatBrut(yGrp),
+                            adet = yGrp.Count(),
+                            ceyrekler = yGrp
+                                .GroupBy(f => (f.Fatura_Tarihi!.Value.Month - 1) / 3 + 1)
+                                .OrderBy(q => q.Key)
+                                .Select(qGrp => new
+                                {
+                                    ceyrek = qGrp.Key,
+                                    label = qGrp.Key + ". Çeyrek",
+                                    toplam = FatNet(qGrp),
+                                    kdvDahilToplam = FatBrut(qGrp),
+                                    adet = qGrp.Count(),
+                                    aylar = qGrp
+                                        .GroupBy(f => f.Fatura_Tarihi!.Value.Month)
+                                        .OrderBy(m => m.Key)
+                                        .Select(mGrp => new
+                                        {
+                                            ay = mGrp.Key,
+                                            ayAdi = new DateTime(yGrp.Key, mGrp.Key, 1).ToString("MMMM", new System.Globalization.CultureInfo("tr-TR")),
+                                            toplam = FatNet(mGrp),
+                                            kdvDahilToplam = FatBrut(mGrp),
+                                            adet = mGrp.Count(),
+                                            haftalar = mGrp
+                                                .GroupBy(f => GetIsoWeek(f.Fatura_Tarihi!.Value))
+                                                .OrderBy(w => w.Key)
+                                                .Select(wGrp => new
+                                                {
+                                                    hafta = wGrp.Key,
+                                                    toplam = FatNet(wGrp),
+                                                    kdvDahilToplam = FatBrut(wGrp),
+                                                    adet = wGrp.Count(),
+                                                    gunler = wGrp
+                                                        .GroupBy(f => f.Fatura_Tarihi!.Value.Date)
+                                                        .OrderBy(d => d.Key)
+                                                        .Select(dGrp => new
+                                                        {
+                                                            tarih = dGrp.Key.ToString("dd.MM.yyyy"),
+                                                            toplam = FatNet(dGrp),
+                                                            kdvDahilToplam = FatBrut(dGrp),
+                                                            adet = dGrp.Count(),
+                                                            faturalar = dGrp.Select(f => new
+                                                            {
+                                                                faturaNo = f.Fatura_No,
+                                                                musteri = f.MusteriUnvan,
+                                                                tutar = (f.NetTutar ?? 0m),
+                                                                kdvDahilTutar = (f.KdvDahilTutar ?? 0m),
+                                                                kumulatif = f.KumulatifToplam,
+                                                                durum = f.Durum?.Trim()?.ToUpper()
+                                                            })
+                                                        })
+                                                })
+                                        })
+                                })
+                        });
+
+                    return Json(new { total = filtered.Count, dipToplam = running, startLevel, hierarchy });
+                }
+                case "tahsilatlar":
+                {
+                    // Tüm faturalar: Fatura_Vade_Tarihi dönemde, iade/ret hariç
+                    var donemFaturalar = allFaturalar
+                        .Where(f => !IsNegatifDurum(f.Durum) && !IsRetDurum(f.Durum))
+                        .Where(f => f.Fatura_Vade_Tarihi.HasValue)
+                        .Where(f => f.Fatura_Vade_Tarihi!.Value >= start && f.Fatura_Vade_Tarihi!.Value <= end)
+                        .ToList();
+
+                    // Tahsil edilenler: Tahsil_Edilen > 0
+                    var tahsilEdilenler = donemFaturalar
+                        .Where(f => (f.Tahsil_Edilen ?? 0) > 0)
+                        .Select(f => new { fatura = f, tarih = f.Fatura_Vade_Tarihi!.Value, odendi = true })
+                        .ToList();
+
+                    // Ödenmeyenler: bakiye > 0
+                    var odenmeyenler = donemFaturalar
+                        .Where(f => {
+                            var bak = f.Bekleyen_Bakiye ?? ((f.Fatura_Toplam ?? 0) - (f.Tahsil_Edilen ?? 0));
+                            return bak > 0;
+                        })
+                        .Select(f => new { fatura = f, tarih = f.Fatura_Vade_Tarihi!.Value, odendi = false })
+                        .ToList();
+
+                    // Birleştir
+                    var combined = tahsilEdilenler.Concat(odenmeyenler)
+                        .OrderBy(x => x.tarih)
+                        .ToList();
+
+                    var filteredFaturalar = combined.Select(x => x.fatura).ToList();
+                    MapMusteriUrun(filteredFaturalar, urunMap, musteriMap);
+
+                    // Haftalık hedef hesapla
+                    var allOpenInvoices = allFaturalar
+                        .Where(f => IsDurumBos(f.Durum) && (f.Bekleyen_Bakiye ?? (f.Fatura_Toplam ?? 0) - (f.Tahsil_Edilen ?? 0)) > 0)
+                        .ToList();
+
+                    var dipToplam = tahsilEdilenler.Sum(x => x.fatura.Fatura_Toplam ?? 0);
+
+                    var hierarchy = combined
+                        .GroupBy(x => x.tarih.Year)
+                        .OrderBy(y => y.Key)
+                        .Select(yGrp => new
+                        {
+                            yil = yGrp.Key,
+                            toplam = yGrp.Where(x => x.odendi).Sum(x => x.fatura.Fatura_Toplam ?? 0),
+                            adet = yGrp.Count(),
+                            ceyrekler = yGrp
+                                .GroupBy(x => (x.tarih.Month - 1) / 3 + 1)
+                                .OrderBy(q => q.Key)
+                                .Select(qGrp => new
+                                {
+                                    ceyrek = qGrp.Key,
+                                    label = qGrp.Key + ". Çeyrek",
+                                    toplam = qGrp.Where(x => x.odendi).Sum(x => x.fatura.Fatura_Toplam ?? 0),
+                                    adet = qGrp.Count(),
+                                    aylar = qGrp
+                                        .GroupBy(x => x.tarih.Month)
+                                        .OrderBy(m => m.Key)
+                                        .Select(mGrp => new
+                                        {
+                                            ay = mGrp.Key,
+                                            ayAdi = new DateTime(yGrp.Key, mGrp.Key, 1).ToString("MMMM", new System.Globalization.CultureInfo("tr-TR")),
+                                            toplam = mGrp.Where(x => x.odendi).Sum(x => x.fatura.Fatura_Toplam ?? 0),
+                                            adet = mGrp.Count(),
+                                            haftalar = mGrp
+                                                .GroupBy(x => GetIsoWeek(x.tarih))
+                                                .OrderBy(w => w.Key)
+                                                .Select(wGrp =>
+                                                {
+                                                    // Hafta başı/sonu: ISO week'e göre Pazartesi-Pazar
+                                                    var anyDate = wGrp.First().tarih;
+                                                    var wStart = System.Globalization.ISOWeek.ToDateTime(anyDate.Year, wGrp.Key, DayOfWeek.Monday);
+                                                    var wEnd = wStart.AddDays(6);
+                                                    var haftaHedef = allOpenInvoices
+                                                        .Where(inv => inv.Fatura_Vade_Tarihi.HasValue
+                                                            && inv.Fatura_Vade_Tarihi.Value.Date >= wStart
+                                                            && inv.Fatura_Vade_Tarihi.Value.Date <= wEnd)
+                                                        .Sum(inv => inv.Bekleyen_Bakiye ?? ((inv.Fatura_Toplam ?? 0) - (inv.Tahsil_Edilen ?? 0)));
+                                                    var alinan = wGrp.Where(x => x.odendi).Sum(x => x.fatura.Fatura_Toplam ?? 0);
+
+                                                    return new
+                                                    {
+                                                        hafta = wGrp.Key,
+                                                        alinan,
+                                                        alinmasiGereken = haftaHedef,
+                                                        adet = wGrp.Count(),
+                                                        gunler = wGrp
+                                                            .GroupBy(x => x.tarih.Date)
+                                                            .OrderBy(d => d.Key)
+                                                            .Select(dGrp => new
+                                                            {
+                                                                tarih = dGrp.Key.ToString("dd.MM.yyyy"),
+                                                                toplam = dGrp.Where(x => x.odendi).Sum(x => x.fatura.Fatura_Toplam ?? 0),
+                                                                adet = dGrp.Count(),
+                                                                faturalar = dGrp.Select(x => new
+                                                                {
+                                                                    faturaNo = x.fatura.Fatura_No,
+                                                                    musteri = x.fatura.MusteriUnvan,
+                                                                    tutar = x.fatura.Fatura_Toplam ?? 0,
+                                                                    bakiye = x.fatura.Bekleyen_Bakiye ?? ((x.fatura.Fatura_Toplam ?? 0) - (x.fatura.Tahsil_Edilen ?? 0)),
+                                                                    durum = x.fatura.Durum?.Trim()?.ToUpper(),
+                                                                    odendi = x.odendi
+                                                                })
+                                                            })
+                                                    };
+                                                })
+                                        })
+                                })
+                        });
+
+                    return Json(new { total = combined.Count, dipToplam, startLevel, hierarchy });
+                }
+                case "sozlesmeler":
+                {
+                    var sozDonemDt = sozlesmeler.Where(s => s.RenewalDate.HasValue && s.RenewalDate.Value >= start && s.RenewalDate.Value <= end)
+                        .OrderBy(s => s.RenewalDate)
+                        .ToList();
+                    var total = sozDonemDt.Count;
+                    var dipToplam = sozDonemDt.Sum(s => s.TotalAmount ?? 0);
+                    var archivedToplam = sozDonemDt.Where(s => string.Equals(s.ContractStatus, "Archived", StringComparison.OrdinalIgnoreCase)).Sum(s => s.TotalAmount ?? 0);
+
+                    var hierarchy = sozDonemDt
+                        .GroupBy(s => s.RenewalDate!.Value.Year)
+                        .OrderBy(y => y.Key)
+                        .Select(yGrp => new
+                        {
+                            yil = yGrp.Key,
+                            toplam = yGrp.Sum(s => s.TotalAmount ?? 0),
+                            adet = yGrp.Count(),
+                            archivedAdet = yGrp.Count(s => string.Equals(s.ContractStatus, "Archived", StringComparison.OrdinalIgnoreCase)),
+                            ceyrekler = yGrp
+                                .GroupBy(s => (s.RenewalDate!.Value.Month - 1) / 3 + 1)
+                                .OrderBy(q => q.Key)
+                                .Select(qGrp => new
+                                {
+                                    ceyrek = qGrp.Key,
+                                    label = qGrp.Key + ". Çeyrek",
+                                    toplam = qGrp.Sum(s => s.TotalAmount ?? 0),
+                                    adet = qGrp.Count(),
+                                    archivedAdet = qGrp.Count(s => string.Equals(s.ContractStatus, "Archived", StringComparison.OrdinalIgnoreCase)),
+                                    aylar = qGrp
+                                        .GroupBy(s => s.RenewalDate!.Value.Month)
+                                        .OrderBy(m => m.Key)
+                                        .Select(mGrp => new
+                                        {
+                                            ay = mGrp.Key,
+                                            ayAdi = new DateTime(yGrp.Key, mGrp.Key, 1).ToString("MMMM", new System.Globalization.CultureInfo("tr-TR")),
+                                            toplam = mGrp.Sum(s => s.TotalAmount ?? 0),
+                                            adet = mGrp.Count(),
+                                            archivedAdet = mGrp.Count(s => string.Equals(s.ContractStatus, "Archived", StringComparison.OrdinalIgnoreCase)),
+                                            sozlesmeler = mGrp.OrderByDescending(s => s.TotalAmount).Select(s => new
+                                            {
+                                                musteri = s.AccountTitle,
+                                                baslangic = s.StartDate?.ToString("dd.MM.yyyy"),
+                                                bitis = s.FinishDate?.ToString("dd.MM.yyyy"),
+                                                yenileme = s.RenewalDate?.ToString("dd.MM.yyyy"),
+                                                tutar = s.TotalAmount ?? 0,
+                                                durum = s.ContractStatus
+                                            })
+                                        })
+                                })
+                        });
+
+                    return Json(new { total, dipToplam, archivedToplam, startLevel, hierarchy });
+                }
+                default:
+                    return BadRequest(new { error = "Geçersiz tip" });
+            }
         }
 
         [HttpGet]
         public async Task<IActionResult> GetDailyBreakdown(string type, string? filter, string? startDate, string? endDate)
         {
             var (start, end, _, _) = ParseFilter(filter, startDate, endDate);
+            var (allFaturalar, _, _, sozlesmeler, _, _, _) = await LoadAllCachedDataAsync(_contextFactory, _cache);
 
             switch (type?.ToLowerInvariant())
             {
                 case "faturalar":
                 {
-                    var data = await _context.VIEW_CP_EXCEL_FATURAs
-                        .Where(f => f.Fatura_Tarihi.HasValue
-                                 && f.Fatura_Tarihi.Value >= start
-                                 && f.Fatura_Tarihi.Value <= end)
-                        .ToListAsync();
-
-                    var daily = data
+                    var daily = allFaturalar
+                        .Where(f => f.Fatura_Tarihi.HasValue && f.Fatura_Tarihi.Value >= start && f.Fatura_Tarihi.Value <= end)
                         .GroupBy(f => f.Fatura_Tarihi!.Value.Date)
-                        .Select(g => new { Tarih = g.Key.ToString("yyyy-MM-dd"), Toplam = NetTutar(g), Adet = g.Count() })
-                        .OrderBy(x => x.Tarih).ToList();
+                        .Select(g => new { tarih = g.Key.ToString("yyyy-MM-dd"), toplam = g.Where(x => !IsRetDurum(x.Durum)).Sum(x => IsNegatifDurum(x.Durum) ? -(x.NetTutar ?? 0) : (x.NetTutar ?? 0)), adet = g.Count() })
+                        .OrderBy(x => x.tarih).ToList();
                     return Json(daily);
                 }
                 case "tahsilatlar":
                 {
-                    var data = await _context.VIEW_CP_EXCEL_FATURAs
-                        .Where(f => f.Odeme_Sozu_Tarihi.HasValue || f.Tahsil_Tarihi.HasValue)
-                        .ToListAsync();
-
-                    var daily = data.Where(f => IsTahsilatOrKrediKarti(f.Durum))
-                        .Where(f => {
-                            var t = f.Odeme_Sozu_Tarihi ?? f.Tahsil_Tarihi;
-                            return t.HasValue && t.Value >= start && t.Value <= end;
-                        })
-                        .GroupBy(f => (f.Odeme_Sozu_Tarihi ?? f.Tahsil_Tarihi)!.Value.Date)
-                        .Select(g => new { Tarih = g.Key.ToString("yyyy-MM-dd"), Toplam = g.Sum(x => x.Fatura_Toplam ?? 0), Adet = g.Count() })
-                        .OrderBy(x => x.Tarih).ToList();
+                    var daily = allFaturalar
+                        .Where(f => f.Fatura_Vade_Tarihi.HasValue && IsTahsilatOrKrediKarti(f.Durum))
+                        .Where(f => f.Fatura_Vade_Tarihi!.Value >= start && f.Fatura_Vade_Tarihi!.Value <= end)
+                        .GroupBy(f => f.Fatura_Vade_Tarihi!.Value.Date)
+                        .Select(g => new { tarih = g.Key.ToString("yyyy-MM-dd"), toplam = g.Sum(x => x.Fatura_Toplam ?? 0), adet = g.Count() })
+                        .OrderBy(x => x.tarih).ToList();
                     return Json(daily);
                 }
                 case "sozlesmeler":
                 {
-                    var data = await _context.TBL_VARUNA_SOZLESMEs
-                        .Where(s => s.ContractStatus == "Archived")
-                        .ToListAsync();
-
-                    var daily = data.Where(s => s.CreatedOn.HasValue)
+                    var daily = sozlesmeler.Where(s => s.CreatedOn.HasValue)
                         .GroupBy(s => s.CreatedOn!.Value.Date)
-                        .Select(g => new { Tarih = g.Key.ToString("yyyy-MM-dd"), Toplam = g.Sum(x => x.TotalAmount ?? 0), Adet = g.Count() })
-                        .OrderBy(x => x.Tarih).ToList();
+                        .Select(g => new { tarih = g.Key.ToString("yyyy-MM-dd"), toplam = g.Sum(x => x.TotalAmount ?? 0), adet = g.Count() })
+                        .OrderBy(x => x.tarih).ToList();
                     return Json(daily);
                 }
                 default:
                     return BadRequest(new { error = "Geçersiz tip" });
             }
         }
+
         [HttpGet]
         public async Task<IActionResult> GetKalemDetay(string faturaNo)
         {
             if (string.IsNullOrEmpty(faturaNo))
                 return BadRequest(new { error = "Fatura no gerekli" });
 
-            // Fatura_No → SerialNumber → OrderId → CrmOrderId → Ürünler
-            var siparis = await _context.TBL_VARUNA_SIPARIs
+            using var db = _contextFactory.CreateDbContext();
+
+            // Fatura_No → SerialNumber → OrderId + TotalNetAmount (TL bazlı)
+            var siparis = await db.TBL_VARUNA_SIPARIs
+                .AsNoTracking()
                 .Where(s => s.SerialNumber == faturaNo)
-                .Select(s => new { s.OrderId })
+                .Select(s => new { s.OrderId, s.TotalNetAmount })
                 .FirstOrDefaultAsync();
 
             if (siparis?.OrderId == null)
                 return Json(new List<object>());
 
-            var urunler = await _context.TBL_VARUNA_SIPARIS_URUNLERIs
+            var kalemler = await db.TBL_VARUNA_SIPARIS_URUNLERIs
+                .AsNoTracking()
                 .Where(u => u.CrmOrderId == siparis.OrderId)
                 .Select(u => new
                 {
@@ -545,13 +1245,358 @@ namespace SOS.Controllers
                     StokKodu = u.StockCode,
                     Miktar = u.Quantity,
                     BirimFiyat = u.UnitPrice,
-                    Toplam = u.Total,
+                    DovizToplam = u.Total,
                     KDV = u.Tax
                 })
                 .ToListAsync();
 
+            // Kalem bazlı TL dağılımı: s.TotalNetAmount'ı kalemlerin döviz oranına göre dağıt
+            var dovizGenel = kalemler.Sum(k => k.DovizToplam ?? 0);
+            var tlNet = siparis.TotalNetAmount ?? 0;
+
+            var urunler = kalemler.Select(k =>
+            {
+                var oran = dovizGenel != 0 ? (k.DovizToplam ?? 0) / dovizGenel : 0;
+                var tlToplam = tlNet * oran;
+                return new
+                {
+                    k.UrunAdi,
+                    k.StokKodu,
+                    k.Miktar,
+                    BirimFiyat = k.Miktar > 0 ? tlToplam / (decimal)k.Miktar : 0,
+                    Toplam = tlToplam,
+                    k.KDV
+                };
+            }).ToList();
+
             return Json(urunler);
         }
+
+        [HttpGet]
+        public async Task<IActionResult> TahsilatCheck(string? filter)
+        {
+            var (allFaturalar, _, _, _, _, _, _) = await LoadAllCachedDataAsync(_contextFactory, _cache);
+            var (start, end, activeFilter, _) = ParseFilter(filter, null, null);
+
+            // Ortak filtre: Fatura_Vade_Tarihi bazlı
+            var donemFaturalar = allFaturalar
+                .Where(f => f.Fatura_Vade_Tarihi.HasValue)
+                .Where(f => f.Fatura_Vade_Tarihi!.Value >= start && f.Fatura_Vade_Tarihi!.Value <= end)
+                .Where(f => !new[] { "İADE","IADE","İPTAL","IPTAL","RET" }.Contains(f.Durum?.Trim() ?? "", StringComparer.OrdinalIgnoreCase))
+                .ToList();
+
+            // YTD ayrıca
+            var ytdStart = new DateTime(DateTime.Now.Year, 1, 1);
+            var ytdEnd = DateTime.Now.Date.AddDays(1).AddSeconds(-1);
+            var ytdFaturalar = allFaturalar
+                .Where(f => f.Fatura_Vade_Tarihi.HasValue)
+                .Where(f => f.Fatura_Vade_Tarihi!.Value >= ytdStart && f.Fatura_Vade_Tarihi!.Value <= ytdEnd)
+                .Where(f => !new[] { "İADE","IADE","İPTAL","IPTAL","RET" }.Contains(f.Durum?.Trim() ?? "", StringComparer.OrdinalIgnoreCase))
+                .ToList();
+
+            // PAYDA alternatif: Fatura_Tarihi bazlı (dönemde kesilen faturalar)
+            var faturaTarihiBazli = allFaturalar
+                .Where(f => f.Fatura_Tarihi.HasValue && f.Fatura_Tarihi.Value >= start && f.Fatura_Tarihi.Value <= end)
+                .Where(f => !new[] { "İADE","IADE","İPTAL","IPTAL","RET" }.Contains(f.Durum?.Trim() ?? "", StringComparer.OrdinalIgnoreCase))
+                .ToList();
+
+            var ytdFaturaTarihiBazli = allFaturalar
+                .Where(f => f.Fatura_Tarihi.HasValue && f.Fatura_Tarihi.Value >= ytdStart && f.Fatura_Tarihi.Value <= ytdEnd)
+                .Where(f => !new[] { "İADE","IADE","İPTAL","IPTAL","RET" }.Contains(f.Durum?.Trim() ?? "", StringComparer.OrdinalIgnoreCase))
+                .ToList();
+
+            return Json(new {
+                filtre = activeFilter,
+                donem = start.ToString("dd.MM.yyyy") + " - " + end.ToString("dd.MM.yyyy"),
+                mevcutHesap_VadeTarihi = new {
+                    pay = donemFaturalar.Sum(f => f.Tahsil_Edilen ?? 0),
+                    payda = donemFaturalar.Sum(f => (f.KdvDahilTutar ?? 0m)),
+                    adet = donemFaturalar.Count
+                },
+                dogruHesap_FaturaTarihi = new {
+                    pay = faturaTarihiBazli.Sum(f => f.Tahsil_Edilen ?? 0),
+                    payda = faturaTarihiBazli.Sum(f => (f.KdvDahilTutar ?? 0m)),
+                    adet = faturaTarihiBazli.Count
+                },
+                ytdMevcut = new {
+                    pay = ytdFaturalar.Sum(f => f.Tahsil_Edilen ?? 0),
+                    payda = ytdFaturalar.Sum(f => (f.KdvDahilTutar ?? 0m)),
+                    adet = ytdFaturalar.Count
+                },
+                ytdDogru = new {
+                    pay = ytdFaturaTarihiBazli.Sum(f => f.Tahsil_Edilen ?? 0),
+                    payda = ytdFaturaTarihiBazli.Sum(f => (f.KdvDahilTutar ?? 0m)),
+                    adet = ytdFaturaTarihiBazli.Count
+                }
+            });
+        }
+
+        /* VarunaCheck endpoint kaldırıldı */
+        /*
+        public async Task<IActionResult> VarunaCheck_REMOVED()
+        {
+            var (allFaturalar, _, _, _, _, varunaTutarMap, _) = await LoadAllCachedDataAsync(_contextFactory, _cache);
+            using var db = _contextFactory.CreateDbContext();
+
+            var statuses = await db.TBL_VARUNA_SIPARIs.Select(s => s.OrderStatus).Distinct().ToListAsync();
+            var closedCount = await db.TBL_VARUNA_SIPARIs.CountAsync(s => s.OrderStatus == "Closed");
+            var closedWithNet = await db.TBL_VARUNA_SIPARIs.CountAsync(s => s.OrderStatus == "Closed" && s.TotalNetAmount != null && s.TotalNetAmount > 0 && s.SerialNumber != null);
+
+            // Fatura eşleşme
+            var faturaNoSet = allFaturalar.Where(f => f.Fatura_No != null).Select(f => f.Fatura_No!).Distinct().ToList();
+            var matchedCount = varunaTutarMap.Keys.Count(k => faturaNoSet.Contains(k));
+
+            // Örnek eşleşmeler
+            var samples = allFaturalar
+                .Where(f => f.Fatura_No != null && varunaTutarMap.ContainsKey(f.Fatura_No))
+                .Take(10)
+                .Select(f => new {
+                    f.Fatura_No,
+                    ExcelTutar = f.Fatura_Toplam,
+                    VarunaNetTutar = varunaTutarMap[f.Fatura_No!],
+                    Fark = (f.Fatura_Toplam ?? 0) - varunaTutarMap[f.Fatura_No!]
+                }).ToList();
+
+            // ComputeMetrics ile aynı parametreleri kullanarak test
+            var now = DateTime.Now;
+            var bugun = now.Date;
+            var today = bugun.AddDays(1).AddSeconds(-1);
+            var ytdStart = new DateTime(now.Year, 1, 1);
+
+            // YTD faturalar: Varuna'lı vs Varuna'sız karşılaştırma
+            var ytdFaturalar = allFaturalar
+                .Where(f => f.Fatura_Tarihi.HasValue && f.Fatura_Tarihi.Value >= ytdStart && f.Fatura_Tarihi.Value <= today)
+                .ToList();
+
+            decimal ytdExcelToplam = 0, ytdVarunaToplam = 0;
+            int varunaKullanilan = 0, excelKullanilan = 0;
+            foreach (var f in ytdFaturalar)
+            {
+                if (IsRetDurum(f.Durum)) continue;
+                var excelTutar = f.Fatura_Toplam ?? 0;
+                decimal vt2 = 0;
+                var varunaVar = f.Fatura_No != null && varunaTutarMap.TryGetValue(f.Fatura_No, out vt2);
+                var tutar = varunaVar ? vt2 : excelTutar;
+                var net = IsNegatifDurum(f.Durum) ? -tutar : tutar;
+                var netExcel = IsNegatifDurum(f.Durum) ? -excelTutar : excelTutar;
+                ytdVarunaToplam += net;
+                ytdExcelToplam += netExcel;
+                if (varunaVar) varunaKullanilan++; else excelKullanilan++;
+            }
+
+            return Json(new {
+                orderStatuses = statuses,
+                closedSiparis = closedCount,
+                closedWithTotalNetAmount = closedWithNet,
+                varunaMapSize = varunaTutarMap.Count,
+                faturaCount = faturaNoSet.Count,
+                eslesen = matchedCount,
+                ytd = new {
+                    excelToplam = ytdExcelToplam,
+                    varunaToplam = ytdVarunaToplam,
+                    fark = ytdExcelToplam - ytdVarunaToplam,
+                    varunaKullanilan,
+                    excelKullanilan,
+                    toplamFatura = ytdFaturalar.Count
+                },
+                ornekler = samples
+            });
+        }
+        */
+
+        // ═══ DEBUG: Departman ve Ürün listesi + StockCode eşleşme ═══
+        [HttpGet]
+        public async Task<IActionResult> GetDepartmanUrunList()
+        {
+            using var db = _contextFactory.CreateDbContext();
+
+            // 1) Faturalardaki benzersiz Proje (departman) isimleri
+            var projeler = await db.VIEW_CP_EXCEL_FATURAs
+                .AsNoTracking()
+                .Where(f => f.Proje != null && f.Proje != "")
+                .Select(f => f.Proje!)
+                .Distinct()
+                .OrderBy(p => p)
+                .ToListAsync();
+
+            // 2) VIEW_ORTAK_PROJE_ISIMLERI (master departman listesi)
+            var ortakProjeler = await db.VIEW_ORTAK_PROJE_ISIMLERIs
+                .AsNoTracking()
+                .Where(p => p.TXTORTAKPROJEADI != null)
+                .Select(p => new { p.LNGKOD, p.TXTORTAKPROJEADI, p.DURUM })
+                .OrderBy(p => p.TXTORTAKPROJEADI)
+                .ToListAsync();
+
+            // 3) Ürün grupları
+            var urunGruplari = await db.TBL_VARUNA_URUN_GRUPLAMAs
+                .AsNoTracking()
+                .Select(u => new { u.LNGKOD, u.TXTURUNGRUP, u.TXTURUNMASK, u.TXTKOD })
+                .OrderBy(u => u.TXTURUNGRUP)
+                .ToListAsync();
+
+            // 4) Sipariş ürünleri (StockCode + ProductName)
+            var siparisUrunleri = await db.TBL_VARUNA_SIPARIS_URUNLERIs
+                .AsNoTracking()
+                .Where(u => u.StockCode != null && u.StockCode != "")
+                .Select(u => new { u.StockCode, u.ProductName })
+                .Distinct()
+                .OrderBy(u => u.StockCode)
+                .ToListAsync();
+
+            // 5) StockCode → Ürün grubu mask eşleştirme
+            var gruplama = urunGruplari
+                .Where(g => g.TXTURUNMASK != null && g.TXTURUNMASK != "")
+                .OrderByDescending(g => (g.TXTURUNMASK ?? "").Length)
+                .ToList();
+
+            var stockMapping = siparisUrunleri.Select(u =>
+            {
+                var match = gruplama.FirstOrDefault(g =>
+                    u.StockCode!.Trim().StartsWith(g.TXTURUNMASK!.Trim(), StringComparison.OrdinalIgnoreCase));
+                return new
+                {
+                    StockCode = (u.StockCode ?? "").Trim(),
+                    ProductName = (u.ProductName ?? "").Trim(),
+                    MatchedMask = match?.TXTURUNMASK?.Trim(),
+                    UrunGrubu = match?.TXTURUNGRUP?.Trim(),
+                    Matched = match != null
+                };
+            }).ToList();
+
+            return Json(new
+            {
+                faturaDepartmanlari = projeler,
+                masterDepartmanlar = ortakProjeler,
+                urunGruplari = urunGruplari,
+                stockMapping = new
+                {
+                    toplam = stockMapping.Count,
+                    eslesenAdet = stockMapping.Count(s => s.Matched),
+                    eslesmeyenAdet = stockMapping.Count(s => !s.Matched),
+                    eslesen = stockMapping.Where(s => s.Matched)
+                        .GroupBy(s => s.UrunGrubu)
+                        .Select(g => new
+                        {
+                            urunGrubu = g.Key,
+                            adet = g.Count(),
+                            ornekler = g.Take(5).Select(x => new { x.StockCode, x.ProductName, x.MatchedMask })
+                        }),
+                    eslesmeyen = stockMapping.Where(s => !s.Matched)
+                        .Select(x => new { x.StockCode, x.ProductName })
+                }
+            });
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> GetUrunKategoriExcel()
+        {
+            using var db = _contextFactory.CreateDbContext();
+
+            var siparisUrunleri = await db.TBL_VARUNA_SIPARIS_URUNLERIs
+                .AsNoTracking()
+                .Where(u => u.StockCode != null && u.StockCode != "")
+                .Select(u => new { StockCode = u.StockCode!.Trim(), ProductName = (u.ProductName ?? "").Trim() })
+                .Distinct()
+                .OrderBy(u => u.StockCode)
+                .ToListAsync();
+
+            var gruplama = await db.TBL_VARUNA_URUN_GRUPLAMAs
+                .AsNoTracking()
+                .Where(g => g.TXTURUNMASK != null && g.TXTURUNMASK != "")
+                .OrderByDescending(g => g.TXTURUNMASK!.Length)
+                .ToListAsync();
+
+            // Güncel kategori map (UH → E-Dönüşüm)
+            var kategoriMap = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+            {
+                ["EY"] = "Enroute", ["EH"] = "Enroute", ["EYS"] = "Enroute",
+                ["SH"] = "Stokbar", ["SH.01"] = "Stokbar", ["SY"] = "Stokbar",
+                ["QY"] = "Quest", ["QH"] = "Quest", ["QMH"] = "Quest", ["QYS"] = "Quest",
+                ["CDY"] = "ServiceCore", ["CDH"] = "ServiceCore",
+                ["VY"] = "Varuna", ["VH"] = "Varuna",
+                ["OH"] = "Hosting", ["WPH"] = "Hosting", ["WPY"] = "Hosting",
+                ["SM"] = "E-Dönüşüm", ["SMY"] = "E-Dönüşüm", ["SMH"] = "E-Dönüşüm", ["UH"] = "E-Dönüşüm",
+                ["PP"] = "BFG",
+                ["zzzUH"] = "E-Dönüşüm",
+            };
+
+            var rows = siparisUrunleri.Select(u =>
+            {
+                var maskMatch = gruplama.FirstOrDefault(g =>
+                    u.StockCode.StartsWith(g.TXTURUNMASK!.Trim(), StringComparison.OrdinalIgnoreCase));
+                var mask = maskMatch?.TXTURUNMASK?.Trim() ?? "";
+                var grupTip = maskMatch?.TXTURUNGRUP?.Trim() ?? "";
+                kategoriMap.TryGetValue(mask, out var anaUrun);
+                return new { AnaUrun = anaUrun ?? "Eşleşmedi", Mask = mask, YazilimHizmet = grupTip, StokKodu = u.StockCode, UrunAdi = u.ProductName };
+            })
+            .OrderBy(r => r.AnaUrun).ThenBy(r => r.Mask).ThenBy(r => r.StokKodu)
+            .ToList();
+
+            // CSV üret
+            var sb = new System.Text.StringBuilder();
+            sb.AppendLine("Ana Ürün\tMask\tYazılım/Hizmet\tStok Kodu\tÜrün Açıklaması");
+            foreach (var r in rows)
+                sb.AppendLine($"{r.AnaUrun}\t{r.Mask}\t{r.YazilimHizmet}\t{r.StokKodu}\t{r.UrunAdi}");
+
+            var bytes = System.Text.Encoding.UTF8.GetPreamble().Concat(System.Text.Encoding.UTF8.GetBytes(sb.ToString())).ToArray();
+            return File(bytes, "text/csv; charset=utf-8", "urun_kategori_eslestirme.csv");
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> FaturaDebug(string? filter)
+        {
+            var (allFaturalar, _, _, _, _, varunaTutarMap, urunGrupMap) = await LoadAllCachedDataAsync(_contextFactory, _cache);
+            var (start, end, activeFilter, _) = ParseFilter(filter, null, null);
+            using var db = _contextFactory.CreateDbContext();
+
+            // Dönemdeki Varuna eşleşen faturalar
+            var donemFaturalar = allFaturalar
+                .Where(f => f.VarunaEslesti && f.Fatura_Tarihi.HasValue
+                    && f.Fatura_Tarihi.Value >= start && f.Fatura_Tarihi.Value <= end
+                    && !IsRetDurum(f.Durum))
+                .ToList();
+
+            // Her fatura için: TotalNetAmount (sipariş başlığı) vs kalem bazlı toplam
+            var siparisler = await db.TBL_VARUNA_SIPARIs.AsNoTracking()
+                .Where(s => s.SerialNumber != null && s.OrderId != null && s.OrderStatus == "Closed")
+                .Select(s => new { s.SerialNumber, s.OrderId, s.TotalNetAmount })
+                .ToListAsync();
+            var sipMap = siparisler.GroupBy(s => s.SerialNumber!).ToDictionary(g => g.Key, g => g.First());
+
+            var urunler = await db.TBL_VARUNA_SIPARIS_URUNLERIs.AsNoTracking()
+                .Where(u => u.CrmOrderId != null)
+                .Select(u => new { u.CrmOrderId, u.Total })
+                .ToListAsync();
+            var kalemToplam = urunler.GroupBy(u => u.CrmOrderId!)
+                .ToDictionary(g => g.Key, g => g.Sum(u => u.Total ?? 0));
+
+            var farklar = new List<object>();
+            decimal toplamTNA = 0, toplamKalem = 0;
+            foreach (var f in donemFaturalar)
+            {
+                if (f.Fatura_No == null || !sipMap.TryGetValue(f.Fatura_No, out var sip)) continue;
+                var tna = sip.TotalNetAmount ?? 0;
+                var kt = sip.OrderId != null && kalemToplam.TryGetValue(sip.OrderId, out var k) ? k : 0;
+                toplamTNA += tna;
+                toplamKalem += kt;
+                if (Math.Abs(tna - kt) > 1000)
+                {
+                    farklar.Add(new { faturaNo = f.Fatura_No, orderId = sip.OrderId, totalNetAmount = tna, kalemToplam = kt, fark = tna - kt });
+                }
+            }
+
+            return Json(new {
+                filtre = activeFilter,
+                donem = start.ToString("dd.MM.yyyy") + " - " + end.ToString("dd.MM.yyyy"),
+                fatAdet = donemFaturalar.Count,
+                toplamTotalNetAmount = toplamTNA,
+                toplamKalemBazli = toplamKalem,
+                fark = toplamTNA - toplamKalem,
+                farkliSiparisler = farklar.Count,
+                ornekFarklar = farklar.OrderByDescending(x => ((dynamic)x).fark).Take(15)
+            });
+        }
+
+        #endregion
     }
 }
-

@@ -1,29 +1,34 @@
 using Microsoft.AspNetCore.Identity;
 using Microsoft.EntityFrameworkCore;
-using Microsoft.Extensions.Options;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using SOS.DbData;
 using SOS.Models;
 using SOS.Models.Kullanici;
-using SOS.Models.MsK;
 using SOS.Services;
 
 
 var builder = WebApplication.CreateBuilder(args);
 
+// User secrets — sadece Development'ta aktif (üretimde env vars / Azure Key Vault)
+// UserSecretsId string kullanıyoruz çünkü top-level Program için <T> overload attribute okumayabilir
+if (builder.Environment.IsDevelopment())
+{
+    builder.Configuration.AddUserSecrets("sos-sales-operating-system-2026");
+}
+
 // Add services to the container.
 builder.Services.AddTransient<IEmailService, SmtpEmailService>();
 builder.Services.AddControllersWithViews().AddRazorRuntimeCompilation();
-builder.Services.AddHttpClient<SOS.Services.ZabbixService>(); // Registered ZabbixService
 builder.Services.AddScoped<ICompanyResolutionService, CompanyResolutionService>();
 builder.Services.AddScoped<IDatabaseMigrationService, DatabaseMigrationService>();
 builder.Services.AddHttpContextAccessor();
-builder.Services.AddScoped<ITenantProvider, TenantProvider>();
 builder.Services.AddSingleton<IUrlEncryptionService, UrlEncryptionService>();
 builder.Services.AddScoped<ILogService, DbLogService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddResponseCaching();
-builder.Services.AddScoped<ParamPosService>();
-
+// Cockpit cache warmer — app startup'tan sonra her 4 dakikada cache'i DB'den yeniler
+builder.Services.AddSingleton<CockpitCacheWarmerState>();
+builder.Services.AddHostedService<CockpitCacheWarmer>();
 // Performance Optimization: Response Compression
 builder.Services.AddResponseCompression(options =>
 {
@@ -33,10 +38,19 @@ builder.Services.AddResponseCompression(options =>
 builder.Services.AddDbContextPool<DataContext>(options =>
 {
     var connectionString = builder.Configuration.GetConnectionString("DefaultConnection");
-    options.UseSqlServer(connectionString);
+    options.UseSqlServer(connectionString)
+           .ConfigureWarnings(w => w.Ignore(SqlServerEventId.DecimalTypeDefaultWarning));
 });
+// MskDbContext: Normal scoped (ClaimsFactory, LogService vb. için)
+// ConfigureWarnings: scaffolded model'lerde decimal precision tanımlı değil — DB sütun tipleri zaten doğru, runtime warning'i suppress et
 builder.Services.AddDbContext<MskDbContext>(options =>
-    options.UseSqlServer(builder.Configuration.GetConnectionString("MsKConnection")));
+    options.UseSqlServer(builder.Configuration.GetConnectionString("MsKConnection"))
+           .ConfigureWarnings(w => w.Ignore(SqlServerEventId.DecimalTypeDefaultWarning)));
+// Factory: CockpitController kendi bağımsız context'ini oluşturur (concurrent access fix)
+builder.Services.AddDbContextFactory<MskDbContext>(options =>
+    options.UseSqlServer(builder.Configuration.GetConnectionString("MsKConnection"))
+           .ConfigureWarnings(w => w.Ignore(SqlServerEventId.DecimalTypeDefaultWarning)),
+    ServiceLifetime.Scoped);
 
 
 builder.Services.AddIdentity<AppUser, AppRole>(options => { 
@@ -94,7 +108,11 @@ if (!app.Environment.IsDevelopment())
 
 app.UseResponseCompression(); // Optimized Placement
 app.UseResponseCaching();
-app.UseHttpsRedirection();
+// HTTPS redirect sadece production'da — dev launchSettings yalnız HTTP profili açıyor
+if (!app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 
 app.UseRouting();
 app.UseAuthentication();
@@ -119,17 +137,8 @@ app.UseStaticFiles(new StaticFileOptions
 });
 
 app.MapControllerRoute(
-    name: "urunler_by_kategori",
-    pattern: "urunler/{url?}",
-    defaults: new { controller = "Urun", action = "List" })
-    .WithStaticAssets();
-
-app.MapControllerRoute(
     name: "default",
     pattern: "{controller=Account}/{action=Login}/{id?}")
     .WithStaticAssets();
 
-
-
 app.Run();
-

@@ -4,6 +4,12 @@ obj/
 *.user
 *.pdb
 *.cache
+.vs/
+
+# Secrets — asla commit ETME (user-secrets üzerinden yönetilir)
+appsettings.Development.json
+appsettings.Production.json
+appsettings.Local.json
 
 # Node.js
 node_modules/

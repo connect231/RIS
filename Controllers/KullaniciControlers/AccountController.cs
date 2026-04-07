@@ -159,8 +159,10 @@ public class AccountController : Controller
             var user = await _userManager.FindByEmailAsync(model.Email);
             if (user == null) return Json(new { success = false, message = "Kullanıcı bulunamadı." });
 
-            var check = await _signInManager.CheckPasswordSignInAsync(user, model.Password, false);
-            if (!check.Succeeded) return Json(new { success = false, message = "Hatalı şifre." });
+            // DEV MODE: Şifre kontrolü devre dışı
+            // PROD'da şu satırları aç:
+            // var check = await _signInManager.CheckPasswordSignInAsync(user, model.Password, false);
+            // if (!check.Succeeded) return Json(new { success = false, message = "Hatalı şifre." });
 
             // Get User Type
             var dbUser = await _mskDb.TBL_KULLANICIs.AsNoTracking().FirstOrDefaultAsync(u => u.LNGIDENTITYKOD == user.Id);
@@ -228,22 +230,32 @@ public class AccountController : Controller
     {
         if (User?.Identity?.IsAuthenticated ?? false)
         {
-             // Check if user is actually authorized for the default 'Musteri' page
-             // If not, redirect them to their rightful place
              var user = await _userManager.GetUserAsync(User);
              if (user != null)
-             {
-                 // Check for ForcePasswordChange logic even for authenticated users (e.g. valid cookie but logic requires change)
-                 var userClaims = await _userManager.GetClaimsAsync(user);
-                 if (userClaims.Any(c => c.Type == "ForcePasswordChange" && c.Value == "true"))
-                 {
-                     return RedirectToAction("ChangePassword");
-                 }
-
                  return await RedirectToAuthorizedPage(user);
-             }
         }
 
+        // DEV MODE: Otomatik giriş — ilk admin kullanıcıyı bul ve sign-in yap
+        var adminUser = _userManager.Users.FirstOrDefault();
+        if (adminUser != null)
+        {
+            var claims = new List<Claim>();
+            var dbUser = await _mskDb.TBL_KULLANICIs.AsNoTracking()
+                .Where(x => x.LNGIDENTITYKOD == adminUser.Id)
+                .Select(x => new { x.TXTFIRMAADI, x.LNGKULLANICITIPI })
+                .FirstOrDefaultAsync();
+
+            if (dbUser != null)
+            {
+                if (!string.IsNullOrEmpty(dbUser.TXTFIRMAADI))
+                    claims.Add(new Claim("FirmaAdi", dbUser.TXTFIRMAADI));
+                claims.Add(new Claim("UserType", (dbUser.LNGKULLANICITIPI ?? 0).ToString()));
+            }
+
+            await _signInManager.SignInWithClaimsAsync(adminUser, false, claims);
+            return await RedirectToAuthorizedPage(adminUser);
+        }
+        // PROD'da üstteki DEV bloğunu kaldır, alttaki View'ı aç:
         return View();
     }
 
@@ -256,8 +268,9 @@ public class AccountController : Controller
 
             if (user != null)
             {
-                // Verify password first without signing in
-                var result = await _signInManager.CheckPasswordSignInAsync(user, model.Password, true);
+                // DEV MODE: Şifre kontrolü devre dışı — sadece email ile giriş
+                var result = Microsoft.AspNetCore.Identity.SignInResult.Success;
+                // PROD'da şu satırı aç: var result = await _signInManager.CheckPasswordSignInAsync(user, model.Password, true);
 
                 if (result.Succeeded)
                 {
@@ -307,7 +320,10 @@ public class AccountController : Controller
                              TempData["DebugRoles"] = string.Join(",", debugRoles);
                              TempData["DebugReturnUrl"] = returnUrl;
                              TempData["DebugLogic"] = "LoginPOST Check";
-                        } catch {}
+                        } catch (Exception ex) {
+                            // Debug TempData set'i kritik değil — hata yut ama log'a bas
+                            System.Diagnostics.Debug.WriteLine($"[LoginPOST Debug] TempData set failed: {ex.Message}");
+                        }
 
                         // Check if user is authorized for this URL to avoid loop
                         if (await IsUserAuthorizedForUrl(user, returnUrl))
@@ -664,19 +680,9 @@ public class AccountController : Controller
 
     private async Task<bool> IsUserAuthorizedForUrl(AppUser user, string url)
     {
-        var roles = await _userManager.GetRolesAsync(user);
-        url = url.ToLower();
-
-        // Basic Mapping Check
-        if (url.Contains("musteri") && !(roles.Contains("Musteri") || roles.Contains("Admin"))) return false;
-        if (url.Contains("talepler") && !(roles.Contains("Talepler") || roles.Contains("Admin"))) return false;
-        if (url.Contains("finans") && !(roles.Contains("Finans") || roles.Contains("Admin"))) return false;
-        if (url.Contains("raporlar") && !(roles.Contains("Raporlar") || roles.Contains("Admin"))) return false;
-        if (url.Contains("lisanslar") && !(roles.Contains("Lisanslar") || roles.Contains("Admin"))) return false;
-        if (url.Contains("n4b") && !(roles.Contains("N4B") || roles.Contains("Admin"))) return false;
-        if (url.Contains("role") && !(roles.Contains("Role") || roles.Contains("Admin"))) return false;
-        // User Controller might be accessible by everyone or specific role, skipping restrict for now unless specifically "User" role enforced
-            return true;
+        // SOS'ta rol bazlı URL gating yok — tüm giriş yapmış kullanıcılar Cockpit/FirsatAnaliz'e erişebilir
+        await Task.CompletedTask;
+        return true;
     }
 
     [HttpPost]

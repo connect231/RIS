@@ -34,10 +34,5 @@ public partial class TBL_KULLANICI
 
     public int? LNGKULLANICITIP { get; set; }
 
-    [InverseProperty("CreatedByNavigation")]
-    public virtual ICollection<TBL_FINANS_ONAY> TBL_FINANS_ONAYCreatedByNavigations { get; set; } = new List<TBL_FINANS_ONAY>();
-
-    [InverseProperty("RevokedByNavigation")]
-    public virtual ICollection<TBL_FINANS_ONAY> TBL_FINANS_ONAYRevokedByNavigations { get; set; } = new List<TBL_FINANS_ONAY>();
 }
 

@@ -6,9 +6,9 @@ namespace SOS.Services
 {
     public class UrlEncryptionService : IUrlEncryptionService
     {
-        // TODO: Move this key to appsettings.json or Azure KeyVault in production
+        // TODO: user-secrets veya Azure Key Vault'a taşı
         // 32 chars for 256-bit key
-        private readonly string _key = "UniveraCP_Secure_Key_2026_Trx9sZ"; 
+        private readonly string _key = "SOS_Secure_Key_2026_Trx9sZaQwErTy";
         
         public string Encrypt(string plainText)
         {

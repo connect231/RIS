@@ -8,22 +8,33 @@ namespace SOS.Models.ViewModels
         // Faturalar (İade + NULL/Boş)
         public decimal FaturalarToplam { get; set; }
         public int FaturalarAdet { get; set; }
+        public decimal VarunaDisiToplam { get; set; }
+        public int VarunaDisiAdet { get; set; }
 
         // Tahsilatlar (Tahsil Edildi)
         public decimal TahsilatlarToplam { get; set; }
         public int TahsilatlarAdet { get; set; }
 
-        // Sözleşmeler (Archived)
+        // Sözleşmeler (aktif dönem: StartDate <= bugün <= FinishDate)
         public decimal SozlesmelerToplam { get; set; }
         public int SozlesmelerAdet { get; set; }
+        public decimal SozArchivedToplam { get; set; }
+        public int SozArchivedAdet { get; set; }
+        public decimal SozGecikmisToplam { get; set; }
+        public int SozGecikmiAdet { get; set; }
 
         // Trend verileri (önceki dönem karşılaştırma)
         public decimal FaturalarTrend { get; set; }
         public decimal TahsilatlarTrend { get; set; }
         public decimal SozlesmelerTrend { get; set; }
 
+        // Önceki dönem tutarları (silik gösterim)
+        public decimal PrevFaturalarToplam { get; set; }
+        public decimal PrevTahsilatlarToplam { get; set; }
+
         // Hedef (dönem bazlı dinamik)
         public decimal AylikHedef { get; set; }
+        public decimal HedefTutar { get; set; }  // = AylikHedef (dönem hedefi, view'da kullanılır)
         public decimal HedefGerceklesme { get; set; }
         public decimal HedefKalan { get; set; }
         public decimal HedefYuzde { get; set; }
@@ -40,23 +51,35 @@ namespace SOS.Models.ViewModels
         public DateTime FiltreBaslangic { get; set; }
         public DateTime FiltreBitis { get; set; }
 
-        // Tahsil edilecek hedef (dönem bazlı)
-        public decimal TahsilEdilecek { get; set; }
-        public decimal TahsilKalan { get; set; }
+        // Tahsilat detay (dönem bazlı)
+        public decimal TahsilEdilecek { get; set; }  // PAYDA = VadeToplam + GecmisBakiye
+        public decimal TahsilatEdilen { get; set; }  // PAY = Tahsil_Tarihi bazlı Tahsil_Edilen
+        public decimal TahsilKalan { get; set; }     // PAYDA - PAY
+        public decimal TahDonemBakiye { get; set; }     // Bekleyen bakiye (vade ≤ dönem sonu)
+        public decimal TahGecmisBakiye { get; set; }  // Vadesi geçmiş bakiye
+        public int TahGecmisAdet { get; set; }        // Vadesi geçmiş fatura sayısı
+        public decimal TahGecmisTahsilat { get; set; } // Geçmiş dönem tahsilat (Tahsil_Tarihi < dönem başı)
 
         // CEI Dönem (seçilen filtre başlangıcı → bugün)
         public decimal CeiDonemTahsilat { get; set; }
         public decimal CeiDonemVadesiGecmis { get; set; }
         public decimal CeiDonemOran { get; set; }
 
+        // CEI Haftalık (mevcut takvim haftası)
+        public decimal CeiHaftalikTahsilat { get; set; }
+        public decimal CeiHaftalikToplam { get; set; }
+        public decimal CeiHaftalikOran { get; set; }
+        public DateTime HaftaBaslangic { get; set; }
+        public DateTime HaftaSonu { get; set; }
+
         // CEI Aylık (mevcut takvim ayı)
         public decimal CeiAylikTahsilat { get; set; }
-        public decimal CeiAylikVadesiGecmis { get; set; }
+        public decimal CeiAylikToplam { get; set; }
         public decimal CeiAylikOran { get; set; }
 
         // CEI Yıllık (YTD — 01.01.2026 → bugün)
         public decimal CeiYillikTahsilat { get; set; }
-        public decimal CeiYillikVadesiGecmis { get; set; }
+        public decimal CeiYillikToplam { get; set; }
         public decimal CeiYillikOran { get; set; }
 
         // 2025 yılından kalan bakiye
@@ -79,8 +102,11 @@ namespace SOS.Models.ViewModels
         public decimal FixedCurrentMonthTarget { get; set; }
         public decimal FixedCurrentMonthActual { get; set; }
         public decimal FixedCurrentMonthPct { get; set; }
-        public decimal FixedYTDTarget { get; set; }
-        public decimal FixedYTDActual { get; set; }
+        public decimal FixedYTDTarget { get; set; }  // Yıllık hedef (₺600M)
+        public decimal FixedYTDActual { get; set; }  // YTD gerçekleşen
         public decimal FixedYTDPct { get; set; }
+        public decimal FixedQuarterTarget { get; set; }
+        public int RemainingMonths { get; set; }
+        public int CurrentQuarter { get; set; }
     }
 }

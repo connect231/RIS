@@ -1,0 +1,1371 @@
+@model SOS.Models.ViewModels.FirsatAnalizViewModel
+
+@{
+    ViewData["Title"] = "Fırsat Analizi";
+}
+
+<style>
+    @@import url('https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700&display=swap');
+
+    .fa-dash { font-family: 'DM Sans', sans-serif; color: #1e293b; }
+    .fa-dash * { box-sizing: border-box; }
+
+    /* ── CountUp + Fade-in Animations ── */
+    .fade-up {
+        opacity: 0;
+        transform: translateY(16px);
+        animation: fadeUp 0.6s cubic-bezier(0.25,0.46,0.45,0.94) forwards;
+    }
+    .fade-up-d1 { animation-delay: 0.05s; }
+    .fade-up-d2 { animation-delay: 0.10s; }
+    .fade-up-d3 { animation-delay: 0.15s; }
+    .fade-up-d4 { animation-delay: 0.20s; }
+    .fade-up-d5 { animation-delay: 0.25s; }
+    @@keyframes fadeUp {
+        to { opacity: 1; transform: translateY(0); }
+    }
+    .shimmer-line {
+        background: linear-gradient(90deg, #f1f5f9 25%, #e8edf2 50%, #f1f5f9 75%);
+        background-size: 200% 100%;
+        animation: shimmerAnim 1.5s infinite;
+        border-radius: 6px; height: 24px;
+    }
+    @@keyframes shimmerAnim { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+    /* Number pulse on update */
+    .num-pulse {
+        animation: numPulse 0.4s ease;
+    }
+    @@keyframes numPulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.04); color: #4f46e5; }
+        100% { transform: scale(1); }
+    }
+
+    /* iOS-like content transition */
+    .content-panel {
+        transition: opacity 0.3s cubic-bezier(0.25,0.1,0.25,1), transform 0.3s cubic-bezier(0.25,0.1,0.25,1);
+    }
+    .content-panel.fading {
+        opacity: 0;
+        transform: translateY(6px);
+    }
+
+    /* ── Cards ── */
+    .fa-card {
+        background: #fff;
+        border-radius: 14px;
+        border: 1px solid #eef2f6;
+        transition: box-shadow 0.3s ease, transform 0.3s ease, opacity 0.3s ease;
+        position: relative;
+        overflow: hidden;
+    }
+    .fa-card:hover {
+        box-shadow: 0 12px 32px rgba(15,23,42,0.08);
+        transform: translateY(-2px);
+    }
+
+    /* ── Funnel card specifics ── */
+    .funnel-card {
+        cursor: pointer;
+        user-select: none;
+        padding: 20px 20px 16px;
+    }
+    .funnel-card::before {
+        content: '';
+        position: absolute;
+        top: 0; left: 0; right: 0;
+        height: 2.5px;
+        border-radius: 14px 14px 0 0;
+    }
+    .funnel-card.fc-orange::before { background: #f97316; }
+    .funnel-card.fc-violet::before { background: #8b5cf6; }
+    .funnel-card.fc-blue::before   { background: #3b82f6; }
+    .funnel-card.fc-cyan::before   { background: #06b6d4; }
+    .funnel-card.fc-green::before  { background: #10b981; }
+
+    /* Icon circles */
+    .fc-icon {
+        width: 32px; height: 32px; border-radius: 10px;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 14px; flex-shrink: 0;
+    }
+    .fc-orange .fc-icon { background: #fff7ed; color: #ea580c; }
+    .fc-violet .fc-icon { background: #f5f3ff; color: #7c3aed; }
+    .fc-blue .fc-icon   { background: #eff6ff; color: #2563eb; }
+    .fc-cyan .fc-icon   { background: #ecfeff; color: #0891b2; }
+    .fc-green .fc-icon  { background: #ecfdf5; color: #059669; }
+
+    /* Funnel active/dimmed states */
+    .funnel-card.active-card {
+        box-shadow: 0 0 0 2px currentColor, 0 12px 32px rgba(15,23,42,0.10);
+        transform: translateY(-2px);
+    }
+    .funnel-card.fc-orange.active-card { box-shadow: 0 0 0 2px #f97316, 0 12px 32px rgba(15,23,42,0.10); }
+    .funnel-card.fc-violet.active-card { box-shadow: 0 0 0 2px #8b5cf6, 0 12px 32px rgba(15,23,42,0.10); }
+    .funnel-card.fc-blue.active-card   { box-shadow: 0 0 0 2px #3b82f6, 0 12px 32px rgba(15,23,42,0.10); }
+    .funnel-card.fc-cyan.active-card   { box-shadow: 0 0 0 2px #06b6d4, 0 12px 32px rgba(15,23,42,0.10); }
+    .funnel-card.fc-green.active-card  { box-shadow: 0 0 0 2px #10b981, 0 12px 32px rgba(15,23,42,0.10); }
+    .funnel-card.dimmed { opacity: 0.55; transform: none; }
+    .funnel-card.dimmed:hover { opacity: 0.75; transform: translateY(-1px); box-shadow: 0 6px 18px rgba(15,23,42,0.06); }
+
+    /* Conversion badge */
+    .conv-badge {
+        display: inline-flex; align-items: center; gap: 3px;
+        font-size: 10px; font-weight: 600;
+        padding: 2px 8px; border-radius: 20px;
+    }
+    .fc-orange .conv-badge { background: #fff7ed; color: #c2410c; }
+    .fc-violet .conv-badge { background: #f5f3ff; color: #6d28d9; }
+    .fc-blue .conv-badge   { background: #eff6ff; color: #1d4ed8; }
+    .fc-cyan .conv-badge   { background: #ecfeff; color: #0e7490; }
+    .fc-green .conv-badge  { background: #ecfdf5; color: #047857; }
+
+    /* Arrow connector between cards */
+    .funnel-arrow {
+        display: flex; align-items: center; justify-content: center;
+        flex-shrink: 0; width: 24px;
+    }
+
+    /* ── Filter tabs ── */
+    .ftab {
+        padding: 6px 16px; border-radius: 8px; font-size: 12px; font-weight: 500;
+        cursor: pointer; border: none; transition: all 0.2s ease;
+        color: #64748b; background: transparent;
+    }
+    .ftab:hover { background: #f1f5f9; color: #1e293b; }
+    .ftab.active {
+        background: #1e293b; color: #fff;
+        box-shadow: 0 2px 8px rgba(30,41,59,0.18);
+    }
+
+    /* ── Avatar ── */
+    .avatar-circle {
+        width: 38px; height: 38px; border-radius: 50%;
+        display: flex; align-items: center; justify-content: center;
+        font-size: 12px; font-weight: 700; color: #fff; flex-shrink: 0;
+    }
+
+    /* ── Alarm Banner ── */
+    .alarm-banner {
+        background: linear-gradient(90deg, #fef2f2, #fee2e2);
+        border: 1px solid #fecaca;
+        border-radius: 12px;
+        padding: 12px 20px;
+        margin-bottom: 16px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        animation: alarmPulse 2s ease-in-out infinite;
+    }
+    @@keyframes alarmPulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(248,113,113,0); }
+        50% { box-shadow: 0 0 0 4px rgba(248,113,113,0.15); }
+    }
+    .alarm-banner.warning {
+        background: linear-gradient(90deg, #fffbeb, #fef3c7);
+        border-color: #fde68a;
+        animation: warnPulse 2s ease-in-out infinite;
+    }
+    @@keyframes warnPulse {
+        0%, 100% { box-shadow: 0 0 0 0 rgba(245,158,11,0); }
+        50% { box-shadow: 0 0 0 4px rgba(245,158,11,0.12); }
+    }
+    .alarm-banner .alarm-dot {
+        width: 8px; height: 8px; border-radius: 50%;
+        background: #f87171;
+        animation: dotPulse 1.5s ease-in-out infinite;
+    }
+    .alarm-banner.warning .alarm-dot { background: #f59e0b; }
+    @@keyframes dotPulse {
+        0%, 100% { opacity: 1; transform: scale(1); }
+        50% { opacity: 0.5; transform: scale(1.3); }
+    }
+
+    /* ── KPI Kart Renk Kodları ── */
+    .kpi-status-dot {
+        width: 6px; height: 6px; border-radius: 50%; display: inline-block;
+    }
+    .kpi-status-green { background: #22d3a0; box-shadow: 0 0 6px rgba(34,211,160,0.4); }
+    .kpi-status-amber { background: #f59e0b; box-shadow: 0 0 6px rgba(245,158,11,0.4); animation: dotPulse 1.5s infinite; }
+    .kpi-status-red { background: #f87171; box-shadow: 0 0 6px rgba(248,113,113,0.5); animation: dotPulse 1s infinite; }
+
+    .funnel-card.kpi-border-green::before { background: #22d3a0 !important; }
+    .funnel-card.kpi-border-amber::before { background: #f59e0b !important; }
+    .funnel-card.kpi-border-red::before { background: #f87171 !important; }
+
+    /* ── Progress bar ── */
+    .pbar-track { height: 7px; border-radius: 4px; background: #f1f5f9; overflow: hidden; }
+    .pbar-fill { height: 100%; border-radius: 4px; transition: width 0.8s cubic-bezier(0.25,0.1,0.25,1); }
+
+    /* ── Stage badge ── */
+    .stage-badge {
+        display: inline-flex; padding: 3px 10px; border-radius: 6px;
+        font-size: 10px; font-weight: 600;
+    }
+
+    /* ── Medal ── */
+    .medal { font-size: 15px; width: 24px; text-align: center; flex-shrink: 0; }
+
+    /* ── Shimmer ── */
+    .sh { background: linear-gradient(90deg,#f1f5f9 25%,#e8edf2 50%,#f1f5f9 75%); background-size: 200% 100%; animation: sh 1.5s infinite; border-radius: 6px; height: 18px; }
+    @@keyframes sh { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+
+    /* ── Pagination ── */
+    .pg-btn {
+        padding: 4px 10px; border-radius: 6px; font-size: 11px; font-weight: 500;
+        border: 1px solid #e2e8f0; background: #fff; color: #475569; cursor: pointer;
+        transition: all 0.15s ease;
+    }
+    .pg-btn:hover { background: #f8fafc; border-color: #cbd5e1; }
+    .pg-btn.active { background: #1e293b; color: #fff; border-color: #1e293b; }
+
+    /* ── Divider ── */
+    .divider { height: 1px; background: #f1f5f9; margin: 0; }
+
+    /* ── Warning note ── */
+    .warn-note {
+        display: flex; align-items: flex-start; gap: 5px;
+        background: #fffbeb; border: 1px solid #fef3c7; border-radius: 6px;
+        padding: 6px 8px; margin-top: 8px;
+        font-size: 10px; color: #92400e; line-height: 1.4;
+    }
+</style>
+
+<div class="fa-dash">
+
+    <!-- ═══ HEADER ═══ -->
+    <div class="flex items-center justify-between mb-6">
+        <div>
+            <h1 class="text-[22px] font-bold text-[#0f172a] tracking-tight">Fırsat Analizi</h1>
+            <p class="text-[12px] text-[#94a3b8] mt-0.5 font-medium">Fırsattan Faturaya Uçtan Uca Dönüşüm İzleme</p>
+        </div>
+        <div class="flex items-center gap-1 bg-[#f8fafc] rounded-xl p-1" id="filterTabs">
+            <button class="ftab" data-filter="week">Bu hafta</button>
+            <button class="ftab active" data-filter="month">Bu ay</button>
+            <button class="ftab" data-filter="ytd">YTD</button>
+            <button class="ftab" data-filter="all">Tümü</button>
+        </div>
+    </div>
+
+    <!-- ═══ FUNNEL CARDS ═══ -->
+    <div class="flex items-stretch gap-0 mb-6" id="funnelRow">
+
+        <!-- 1: Tüm Fırsatlar -->
+        <div class="fa-card funnel-card fc-orange flex-1 fade-up fade-up-d1" data-funnel="1" onclick="window._clickFunnel(1)">
+            <div class="flex items-start justify-between mb-3">
+                <span class="text-[11px] font-semibold text-[#64748b]">Tüm Fırsatlar <span id="dot1" class="kpi-status-dot"></span></span>
+                <div class="fc-icon"><i class="bi bi-layers"></i></div>
+            </div>
+            <p id="kpiVal1" class="text-[26px] font-extrabold text-[#0f172a] leading-none tracking-tight">--</p>
+            <p id="kpiSub1" class="text-[11px] text-[#94a3b8] mt-2 font-medium">--</p>
+            <div id="kpiNote1" class="warn-note hidden">
+                <span>&#9888;</span>
+                <span id="kpiNoteText1"></span>
+            </div>
+        </div>
+
+        <!-- Arrow 1-2 -->
+        <div class="funnel-arrow">
+            <svg width="16" height="24" viewBox="0 0 16 24" fill="none"><path d="M2 4l10 8-10 8" stroke="#cbd5e1" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+
+        <!-- 2: Dönem fırsat potansiyeli -->
+        <div class="fa-card funnel-card fc-violet flex-1 fade-up fade-up-d2" data-funnel="2" onclick="window._clickFunnel(2)">
+            <div class="flex items-start justify-between mb-3">
+                <span id="kpiLabel2" class="text-[11px] font-semibold text-[#64748b]">Bu Ay Fırsat Potansiyeli</span>
+                <div class="fc-icon"><i class="bi bi-bullseye"></i></div>
+            </div>
+            <p id="kpiVal2" class="text-[26px] font-extrabold text-[#0f172a] leading-none tracking-tight">--</p>
+            <p id="kpiSub2a" class="text-[11px] text-[#94a3b8] mt-2 font-medium">--</p>
+            <div class="flex items-center gap-2 mt-1.5">
+                <span id="kpiSub2" class="text-[11px] text-[#64748b] font-medium">--</span>
+                <span id="kpiConv1" class="conv-badge hidden"></span>
+            </div>
+        </div>
+
+        <!-- Arrow 2-3 -->
+        <div class="funnel-arrow">
+            <svg width="16" height="24" viewBox="0 0 16 24" fill="none"><path d="M2 4l10 8-10 8" stroke="#cbd5e1" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+
+        <!-- 3: Donem teklif -->
+        <div class="fa-card funnel-card fc-blue flex-1 fade-up fade-up-d3" data-funnel="3" onclick="window._clickFunnel(3)">
+            <div class="flex items-start justify-between mb-3">
+                <span id="kpiLabel3" class="text-[11px] font-semibold text-[#64748b]">Bu Ay Teklif</span>
+                <div class="fc-icon"><i class="bi bi-file-earmark-text"></i></div>
+            </div>
+            <p id="kpiVal3" class="text-[26px] font-extrabold text-[#0f172a] leading-none tracking-tight">--</p>
+            <p id="kpiSub3" class="text-[11px] text-[#94a3b8] mt-2 font-medium">--</p>
+            <div class="mt-1.5">
+                <span id="kpiConv2" class="conv-badge hidden"></span>
+            </div>
+        </div>
+
+        <!-- Arrow 3-4 -->
+        <div class="funnel-arrow">
+            <svg width="16" height="24" viewBox="0 0 16 24" fill="none"><path d="M2 4l10 8-10 8" stroke="#cbd5e1" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+
+        <!-- 4: Dönem sipariş -->
+        <div class="fa-card funnel-card fc-cyan flex-1 fade-up fade-up-d4" data-funnel="4" onclick="window._clickFunnel(4)">
+            <div class="flex items-start justify-between mb-3">
+                <span id="kpiLabel4" class="text-[11px] font-semibold text-[#64748b]">Bu Ay Sipariş</span>
+                <div class="fc-icon"><i class="bi bi-cart-check"></i></div>
+            </div>
+            <p id="kpiVal4" class="text-[26px] font-extrabold text-[#0f172a] leading-none tracking-tight">--</p>
+            <p id="kpiSub4" class="text-[11px] text-[#94a3b8] mt-2 font-medium">--</p>
+            <div class="mt-1.5">
+                <span id="kpiConv3" class="conv-badge hidden"></span>
+            </div>
+        </div>
+
+        <!-- Arrow 4-5 -->
+        <div class="funnel-arrow">
+            <svg width="16" height="24" viewBox="0 0 16 24" fill="none"><path d="M2 4l10 8-10 8" stroke="#cbd5e1" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></svg>
+        </div>
+
+        <!-- 5: Dönem satış faturası -->
+        <div class="fa-card funnel-card fc-green flex-1 fade-up fade-up-d5" data-funnel="5" onclick="window._clickFunnel(5)">
+            <div class="flex items-start justify-between mb-3">
+                <span id="kpiLabel5" class="text-[11px] font-semibold text-[#64748b]">Bu Ay Satış Faturası</span>
+                <div class="fc-icon"><i class="bi bi-receipt"></i></div>
+            </div>
+            <p id="kpiVal5" class="text-[26px] font-extrabold text-[#0f172a] leading-none tracking-tight">--</p>
+            <p id="kpiSub5" class="text-[11px] text-[#94a3b8] mt-2 font-medium">--</p>
+            <div class="mt-1.5">
+                <span id="kpiConv4" class="conv-badge hidden"></span>
+            </div>
+        </div>
+
+    </div>
+
+    <!-- ═══ HEDEF ANALİZ PANELİ ═══ -->
+    <!-- Geçen dönem gizli holder (JS referansları için) -->
+    <div id="gecenAyBox" style="display:none;"><span id="gecenAyTutar"></span><span id="gecenAyTrend"></span></div>
+
+    <div class="fa-card mb-6 fade-up overflow-hidden" id="hedefPanel">
+        <!-- Başlık: Hedef Analizi + yüzde + bar yanyana -->
+        <div class="px-5 py-4" style="background: linear-gradient(135deg, #f8fafc 0%, #eef2ff 100%);">
+            <div class="flex items-center gap-2 mb-3">
+                <i class="bi bi-bullseye text-indigo-500" style="font-size:12px;"></i>
+                <span class="text-[13px] font-bold text-[#334155]">Hedef Analizi</span>
+                <span class="text-[9px] text-[#94a3b8] font-medium" id="hedefDonemLabel">Bu ay</span>
+            </div>
+            <div class="flex items-center gap-4">
+                <p id="hedefPctBig" class="text-[28px] font-extrabold leading-none tracking-tight" style="min-width:70px;">--</p>
+                <div class="flex-1">
+                    <div class="w-full h-3 rounded-full bg-white/80 overflow-hidden shadow-inner">
+                        <div id="hedefBarBig" class="h-full rounded-full transition-all" style="width:0%; transition-duration:1.5s;"></div>
+                    </div>
+                    <div class="flex justify-between mt-1">
+                        <span id="hedefGerceklesen" class="text-[9px] text-[#64748b] font-medium">--</span>
+                        <span id="hedefHedefTutar" class="text-[9px] text-[#64748b] font-medium">--</span>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Alt: 3 kolon -->
+        <div class="grid grid-cols-3 divide-x divide-[#f1f5f9]">
+            <!-- Aşama karşılaştırma -->
+            <div class="px-5 py-4">
+                <p class="text-[10px] font-bold text-[#94a3b8] mb-3">Aşama karşılaştırma</p>
+                <div class="space-y-2.5">
+                    <div class="flex items-center gap-3">
+                        <div class="w-1.5 h-8 rounded-full bg-[#8b5cf6]"></div>
+                        <div class="flex-1">
+                            <div class="flex items-center justify-between">
+                                <span class="text-[11px] font-medium text-[#334155]">Fırsat</span>
+                                <span id="hedefFirsatPct" class="text-[11px] font-bold">--</span>
+                            </div>
+                            <div id="firsatMiniBar" class="w-full h-1 rounded-full bg-[#f1f5f9] mt-1 overflow-hidden"><div class="h-full rounded-full bg-[#8b5cf6] transition-all" style="width:0%; transition-duration:1s;"></div></div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="w-1.5 h-8 rounded-full bg-[#3b82f6]"></div>
+                        <div class="flex-1">
+                            <div class="flex items-center justify-between">
+                                <span class="text-[11px] font-medium text-[#334155]">Teklif</span>
+                                <span id="hedefTeklifPct" class="text-[11px] font-bold">--</span>
+                            </div>
+                            <div id="teklifMiniBar" class="w-full h-1 rounded-full bg-[#f1f5f9] mt-1 overflow-hidden"><div class="h-full rounded-full bg-[#3b82f6] transition-all" style="width:0%; transition-duration:1s;"></div></div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="w-1.5 h-8 rounded-full bg-[#06b6d4]"></div>
+                        <div class="flex-1">
+                            <div class="flex items-center justify-between">
+                                <span class="text-[11px] font-medium text-[#334155]">Sipariş</span>
+                                <span id="hedefSiparisPct" class="text-[11px] font-bold">--</span>
+                            </div>
+                            <div id="siparisMiniBar" class="w-full h-1 rounded-full bg-[#f1f5f9] mt-1 overflow-hidden"><div class="h-full rounded-full bg-[#06b6d4] transition-all" style="width:0%; transition-duration:1s;"></div></div>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <div class="w-1.5 h-8 rounded-full bg-[#22d3a0]"></div>
+                        <div class="flex-1">
+                            <div class="flex items-center justify-between">
+                                <span class="text-[11px] font-medium text-[#334155]">Fatura</span>
+                                <span id="hedefFaturaPct" class="text-[11px] font-bold">--</span>
+                            </div>
+                            <div id="faturaMiniBar" class="w-full h-1 rounded-full bg-[#f1f5f9] mt-1 overflow-hidden"><div class="h-full rounded-full bg-[#22d3a0] transition-all" style="width:0%; transition-duration:1s;"></div></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Fırsat dönüşüm chart -->
+            <div class="px-5 py-4">
+                <p class="text-[10px] font-bold text-[#94a3b8] mb-3">Fırsat dönüşüm</p>
+                <div style="height:150px;">
+                    <canvas id="hedefChart"></canvas>
+                </div>
+            </div>
+
+            <!-- Potansiyel analizi -->
+            <div class="px-5 py-4">
+                <p class="text-[10px] font-bold text-[#94a3b8] mb-3">Potansiyel analizi</p>
+                <div class="space-y-2" id="potansiyelArea"></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ TWO COLUMN: PERFORMANCE + CHARTS ═══ -->
+    <div class="grid grid-cols-12 gap-5 mb-6">
+
+        <!-- LEFT: Ürün Bazlı + Satış Yöneticisi -->
+        <div class="col-span-7 space-y-5">
+            <!-- Ürün Bazlı -->
+            <div class="fa-card p-5">
+                <div class="flex items-center gap-2 mb-4">
+                    <div class="w-7 h-7 rounded-lg bg-emerald-50 flex items-center justify-center">
+                        <i class="bi bi-box-seam text-emerald-600" style="font-size:13px;"></i>
+                    </div>
+                    <h2 class="text-[13px] font-bold text-[#0f172a] tracking-tight">Ürün Bazlı</h2>
+                </div>
+                <div id="productBars" class="space-y-3 content-panel">
+                    <div class="sh w-full"></div><div class="sh w-3/4"></div><div class="sh w-1/2"></div>
+                </div>
+            </div>
+
+            <!-- Fırsat Sahibi Performans İzleme -->
+            <div class="fa-card p-5">
+                <div class="flex items-center justify-between mb-4">
+                    <div class="flex items-center gap-2">
+                        <div class="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center">
+                            <i class="bi bi-people text-indigo-600" style="font-size:13px;"></i>
+                        </div>
+                        <div>
+                            <h2 class="text-[13px] font-bold text-[#0f172a] tracking-tight">Fırsat Sahibi Performans İzleme</h2>
+                            <p class="text-[10px] text-[#94a3b8] mt-0.5">Canlı Performans Liderlik Tablosu</p>
+                        </div>
+                    </div>
+                </div>
+                <div id="ownerList" class="space-y-1 content-panel">
+                    <div class="sh w-full mb-2"></div><div class="sh w-4/5 mb-2"></div><div class="sh w-11/12"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- RIGHT: Müşteri Bazlı -->
+        <div class="col-span-5">
+            <div class="fa-card p-5">
+                <div class="flex items-center gap-2 mb-4">
+                    <div class="w-7 h-7 rounded-lg bg-violet-50 flex items-center justify-center">
+                        <i class="bi bi-building text-violet-600" style="font-size:13px;"></i>
+                    </div>
+                    <h2 class="text-[13px] font-bold text-[#0f172a] tracking-tight">Müşteri Bazlı</h2>
+                </div>
+                <div id="customerBars" class="space-y-3 content-panel">
+                    <div class="sh w-full"></div><div class="sh w-3/4"></div><div class="sh w-1/2"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- ═══ FIRSAT DETAY TABLOSU ═══ -->
+    <div class="fa-card p-5">
+        <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-2">
+                <div class="w-7 h-7 rounded-lg bg-slate-100 flex items-center justify-center">
+                    <i class="bi bi-table text-slate-600" style="font-size:13px;"></i>
+                </div>
+                <h2 class="text-[13px] font-bold text-[#0f172a] tracking-tight">Fırsat Detayları</h2>
+                <span id="activeFilterBadge" class="hidden ml-2"></span>
+            </div>
+            <div class="flex items-center gap-2">
+                <select id="oppOwnerFilter" class="text-[11px] border border-[#e2e8f0] rounded-lg px-3 py-1.5 text-[#475569] bg-white" style="font-family:'DM Sans',sans-serif;">
+                    <option value="">Tüm Temsilciler</option>
+                </select>
+                <select id="oppStageFilter" class="text-[11px] border border-[#e2e8f0] rounded-lg px-3 py-1.5 text-[#475569] bg-white" style="font-family:'DM Sans',sans-serif;">
+                    <option value="">Tüm Aşamalar</option>
+                    <option value="Won">Won</option>
+                    <option value="Lost">Lost</option>
+                    <option value="Position">Position</option>
+                    <option value="Proposal">Proposal</option>
+                    <option value="Negotiation">Negotiation</option>
+                </select>
+            </div>
+        </div>
+        <div class="overflow-y-auto" style="max-height:400px;">
+            <table class="w-full text-[11px]">
+                <thead>
+                    <tr class="border-b border-[#eef2f6]">
+                        <th class="text-left py-2.5 px-2 font-semibold text-[#94a3b8]" style="width:24%">Fırsat Adı</th>
+                        <th class="text-left py-2.5 px-2 font-semibold text-[#94a3b8]">Müşteri</th>
+                        <th class="text-left py-2.5 px-2 font-semibold text-[#94a3b8]">Aşama</th>
+                        <th class="text-left py-2.5 px-2 font-semibold text-[#94a3b8]">Temsilci</th>
+                        <th class="text-left py-2.5 px-2 font-semibold text-[#94a3b8]">Tip</th>
+                        <th class="text-right py-2.5 px-2 font-semibold text-[#94a3b8]">Tutar</th>
+                        <th class="text-center py-2.5 px-2 font-semibold text-[#94a3b8]">Kapanış tarihi</th>
+                        <th class="text-left py-2.5 px-2 font-semibold text-[#94a3b8]">Kaynak</th>
+                    </tr>
+                </thead>
+                <tbody id="oppDetailBody">
+                    <tr><td colspan="8" class="text-center py-6 text-[#94a3b8]">Yükleniyor...</td></tr>
+                </tbody>
+            </table>
+        </div>
+        <div id="oppPagination" class="flex items-center gap-2 mt-3 justify-end"></div>
+    </div>
+</div>
+
+@section Scripts {
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+<script>
+(function() {
+    'use strict';
+
+    /* ══════════════════════════════════
+       FORMATTERS
+       ══════════════════════════════════ */
+    var fmt = new Intl.NumberFormat('tr-TR', { maximumFractionDigits: 0 });
+    var fmtPct = new Intl.NumberFormat('tr-TR', { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+
+    function abbr(v) {
+        if (v == null) return '-- \u20BA';
+        if (v >= 1e9) return (v / 1e9).toFixed(1) + 'B \u20BA';
+        if (v >= 1e6) return (v / 1e6).toFixed(1) + 'M \u20BA';
+        if (v >= 1e3) return (v / 1e3).toFixed(0) + 'K \u20BA';
+        return fmt.format(v) + ' \u20BA';
+    }
+
+    /* ── CountUp Animation ── */
+    function countUp(el, target, duration, prefix, suffix) {
+        prefix = prefix || '';
+        suffix = suffix || '';
+        duration = duration || 800;
+        var start = performance.now();
+        function step(now) {
+            var elapsed = now - start;
+            var progress = Math.min(elapsed / duration, 1);
+            var eased = 1 - Math.pow(1 - progress, 3); // ease-out-cubic
+            var current = target * eased;
+            el.textContent = prefix + abbr(Math.round(current));
+            if (progress < 1) requestAnimationFrame(step);
+            else {
+                el.textContent = prefix + abbr(target);
+                el.classList.add('num-pulse');
+                setTimeout(function() { el.classList.remove('num-pulse'); }, 400);
+            }
+        }
+        requestAnimationFrame(step);
+    }
+
+    function countUpInt(el, target, duration) {
+        duration = duration || 600;
+        var start = performance.now();
+        function step(now) {
+            var elapsed = now - start;
+            var progress = Math.min(elapsed / duration, 1);
+            var eased = 1 - Math.pow(1 - progress, 3);
+            el.textContent = fmt.format(Math.round(target * eased));
+            if (progress < 1) requestAnimationFrame(step);
+            else {
+                el.textContent = fmt.format(target);
+                el.classList.add('num-pulse');
+                setTimeout(function() { el.classList.remove('num-pulse'); }, 400);
+            }
+        }
+        requestAnimationFrame(step);
+    }
+
+    /* ══════════════════════════════════
+       STATE
+       ══════════════════════════════════ */
+    var activeFilter = 'month';
+    var activeFunnel = 0; // 0 = none selected, 1-5 = funnel index
+    var oppOwnerVal = '';
+    var activeProductFilter = '';
+    var activeCustomerFilter = '';
+
+    // Ürün/Müşteri tıklama filtreleri
+    window._filterByProduct = function(urun) {
+        urun = decodeURIComponent(urun);
+        if (activeProductFilter === urun) { activeProductFilter = ''; } else { activeProductFilter = urun; activeCustomerFilter = ''; }
+        loadOppDetail(1);
+    };
+    window._filterByCustomer = function(musteri) {
+        musteri = decodeURIComponent(musteri);
+        if (activeCustomerFilter === musteri) { activeCustomerFilter = ''; } else { activeCustomerFilter = musteri; activeProductFilter = ''; }
+        loadOppDetail(1);
+    };
+
+    function getFilterParams() {
+        return 'filter=' + encodeURIComponent(activeFilter);
+    }
+
+    function donemLabel() {
+        switch (activeFilter) {
+            case 'week': return 'Bu Hafta';
+            case 'ytd':  return 'YTD';
+            case 'all':  return 'Tüm Dönem';
+            default:     return 'Bu Ay';
+        }
+    }
+
+    /* ══════════════════════════════════
+       AVATAR HELPERS
+       ══════════════════════════════════ */
+    var avatarColors = ['#6366f1','#ec4899','#f59e0b','#10b981','#3b82f6','#8b5cf6','#ef4444','#06b6d4','#f97316','#84cc16'];
+
+    function initials(name) {
+        if (!name) return '??';
+        var parts = name.trim().split(' ');
+        if (parts.length >= 2) return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+        return name.substring(0, 2).toUpperCase();
+    }
+
+    function medalHtml(rank) {
+        if (rank === 1) return '<span class="medal">\uD83E\uDD47</span>';
+        if (rank === 2) return '<span class="medal">\uD83E\uDD48</span>';
+        if (rank === 3) return '<span class="medal">\uD83E\uDD49</span>';
+        return '<span class="medal text-[12px] text-[#94a3b8] font-semibold">#' + rank + '</span>';
+    }
+
+    /* ══════════════════════════════════
+       FUNNEL CARD CLICK
+       ══════════════════════════════════ */
+    // Funnel kart tıklama — tek handler
+    var _funnelLoading = false;
+    window._clickFunnel = function(idx) {
+        if (_funnelLoading) return; // Çift tıklama engeli
+        var cards = document.querySelectorAll(".funnel-card");
+        if (activeFunnel === idx) {
+            activeFunnel = 0;
+            cards.forEach(function(c) { c.classList.remove("active-card","dimmed"); });
+        } else {
+            activeFunnel = idx;
+            cards.forEach(function(c) {
+                var ci = parseInt(c.dataset.funnel);
+                if (ci === idx) { c.classList.add("active-card"); c.classList.remove("dimmed"); }
+                else { c.classList.remove("active-card"); c.classList.add("dimmed"); }
+            });
+        }
+        _funnelLoading = true;
+        refreshLowerSections().then(function() { _funnelLoading = false; });
+    };
+
+    /* ══════════════════════════════════
+       LOAD ALL
+       ══════════════════════════════════ */
+    async function refreshAll() {
+        await Promise.all([
+            loadKpis(),
+            loadFunnelBreakdown(activeFunnel > 0 ? activeFunnel : 2),
+            loadOppDetail(1),
+            loadOwnerOptions()
+        ]);
+    }
+
+    async function refreshLowerSections() {
+        // Her zaman funnel breakdown kullan — varsayılan funnel=2 (dönem fırsatları)
+        var funnel = activeFunnel > 0 ? activeFunnel : 2;
+        await Promise.all([
+            loadFunnelBreakdown(funnel),
+            loadOppDetail(1)
+        ]);
+    }
+
+    // iOS-like fade transition
+    function fadeOut(el) { el.classList.add('fading'); }
+    function fadeIn(el) { el.classList.remove('fading'); }
+
+    async function loadFunnelBreakdown(funnel) {
+        try {
+            // Fade out all panels
+            var panels = document.querySelectorAll('.content-panel');
+            panels.forEach(fadeOut);
+
+            var data = await fetch('/FirsatAnaliz/GetFunnelBreakdown?' + getFilterParams() + '&funnel=' + funnel).then(function(r) { return r.json(); });
+
+            // Small delay for smooth transition
+            await new Promise(function(r) { setTimeout(r, 250); });
+
+            // Owner/Müşteri listesi güncelle
+            var ownerEl = document.getElementById('ownerList');
+            if (data.ownerBreakdown && data.ownerBreakdown.length) {
+                var h = '';
+                data.ownerBreakdown.forEach(function(o, i) {
+                    var clr = avatarColors[i % avatarColors.length];
+                    h += '<div class="flex items-center gap-3 py-2.5 px-2 rounded-lg hover:bg-[#f8fafc] transition-colors">';
+                    h += medalHtml(i + 1);
+                    h += '<div class="avatar" style="background:'+clr+';">'+initials(o.adSoyad)+'</div>';
+                    h += '<div class="flex-1 min-w-0">';
+                    h += '<p class="text-[12px] font-semibold text-[#0f172a] truncate">'+o.adSoyad+'</p>';
+                    h += '<p class="text-[10px] text-[#94a3b8]">'+o.adet+' adet</p>';
+                    h += '</div>';
+                    h += '<div class="text-right">';
+                    h += '<p class="text-[13px] font-bold text-[#0f172a]">'+abbr(o.tutar)+'</p>';
+                    h += '</div></div>';
+                    if (i < data.ownerBreakdown.length - 1) h += '<div class="divider"></div>';
+                });
+                ownerEl.innerHTML = h;
+            } else ownerEl.innerHTML = '<p class="text-[11px] text-[#94a3b8] text-center py-6">Veri Bulunamadı</p>';
+
+            // Ürün dağılımı
+            var prodEl = document.getElementById('productBars');
+            if (data.productBreakdown && data.productBreakdown.length) {
+                var max = Math.max.apply(null, data.productBreakdown.map(function(p) { return p.tutar; })) || 1;
+                var ph = '';
+                data.productBreakdown.forEach(function(p) {
+                    var pct = Math.max((p.tutar / max) * 100, 3);
+                    ph += '<div class="cursor-pointer hover:bg-emerald-50/50 rounded-lg px-1 py-0.5 -mx-1 transition-colors" onclick="window._filterByProduct(\''+encodeURIComponent(p.urun)+'\')">';
+                    ph += '<div class="flex items-center justify-between mb-1">';
+                    ph += '<span class="text-[11px] font-semibold text-[#334155]">'+p.urun+'</span>';
+                    ph += '<span class="text-[11px] font-bold text-[#0f172a]">'+abbr(p.tutar)+'</span>';
+                    ph += '</div>';
+                    ph += '<div class="pbar-track"><div class="pbar-fill" style="width:'+pct+'%; background: linear-gradient(90deg, #10b981, #34d399);"></div></div>';
+                    ph += '</div>';
+                });
+                prodEl.innerHTML = ph;
+            } else prodEl.innerHTML = '<p class="text-[11px] text-[#94a3b8] text-center py-4">Veri Bulunamadı</p>';
+
+            // Müşteri dağılımı
+            var custEl = document.getElementById('customerBars');
+            if (data.customerBreakdown && data.customerBreakdown.length) {
+                var cmax = Math.max.apply(null, data.customerBreakdown.map(function(c) { return c.tutar; })) || 1;
+                var ch = '';
+                data.customerBreakdown.forEach(function(c) {
+                    var cpct = Math.max((c.tutar / cmax) * 100, 3);
+                    ch += '<div class="cursor-pointer hover:bg-violet-50/50 rounded-lg px-1 py-0.5 -mx-1 transition-colors" onclick="window._filterByCustomer(\''+encodeURIComponent(c.musteri)+'\')">';
+                    ch += '<div class="flex items-center justify-between mb-1">';
+                    ch += '<span class="text-[11px] font-semibold text-[#334155] truncate max-w-[200px]">'+(c.musteri||'--')+'</span>';
+                    ch += '<span class="text-[11px] font-bold text-[#0f172a]">'+abbr(c.tutar)+'</span>';
+                    ch += '</div>';
+                    ch += '<div class="pbar-track"><div class="pbar-fill" style="width:'+cpct+'%; background: linear-gradient(90deg, #8b5cf6, #a78bfa);"></div></div>';
+                    ch += '</div>';
+                });
+                custEl.innerHTML = ch;
+            } else custEl.innerHTML = '';
+
+            // Fade in all panels
+            var panels = document.querySelectorAll('.content-panel');
+            panels.forEach(fadeIn);
+
+        } catch(e) {
+            console.error('FunnelBreakdown error:', e);
+            document.querySelectorAll('.content-panel').forEach(fadeIn);
+        }
+
+        // Detay tablosu da güncelle
+        loadOppDetail(1);
+    }
+
+    /* ══════════════════════════════════
+       KPI CARDS
+       ══════════════════════════════════ */
+    async function loadKpis() {
+        try {
+            var opp = await fetch('/FirsatAnaliz/GetOpportunitySummary?' + getFilterParams()).then(function(r) { return r.json(); });
+            var lbl = donemLabel();
+
+            // Update period labels
+            document.getElementById('kpiLabel2').textContent = lbl + ' Fırsat Potansiyeli';
+            document.getElementById('kpiLabel3').textContent = lbl + ' Teklif';
+            document.getElementById('kpiLabel4').textContent = lbl + ' Sipariş';
+            document.getElementById('kpiLabel5').textContent = lbl + ' Satış Faturası';
+
+            // Card 1: Tüm Fırsatlar — CountUp animasyonlu
+            countUp(document.getElementById('kpiVal1'), opp.tumFirsatTutar, 1200);
+            document.getElementById('kpiSub1').textContent = opp.tumFirsatAdet + ' fırsat · Tüm zamanlar havuzu';
+            var noteEl = document.getElementById('kpiNote1');
+            var noteText = document.getElementById('kpiNoteText1');
+            if (opp.firsatsizTeklifAdet > 0) {
+                noteText.textContent = opp.firsatsizTeklifAdet + ' teklif (' + abbr(opp.firsatsizTeklifTutar) + ') doğrudan tekliften geldi';
+                noteEl.classList.remove('hidden');
+            } else {
+                noteEl.classList.add('hidden');
+            }
+
+            // Card 2: Dönem Fırsat Potansiyeli — CountUp
+            countUp(document.getElementById('kpiVal2'), opp.toplamTutar, 1000);
+            document.getElementById('kpiSub2a').textContent = opp.toplam + ' fırsat · ' + opp.aktif + ' açık · ' + opp.won + ' won · ' + opp.lost + ' lost';
+            document.getElementById('kpiSub2').textContent = 'Kazanma: %' + fmtPct.format(opp.kazanmaOrani);
+            var cv1 = document.getElementById('kpiConv1');
+            if (opp.tumFirsatAdet > 0 && opp.toplam > 0) {
+                cv1.textContent = '%' + fmtPct.format(opp.toplam / opp.tumFirsatAdet * 100) + ' dönem';
+                cv1.classList.remove('hidden');
+            }
+
+            // Card 3: Dönem Teklif — CountUp
+            countUp(document.getElementById('kpiVal3'), opp.teklifTutar, 900);
+            document.getElementById('kpiSub3').textContent = opp.teklifToplam + ' teklif';
+            var cv2 = document.getElementById('kpiConv2');
+            if (opp.toplam > 0) {
+                cv2.textContent = '\u2192 Fırsattan: %' + fmtPct.format(opp.teklifToplam / opp.toplam * 100);
+                cv2.classList.remove('hidden');
+            }
+
+            // Card 4: Dönem Sipariş — CountUp
+            countUp(document.getElementById('kpiVal4'), opp.toplamSiparisTutar, 800);
+            document.getElementById('kpiSub4').textContent = opp.toplamSiparisAdet + ' sipariş · ' + opp.acikSiparisAdet + ' açık';
+            var cv3 = document.getElementById('kpiConv3');
+            if (opp.teklifToplam > 0) {
+                cv3.textContent = '\u2192 Tekliften: %' + fmtPct.format(opp.toplamSiparisAdet / opp.teklifToplam * 100);
+                cv3.classList.remove('hidden');
+            }
+
+            // Card 5: Dönem Satış Faturası — CountUp
+            countUp(document.getElementById('kpiVal5'), opp.kapaliSiparisTutar, 700);
+            document.getElementById('kpiSub5').textContent = opp.kapaliSiparisAdet + ' faturalanan sipariş';
+            var cv4 = document.getElementById('kpiConv4');
+            if (opp.toplamSiparisAdet > 0) {
+                cv4.textContent = '\u2713 Siparişten: %' + fmtPct.format(opp.kapaliSiparisAdet / opp.toplamSiparisAdet * 100);
+                cv4.classList.remove('hidden');
+            }
+
+            // ── HEDEF KARŞILAŞTIRMA + ALARM + RENK KODLARI ──
+            var hedef = opp.hedefTutar || 0;
+            if (hedef > 0) {
+                var risks = [];
+
+                // Her kart için hedef % hesapla ve renk kodla
+                var kartlar = [
+                    { idx: 2, val: opp.toplamTutar, label: 'Fırsat potansiyeli' },
+                    { idx: 3, val: opp.teklifTutar, label: 'Teklif' },
+                    { idx: 4, val: opp.toplamSiparisTutar, label: 'Sipariş' },
+                    { idx: 5, val: opp.kapaliSiparisTutar, label: 'Satış faturası' }
+                ];
+
+                kartlar.forEach(function(k) {
+                    var pct = (k.val / hedef) * 100;
+                    var card = document.querySelector('[data-funnel="' + k.idx + '"]');
+                    if (!card) return;
+
+                    // Eski renk class'larını temizle
+                    card.classList.remove('kpi-border-green','kpi-border-amber','kpi-border-red');
+
+                    var colorClass, dotClass, chipBg, chipText;
+                    if (pct >= 100) {
+                        colorClass = 'kpi-border-green'; dotClass = 'kpi-status-green';
+                        chipBg = 'bg-emerald-50'; chipText = 'text-emerald-700';
+                    } else if (pct >= 85) {
+                        colorClass = 'kpi-border-amber'; dotClass = 'kpi-status-amber';
+                        chipBg = 'bg-amber-50'; chipText = 'text-amber-700';
+                    } else {
+                        colorClass = 'kpi-border-red'; dotClass = 'kpi-status-red';
+                        chipBg = 'bg-red-50'; chipText = 'text-red-600';
+                    }
+                    card.classList.add(colorClass);
+                });
+
+                // Müşteri konsantrasyonu kontrolü — tek müşteri %20'den fazla mı?
+                // (customerBreakdown funnel'dan gelecek, burada basit kontrol)
+
+                // ── HEDEF ANALİZ PANELİ ──
+                var faturaPct = (opp.kapaliSiparisTutar / hedef) * 100;
+
+                // Büyük yüzde
+                document.getElementById('hedefPctBig').textContent = '%' + fmtPct.format(faturaPct);
+                document.getElementById('hedefPctBig').style.color = faturaPct >= 100 ? '#22d3a0' : faturaPct >= 85 ? '#f59e0b' : '#f87171';
+
+                // Progress bar
+                var barBig = document.getElementById('hedefBarBig');
+                setTimeout(function() {
+                    barBig.style.width = Math.min(faturaPct, 100) + '%';
+                    barBig.style.background = faturaPct >= 100 ? '#22d3a0' : faturaPct >= 85 ? '#f59e0b' : '#f87171';
+                }, 200);
+                document.getElementById('hedefGerceklesen').textContent = abbr(opp.kapaliSiparisTutar) + ' gerçekleşen';
+                document.getElementById('hedefHedefTutar').textContent = abbr(hedef) + ' hedef';
+
+                // Geçen dönem karşılaştırma
+                var gecenBox = document.getElementById('gecenAyBox');
+                if (opp.gecenDonemFatura != null) {
+                    document.getElementById('gecenAyTutar').textContent = abbr(opp.gecenDonemFatura);
+                    var trendEl = document.getElementById('gecenAyTrend');
+                    if (opp.gecenDonemFatura > 0 && opp.kapaliSiparisTutar > 0) {
+                        var trendPct = ((opp.kapaliSiparisTutar - opp.gecenDonemFatura) / opp.gecenDonemFatura * 100);
+                        trendEl.innerHTML = '<span class="' + (trendPct >= 0 ? 'text-emerald-600' : 'text-red-500') + '">' + (trendPct >= 0 ? '↑' : '↓') + ' %' + fmtPct.format(Math.abs(trendPct)) + '</span>';
+                    } else {
+                        trendEl.textContent = '';
+                    }
+                    // gecenBox kaldırıldı — gösterilmiyor
+                }
+                document.getElementById('hedefDonemLabel').textContent = lbl + ' hedef analizi';
+
+                // Aşama detayları
+                function pctColor(v) { return v >= 100 ? 'text-emerald-600' : v >= 85 ? 'text-amber-600' : 'text-red-500'; }
+                var fp = opp.toplamTutar/hedef*100, tp = opp.teklifTutar/hedef*100, sp = opp.toplamSiparisTutar/hedef*100, fap = faturaPct;
+                document.getElementById('hedefFirsatPct').innerHTML = abbr(opp.toplamTutar) + ' <span class="' + pctColor(fp) + '">%' + fmtPct.format(fp) + '</span>';
+                document.getElementById('hedefTeklifPct').innerHTML = abbr(opp.teklifTutar) + ' <span class="' + pctColor(tp) + '">%' + fmtPct.format(tp) + '</span>';
+                document.getElementById('hedefSiparisPct').innerHTML = abbr(opp.toplamSiparisTutar) + ' <span class="' + pctColor(sp) + '">%' + fmtPct.format(sp) + '</span>';
+                document.getElementById('hedefFaturaPct').innerHTML = abbr(opp.kapaliSiparisTutar) + ' <span class="' + pctColor(fap) + '">%' + fmtPct.format(fap) + '</span>';
+
+                // Mini bar animasyonları
+                setTimeout(function() {
+                    var mb = function(id, pct) { var el = document.querySelector('#' + id + ' div'); if (el) el.style.width = Math.min(pct, 100) + '%'; };
+                    mb('firsatMiniBar', fp); mb('teklifMiniBar', tp); mb('siparisMiniBar', sp); mb('faturaMiniBar', fap);
+                }, 300);
+
+                // Huni chart
+                renderHedefChart(hedef, opp);
+
+                // Potansiyel analizi
+                var potArea = document.getElementById('potansiyelArea');
+                var teklifPotansiyel = opp.agirlikliPotansiyel || 0;
+                var toplamPotansiyel = opp.kapaliSiparisTutar + opp.toplamSiparisTutar + teklifPotansiyel;
+                var potPct = (toplamPotansiyel / hedef) * 100;
+                var ortOlasilik = opp.ortOlasilik || 0;
+
+                var ph = '';
+                // Teklif potansiyeli
+                ph += '<div class="px-3 py-2.5 rounded-lg bg-violet-50/50 border border-violet-100">';
+                ph += '<p class="text-[10px] font-bold text-violet-700">Teklif potansiyeli</p>';
+                ph += '<p class="text-[18px] font-extrabold text-violet-700">' + abbr(teklifPotansiyel) + '</p>';
+                ph += '<p class="text-[9px] text-violet-600">Teklife dönüşen fırsatların olasılıklarıyla ağırlıklı (ort. %' + fmtPct.format(ortOlasilik) + ')</p>';
+                ph += '</div>';
+                // Tahmini hedef gerçekleşme
+                var potClr = potPct >= 100 ? 'bg-emerald-50 border-emerald-200' : potPct >= 85 ? 'bg-amber-50 border-amber-200' : 'bg-red-50 border-red-200';
+                ph += '<div class="px-3 py-2.5 rounded-lg ' + potClr + ' border">';
+                ph += '<p class="text-[10px] font-bold ' + pctColor(potPct) + '">Tahmini hedef gerçekleşme</p>';
+                ph += '<p class="text-[22px] font-extrabold ' + pctColor(potPct) + '">%' + fmtPct.format(potPct) + '</p>';
+                ph += '<p class="text-[9px] text-[#64748b] mt-1"><b>Faturalanan</b> (' + abbr(opp.kapaliSiparisTutar) + ') + <b>Açık Sipariş</b> (' + abbr(opp.toplamSiparisTutar) + ') + <b>Teklif Potansiyeli</b> (' + abbr(teklifPotansiyel) + ') = ' + abbr(toplamPotansiyel) + '</p>';
+                ph += '<p class="text-[9px] text-[#94a3b8] mt-0.5">Toplamın aylık hedefe (' + abbr(hedef) + ') oranı</p>';
+                ph += '</div>';
+                potArea.innerHTML = ph;
+            }
+
+        } catch (e) { console.error('KPI error:', e); }
+    }
+
+    /* ══════════════════════════════════
+       PARETO CHART (Ürün Bazlı)
+       ══════════════════════════════════ */
+    var paretoInstance = null;
+    function renderParetoChart(items) {
+        var cv = document.getElementById('paretoChart');
+        if (!cv) return;
+        if (paretoInstance) paretoInstance.destroy();
+
+        if (!items || !items.length) {
+            cv.parentElement.innerHTML = '<p class="text-[11px] text-[#94a3b8] text-center py-8">Veri Bulunamadı</p>';
+            return;
+        }
+
+        // Kümülatif % hesapla
+        var toplam = items.reduce(function(s, p) { return s + p.tutar; }, 0) || 1;
+        var kumulatif = 0;
+        var cumPcts = items.map(function(p) { kumulatif += p.tutar; return Math.round(kumulatif / toplam * 100); });
+
+        // %80 eşik çizgisi için index bul
+        var esikIdx = cumPcts.findIndex(function(c) { return c >= 80; });
+
+        // Bar renkleri — %80 altı yeşil, üstü soluk
+        var barColors = items.map(function(p, i) {
+            return cumPcts[i] <= 80 || i === esikIdx ? '#10b981' : '#cbd5e1';
+        });
+
+        paretoInstance = new Chart(cv, {
+            type: 'bar',
+            data: {
+                labels: items.map(function(p) { return p.urun; }),
+                datasets: [{
+                    type: 'bar',
+                    data: items.map(function(p) { return p.tutar; }),
+                    backgroundColor: barColors,
+                    borderRadius: 4,
+                    barThickness: 28,
+                    yAxisID: 'y',
+                    order: 2
+                }, {
+                    type: 'line',
+                    data: cumPcts,
+                    borderColor: '#6366f1',
+                    borderWidth: 2,
+                    pointBackgroundColor: '#6366f1',
+                    pointRadius: 3,
+                    pointHoverRadius: 5,
+                    tension: 0.3,
+                    fill: false,
+                    yAxisID: 'y1',
+                    order: 1
+                }]
+            },
+            plugins: [{
+                id: 'paretoLine80',
+                afterDraw: function(chart) {
+                    var y1 = chart.scales.y1;
+                    if (!y1) return;
+                    var yPos = y1.getPixelForValue(80);
+                    var ctx = chart.ctx;
+                    ctx.save();
+                    ctx.strokeStyle = '#f87171';
+                    ctx.lineWidth = 1;
+                    ctx.setLineDash([4, 3]);
+                    ctx.beginPath();
+                    ctx.moveTo(chart.chartArea.left, yPos);
+                    ctx.lineTo(chart.chartArea.right, yPos);
+                    ctx.stroke();
+                    // Label
+                    ctx.fillStyle = '#f87171';
+                    ctx.font = '600 9px DM Sans';
+                    ctx.textAlign = 'right';
+                    ctx.fillText('%80 eşik', chart.chartArea.right, yPos - 4);
+                    ctx.restore();
+                }
+            }],
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: { duration: 600 },
+                onClick: function(evt, elements) {
+                    if (elements.length > 0 && elements[0].datasetIndex === 0) {
+                        var idx = elements[0].index;
+                        window._filterByProduct(encodeURIComponent(items[idx].urun));
+                    }
+                },
+                plugins: {
+                    legend: { display: false },
+                    tooltip: {
+                        backgroundColor: 'rgba(15,23,42,0.9)',
+                        titleFont: { family: 'DM Sans', size: 11 },
+                        bodyFont: { family: 'DM Sans', size: 11 },
+                        padding: 10, cornerRadius: 8,
+                        callbacks: {
+                            label: function(ctx) {
+                                if (ctx.datasetIndex === 0) return abbr(ctx.raw);
+                                return 'Kümülatif: %' + ctx.raw;
+                            }
+                        }
+                    }
+                },
+                scales: {
+                    x: { grid: { display: false }, ticks: { font: { family: 'DM Sans', size: 9 }, color: '#64748b', maxRotation: 45 } },
+                    y: {
+                        position: 'left',
+                        grid: { color: 'rgba(0,0,0,0.03)', borderDash: [2,2] },
+                        border: { display: false },
+                        ticks: { font: { family: 'DM Sans', size: 9 }, color: '#94a3b8',
+                            callback: function(v) { return v >= 1e6 ? (v/1e6).toFixed(0) + 'M' : v >= 1e3 ? (v/1e3).toFixed(0) + 'K' : v; }
+                        }
+                    },
+                    y1: {
+                        position: 'right',
+                        min: 0, max: 100,
+                        grid: { display: false },
+                        border: { display: false },
+                        ticks: { font: { family: 'DM Sans', size: 9 }, color: '#a5b4fc',
+                            callback: function(v) { return '%' + v; },
+                            stepSize: 20
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    /* ══════════════════════════════════
+       HEDEF CHART
+       ══════════════════════════════════ */
+    // Hedef çizgisi plugin (annotation plugin gerekmez)
+    var _hedefLineValue = 0;
+    var hedefLinePlugin = {
+        id: 'hedefLine',
+        afterDraw: function(chart) {
+            var hedefVal = _hedefLineValue;
+            if (!hedefVal || hedefVal <= 0) return;
+            var yScale = chart.scales.y;
+            var y = yScale.getPixelForValue(hedefVal);
+            if (y < yScale.top || y > yScale.bottom) return;
+            var ctx = chart.ctx;
+            ctx.save();
+            ctx.beginPath();
+            ctx.setLineDash([5, 3]);
+            ctx.strokeStyle = '#ef4444';
+            ctx.lineWidth = 1.5;
+            ctx.moveTo(chart.chartArea.left, y);
+            ctx.lineTo(chart.chartArea.right, y);
+            ctx.stroke();
+            // Label
+            ctx.fillStyle = '#ef4444';
+            ctx.font = '600 9px DM Sans, sans-serif';
+            ctx.textAlign = 'right';
+            ctx.fillText('Hedef: ' + (hedefVal >= 1e6 ? (hedefVal/1e6).toFixed(0)+'M' : hedefVal >= 1e3 ? (hedefVal/1e3).toFixed(0)+'K' : hedefVal), chart.chartArea.right, y - 4);
+            ctx.restore();
+        }
+    };
+
+    var hedefChartInstance = null;
+    function renderHedefChart(hedef, opp) {
+        var cv = document.getElementById('hedefChart');
+        if (!cv || !cv.getContext) return;
+        if (hedefChartInstance) hedefChartInstance.destroy();
+        var stages = [
+            { label: 'Fırsat', value: opp.toplamTutar, color: '#8b5cf6' },
+            { label: 'Teklif', value: opp.teklifTutar, color: '#3b82f6' },
+            { label: 'Sipariş', value: opp.toplamSiparisTutar, color: '#06b6d4' },
+            { label: 'Fatura', value: opp.kapaliSiparisTutar, color: '#10b981' }
+        ];
+        var cfg = {
+            type: 'bar',
+            data: {
+                labels: stages.map(function(s) { return s.label; }),
+                datasets: [{
+                    data: stages.map(function(s) { return s.value; }),
+                    backgroundColor: stages.map(function(s) { return s.color; }),
+                    borderRadius: 6, barThickness: 32
+                }]
+            },
+            options: {
+                responsive: true, maintainAspectRatio: false,
+                animation: { duration: 800, easing: 'easeOutQuart' },
+                plugins: { legend: { display: false }, tooltip: { callbacks: { label: function(c) { return abbr(c.raw); } } } },
+                scales: {
+                    x: { grid: { display: false }, border: { display: false }, ticks: { font: { family: 'DM Sans', size: 10 }, color: '#64748b' } },
+                    y: { grid: { color: 'rgba(0,0,0,0.04)', drawBorder: false }, border: { display: false }, ticks: { font: { size: 9 }, color: '#94a3b8', callback: function(v) { return v >= 1e6 ? (v/1e6).toFixed(0)+'M' : v >= 1e3 ? (v/1e3).toFixed(0)+'K' : v; } } }
+                }
+            },
+            plugins: [hedefLinePlugin]
+        };
+        _hedefLineValue = hedef;
+        hedefChartInstance = new Chart(cv, cfg);
+    }
+
+    /* ══════════════════════════════════
+       OWNER PERFORMANCE
+       ══════════════════════════════════ */
+    async function loadOwnerPerformance() {
+        try {
+            var data = await fetch('/FirsatAnaliz/GetOwnerPerformance?' + getFilterParams()).then(function(r) { return r.json(); });
+            var el = document.getElementById('ownerList');
+            if (!data || !data.length) {
+                el.innerHTML = '<p class="text-[11px] text-[#94a3b8] text-center py-6">Veri Bulunamadı</p>';
+                return;
+            }
+
+            var h = '';
+            data.slice(0, 12).forEach(function(o, i) {
+                var clr = avatarColors[i % avatarColors.length];
+                var wrClass = o.kazanmaOrani >= 80 ? 'text-emerald-600' : o.kazanmaOrani >= 50 ? 'text-amber-600' : 'text-red-500';
+                h += '<div class="flex items-center gap-3 py-2.5 px-2 rounded-lg hover:bg-[#f8fafc] transition-colors">';
+                h += medalHtml(i + 1);
+                h += '<div class="avatar-circle" style="background:' + clr + ';">' + initials(o.adSoyad) + '</div>';
+                h += '<div class="flex-1 min-w-0">';
+                h += '<p class="text-[12px] font-semibold text-[#0f172a] truncate">' + o.adSoyad + '</p>';
+                h += '<div class="flex items-center gap-2 mt-1">';
+                h += '<span class="text-[10px] text-[#94a3b8]">' + o.won + ' won / ' + o.toplam + ' toplam</span>';
+                h += '<span class="text-[10px] font-bold ' + wrClass + '">%' + fmtPct.format(o.kazanmaOrani) + '</span>';
+                h += '</div></div>';
+                h += '<div class="text-right">';
+                h += '<p class="text-[13px] font-bold text-[#0f172a]">' + abbr(o.wonTutar) + '</p>';
+                h += '<p class="text-[9px] text-[#94a3b8] font-medium">Kazanilan</p>';
+                h += '</div>';
+                h += '</div>';
+                if (i < data.length - 1 && i < 11) h += '<div class="divider"></div>';
+            });
+            el.innerHTML = h;
+        } catch (e) { console.error('Owner error:', e); }
+    }
+
+    /* ══════════════════════════════════
+       PRODUCTS
+       ══════════════════════════════════ */
+    async function loadProducts() {
+        try {
+            var data = await fetch('/FirsatAnaliz/GetProductPerformance?' + getFilterParams()).then(function(r) { return r.json(); });
+            var el = document.getElementById('productBars');
+            if (!data || !data.length) {
+                el.innerHTML = '<p class="text-[11px] text-[#94a3b8] text-center py-4">Veri Bulunamadı</p>';
+                return;
+            }
+
+            var max = Math.max.apply(null, data.map(function(d) { return d.teklifTutar; })) || 1;
+            var h = '';
+            data.slice(0, 8).forEach(function(p) {
+                var pct = Math.max((p.teklifTutar / max) * 100, 3);
+                h += '<div>';
+                h += '<div class="flex items-center justify-between mb-1">';
+                h += '<span class="text-[11px] font-semibold text-[#334155]">' + (p.urunGrubu || '--') + '</span>';
+                h += '<span class="text-[11px] font-bold text-[#0f172a]">' + abbr(p.teklifTutar) + '</span>';
+                h += '</div>';
+                h += '<div class="pbar-track"><div class="pbar-fill" style="width:' + pct + '%; background: linear-gradient(90deg, #10b981, #34d399);"></div></div>';
+                h += '</div>';
+            });
+            el.innerHTML = h;
+        } catch (e) { console.error('Product error:', e); }
+    }
+
+    /* ══════════════════════════════════
+       CUSTOMERS
+       ══════════════════════════════════ */
+    async function loadCustomers() {
+        try {
+            var data = await fetch('/FirsatAnaliz/GetChartData?chartType=customer&' + getFilterParams()).then(function(r) { return r.json(); });
+            var el = document.getElementById('customerBars');
+            if (!data || !data.labels || !data.labels.length) {
+                el.innerHTML = '<p class="text-[11px] text-[#94a3b8] text-center py-4">Veri Bulunamadı</p>';
+                return;
+            }
+
+            var vals = data.datasets[0].data;
+            var max = Math.max.apply(null, vals) || 1;
+            var h = '';
+            data.labels.slice(0, 7).forEach(function(lbl, i) {
+                var val = vals[i] || 0;
+                var pct = Math.max((val / max) * 100, 3);
+                h += '<div>';
+                h += '<div class="flex items-center justify-between mb-1">';
+                h += '<span class="text-[11px] font-semibold text-[#334155] truncate max-w-[200px]">' + (lbl || '--') + '</span>';
+                h += '<span class="text-[11px] font-bold text-[#0f172a]">' + abbr(val) + '</span>';
+                h += '</div>';
+                h += '<div class="pbar-track"><div class="pbar-fill" style="width:' + pct + '%; background: linear-gradient(90deg, #8b5cf6, #a78bfa);"></div></div>';
+                h += '</div>';
+            });
+            el.innerHTML = h;
+        } catch (e) { console.error('Customer error:', e); }
+    }
+
+    /* ══════════════════════════════════
+       OWNER FILTER OPTIONS
+       ══════════════════════════════════ */
+    async function loadOwnerOptions() {
+        try {
+            var data = await fetch('/FirsatAnaliz/GetOwnerFilterOptions').then(function(r) { return r.json(); });
+            var sel = document.getElementById('oppOwnerFilter');
+            sel.innerHTML = '<option value="">Tüm Temsilciler</option>';
+            data.forEach(function(o) {
+                sel.innerHTML += '<option value="' + o.ownerId + '">' + o.adSoyad + ' (' + o.adet + ')</option>';
+            });
+        } catch (e) { console.error('Owner options error:', e); }
+    }
+
+    /* ══════════════════════════════════
+       OPPORTUNITY DETAIL TABLE
+       ══════════════════════════════════ */
+    async function loadOppDetail(page) {
+        var params = getFilterParams() + '&page=' + page + '&pageSize=15';
+        if (oppOwnerVal) params += '&owner=' + encodeURIComponent(oppOwnerVal);
+        var sf = document.getElementById('oppStageFilter');
+        if (sf && sf.value) params += '&stage=' + encodeURIComponent(sf.value);
+        if (activeCustomerFilter) params += '&customer=' + encodeURIComponent(activeCustomerFilter);
+        if (activeProductFilter) params += '&product=' + encodeURIComponent(activeProductFilter);
+
+        // Aktif filtre badge
+        var filterBadge = document.getElementById('activeFilterBadge');
+        if (activeProductFilter) {
+            filterBadge.innerHTML = '<span class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-emerald-50 text-emerald-700 text-[10px] font-semibold">Ürün: '+activeProductFilter+' <button onclick="window._filterByProduct(\''+encodeURIComponent(activeProductFilter)+'\')" class="ml-1 text-emerald-400 hover:text-emerald-700">&times;</button></span>';
+            filterBadge.classList.remove('hidden');
+        } else if (activeCustomerFilter) {
+            filterBadge.innerHTML = '<span class="inline-flex items-center gap-1 px-2 py-1 rounded-lg bg-violet-50 text-violet-700 text-[10px] font-semibold">Müşteri: '+activeCustomerFilter+' <button onclick="window._filterByCustomer(\''+encodeURIComponent(activeCustomerFilter)+'\')" class="ml-1 text-violet-400 hover:text-violet-700">&times;</button></span>';
+            filterBadge.classList.remove('hidden');
+        } else {
+            filterBadge.classList.add('hidden');
+        }
+
+        try {
+            var d = await fetch('/FirsatAnaliz/GetOpportunityDetail?' + params).then(function(r) { return r.json(); });
+            var tbody = document.getElementById('oppDetailBody');
+            if (!d.items || !d.items.length) {
+                tbody.innerHTML = '<tr><td colspan="8" class="text-center py-6 text-[#94a3b8] text-[11px]">Veri Bulunamadı</td></tr>';
+                document.getElementById('oppPagination').innerHTML = '';
+                return;
+            }
+
+            var stageMap = {
+                Won: 'bg-emerald-50 text-emerald-700',
+                Lost: 'bg-red-50 text-red-600',
+                Position: 'bg-blue-50 text-blue-700',
+                Negotiation: 'bg-amber-50 text-amber-700',
+                Proposal: 'bg-violet-50 text-violet-700',
+                Demo: 'bg-cyan-50 text-cyan-700',
+                ContractPending: 'bg-indigo-50 text-indigo-700',
+                InProgress: 'bg-sky-50 text-sky-700'
+            };
+
+            var h = '';
+            d.items.forEach(function(item) {
+                var sc = Object.keys(stageMap).find(function(k) { return item.asama && item.asama.indexOf(k) >= 0; });
+                var badge = sc ? stageMap[sc] : 'bg-slate-100 text-slate-600';
+                h += '<tr class="border-t border-[#f8fafc] hover:bg-[#fafbfd] transition-colors">';
+                h += '<td class="py-2.5 px-2 text-[11px] text-[#334155] font-medium truncate max-w-[200px]" title="' + (item.name || '') + '">' + (item.name || '--') + '</td>';
+                h += '<td class="py-2.5 px-2 text-[11px] text-[#334155] truncate max-w-[160px]" title="' + (item.musteri || '') + '">' + (item.musteri || '--') + '</td>';
+                h += '<td class="py-2.5 px-2"><span class="stage-badge ' + badge + '">' + (item.asama || '--') + '</span></td>';
+                h += '<td class="py-2.5 px-2 text-[11px] text-[#64748b]">' + (item.satisTemsilcisi || '--') + '</td>';
+                h += '<td class="py-2.5 px-2 text-[11px] text-[#64748b]">' + (item.anlasmaTipi || '--') + '</td>';
+                h += '<td class="py-2.5 px-2 text-[11px] text-right font-semibold text-[#0f172a]">' + (item.tutar != null ? abbr(item.tutar) : '--') + '</td>';
+                h += '<td class="py-2.5 px-2 text-[11px] text-center text-[#64748b]">' + (item.kapanisTarihi || '--') + '</td>';
+                h += '<td class="py-2.5 px-2 text-[11px] text-[#94a3b8]">' + (item.kaynak || '--') + '</td>';
+                h += '</tr>';
+            });
+            tbody.innerHTML = h;
+
+            // Pagination
+            var totalPages = Math.ceil(d.total / d.pageSize);
+            var pag = document.getElementById('oppPagination');
+            var ph = '<span class="text-[10px] text-[#94a3b8]">' + d.total + ' kayit</span>';
+            if (totalPages > 1) {
+                for (var p = 1; p <= Math.min(totalPages, 10); p++) {
+                    ph += '<button onclick="window._loadOppDetail(' + p + ')" class="pg-btn ' + (p === d.page ? 'active' : '') + '">' + p + '</button>';
+                }
+                if (totalPages > 10) {
+                    ph += '<span class="text-[10px] text-[#94a3b8]">...</span>';
+                }
+            }
+            pag.innerHTML = ph;
+        } catch (e) { console.error('Detail error:', e); }
+    }
+    window._loadOppDetail = loadOppDetail;
+
+    /* ══════════════════════════════════
+       EVENT LISTENERS
+       ══════════════════════════════════ */
+
+    // Filter tabs
+    document.getElementById('filterTabs').addEventListener('click', function(e) {
+        var btn = e.target.closest('.ftab');
+        if (!btn) return;
+        document.querySelectorAll('.ftab').forEach(function(b) { b.classList.remove('active'); });
+        btn.classList.add('active');
+        activeFilter = btn.dataset.filter;
+        // Reset funnel selection on filter change
+        activeFunnel = 0;
+        document.querySelectorAll('.funnel-card').forEach(function(c) {
+            c.classList.remove('active-card', 'dimmed');
+        });
+        refreshAll();
+    });
+
+    // Owner filter
+    document.getElementById('oppOwnerFilter').addEventListener('change', function() {
+        oppOwnerVal = this.value;
+        loadOppDetail(1);
+    });
+
+    // Stage filter
+    document.getElementById('oppStageFilter').addEventListener('change', function() {
+        loadOppDetail(1);
+    });
+
+    /* ══════════════════════════════════
+       INIT
+       ══════════════════════════════════ */
+    document.addEventListener('DOMContentLoaded', function() {
+        // Funnel clicks handled via inline onclick="_clickFunnel(N)"
+        refreshAll();
+    });
+
+})();
+</script>
+}

@@ -20,19 +20,80 @@
     <title>@ViewData["Title"]</title>
     <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
 
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+    <!-- Font preload: FOUT/titreme önleme -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" crossorigin>
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <script src="https://cdn.tailwindcss.com"></script>
 
     <style>
-        * { font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif; }
+        /* ═══ APPLE-QUALITY RENDERING ═══ */
+        *, *::before, *::after {
+            -webkit-font-smoothing: antialiased;
+            -moz-osx-font-smoothing: grayscale;
+            text-rendering: optimizeLegibility;
+            -webkit-tap-highlight-color: transparent;
+        }
 
-        ::-webkit-scrollbar { width: 6px; }
+        * {
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', system-ui, sans-serif;
+            font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+            font-optical-sizing: auto;
+        }
+
+        html {
+            scroll-behavior: smooth;
+            -webkit-text-size-adjust: 100%;
+            font-synthesis: none;
+        }
+
+        /* GPU-only animasyonlar: sadece transform + opacity = 60fps */
+        .gpu { will-change: transform, opacity; transform: translateZ(0); backface-visibility: hidden; }
+
+        /* Apple easing curves */
+        :root {
+            --ease-apple: cubic-bezier(0.25, 0.1, 0.25, 1.0);
+            --ease-spring: cubic-bezier(0.34, 1.56, 0.64, 1);
+            --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+            --ease-in-out: cubic-bezier(0.45, 0, 0.55, 1);
+            --duration-fast: 0.2s;
+            --duration-normal: 0.35s;
+            --duration-slow: 0.5s;
+        }
+
+        /* Smooth number transitions */
+        .num-transition {
+            font-variant-numeric: tabular-nums;
+            letter-spacing: -0.02em;
+            transition: none; /* JS handles animation */
+        }
+
+        /* macOS scrollbar */
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
         ::-webkit-scrollbar-track { background: transparent; }
-        ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.08); border-radius: 99px; }
-        ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.15); }
+        ::-webkit-scrollbar-thumb { background: rgba(0,0,0,0.08); border-radius: 99px; transition: background 0.2s; }
+        ::-webkit-scrollbar-thumb:hover { background: rgba(0,0,0,0.18); }
         * { scrollbar-width: thin; scrollbar-color: rgba(0,0,0,0.08) transparent; }
+
+        /* Content fade-in on load (no flash) */
+        .fade-ready { opacity: 0; transform: translateY(8px); }
+        .fade-in {
+            opacity: 1 !important;
+            transform: translateY(0) !important;
+            transition: opacity var(--duration-slow) var(--ease-out-expo),
+                        transform var(--duration-slow) var(--ease-out-expo);
+        }
+
+        /* Smooth value update flash */
+        .value-updated {
+            animation: value-pulse 0.6s var(--ease-apple);
+        }
+        @@keyframes value-pulse {
+            0% { opacity: 0.4; transform: scale(0.96); }
+            50% { opacity: 1; transform: scale(1.02); }
+            100% { opacity: 1; transform: scale(1); }
+        }
 
         /* Deep Blue Navy Sidebar */
         .nav-sidebar {
@@ -117,6 +178,25 @@
             transform: translateX(0);
         }
 
+        /* Mobile sidebar */
+        @@media (max-width: 767px) {
+            .nav-sidebar {
+                position: fixed;
+                left: 0; top: 0; bottom: 0;
+                z-index: 45;
+                width: 220px !important;
+                transform: translateX(-100%);
+                transition: transform 0.35s cubic-bezier(0.16, 1, 0.3, 1);
+            }
+            .nav-sidebar.mobile-open {
+                transform: translateX(0);
+            }
+            .nav-sidebar .sidebar-logo-text,
+            .nav-sidebar .nav-link-text,
+            .nav-sidebar .sidebar-user-text { opacity: 1; transform: none; }
+            main { padding: 16px !important; padding-top: 56px !important; }
+        }
+
         /* Bottom section */
         .sidebar-footer {
             margin-top: auto;
@@ -152,8 +232,16 @@
 </head>
 <body class="bg-[#f8fafc] text-[#1e293b] h-screen flex overflow-hidden">
 
+    <!-- MOBILE HAMBURGER -->
+    <button onclick="document.getElementById('sidebar').classList.add('mobile-open');document.getElementById('sidebarOverlay').classList.remove('hidden');"
+            class="fixed top-4 left-4 z-50 w-10 h-10 rounded-xl bg-white shadow-lg flex items-center justify-center md:hidden">
+        <i class="bi bi-list text-lg text-[#1e293b]"></i>
+    </button>
+    <div id="sidebarOverlay" class="hidden fixed inset-0 bg-black/30 backdrop-blur-sm z-40 md:hidden"
+         onclick="document.getElementById('sidebar').classList.remove('mobile-open');this.classList.add('hidden');"></div>
+
     <!-- DEEP BLUE SIDEBAR -->
-    <aside class="nav-sidebar">
+    <aside id="sidebar" class="nav-sidebar">
         <!-- Logo -->
         <div class="sidebar-logo">
             <svg width="28" height="28" viewBox="0 0 36 36" fill="none" class="flex-shrink-0">
@@ -166,9 +254,17 @@
 
         <!-- Nav -->
         <nav class="w-full flex-1 py-2">
-            <a href="@Url.Action("Index", "Cockpit")" class="nav-link active">
+            <a href="@Url.Action("Index", "Cockpit")" class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Cockpit" ? "active" : "")" title="Finansal Cockpit">
                 <i class="bi bi-bar-chart-line"></i>
                 <span class="nav-link-text">Cockpit</span>
+            </a>
+            <a href="@Url.Action("Index", "FirsatAnaliz")" class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "FirsatAnaliz" ? "active" : "")" title="Fırsat Analizi">
+                <i class="bi bi-graph-up-arrow"></i>
+                <span class="nav-link-text">Fırsat Analizi</span>
+            </a>
+            <a href="@Url.Action("Index", "Parametre")" class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Parametre" ? "active" : "")" title="Parametreler">
+                <i class="bi bi-sliders"></i>
+                <span class="nav-link-text">Parametreler</span>
             </a>
         </nav>
 
@@ -178,7 +274,7 @@
                 <div class="sidebar-avatar-wrap">@userInitial</div>
                 <span class="sidebar-user-text">@userName</span>
             </div>
-            <a href="/Account/LogOut" class="nav-link" style="color:rgba(248,113,113,0.8);">
+            <a href="/Account/LogOut" class="nav-link" style="color:rgba(248,113,113,0.8);" title="Çıkış Yap">
                 <i class="bi bi-box-arrow-right"></i>
                 <span class="nav-link-text" style="color:rgba(248,113,113,0.8);">Çıkış</span>
             </a>
@@ -191,5 +287,80 @@
     </main>
 
     @await RenderSectionAsync("Scripts", required: false)
+
+    <script>
+    // ═══ APPLE-QUALITY GLOBAL UTILITIES ═══
+    (function(){
+        'use strict';
+
+        // Sayfa yüklendikten sonra fade-in (FOUC önleme)
+        document.addEventListener('DOMContentLoaded', function(){
+            requestAnimationFrame(function(){
+                document.querySelectorAll('.fade-ready').forEach(function(el, i){
+                    setTimeout(function(){ el.classList.add('fade-in'); }, i * 60);
+                });
+            });
+        });
+
+        // ═══ COUNT-UP: requestAnimationFrame ile 60fps sayı animasyonu ═══
+        window.countUp = function(el, target, duration, prefix, suffix) {
+            prefix = prefix || '';
+            suffix = suffix || '';
+            duration = duration || 1200;
+            var start = 0;
+            var startTime = null;
+            var formatter = new Intl.NumberFormat('tr-TR', { maximumFractionDigits: 0 });
+
+            function ease(t) {
+                // Apple ease-out-expo
+                return t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
+            }
+
+            function step(timestamp) {
+                if (!startTime) startTime = timestamp;
+                var progress = Math.min((timestamp - startTime) / duration, 1);
+                var current = Math.floor(ease(progress) * target);
+                el.textContent = prefix + formatter.format(current) + suffix;
+                if (progress < 1) {
+                    requestAnimationFrame(step);
+                } else {
+                    el.textContent = prefix + formatter.format(target) + suffix;
+                }
+            }
+
+            requestAnimationFrame(step);
+        };
+
+        // ═══ SMOOTH VALUE UPDATE: Eski değerden yeniye geçiş ═══
+        window.smoothUpdate = function(el, newText, animate) {
+            if (el.textContent === newText) return;
+            if (animate !== false) {
+                el.style.transition = 'none';
+                el.style.opacity = '0.3';
+                el.style.transform = 'translateY(4px) scale(0.98)';
+                requestAnimationFrame(function(){
+                    el.style.transition = 'opacity 0.4s cubic-bezier(0.16,1,0.3,1), transform 0.4s cubic-bezier(0.16,1,0.3,1)';
+                    el.textContent = newText;
+                    el.style.opacity = '1';
+                    el.style.transform = 'translateY(0) scale(1)';
+                });
+            } else {
+                el.textContent = newText;
+            }
+        };
+
+        // ═══ SMOOTH HTML UPDATE: innerHTML için fade geçiş ═══
+        window.smoothHtmlUpdate = function(el, newHtml) {
+            if (!el) return;
+            el.style.transition = 'opacity 0.25s ease';
+            el.style.opacity = '0';
+            setTimeout(function(){
+                el.innerHTML = newHtml;
+                el.style.opacity = '1';
+            }, 250);
+        };
+
+    })();
+    </script>
 </body>
 </html>
