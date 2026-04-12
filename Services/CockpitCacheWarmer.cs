@@ -63,6 +63,29 @@ public class CockpitCacheWarmer : BackgroundService
                 // forceRefresh=true → cache bypass, DB'den taze data
                 await CockpitController.LoadAllCachedDataAsync(contextFactory, cache, forceRefresh: true);
 
+                // SP cache'lerini ısıt — sabit tarihli sorgular
+                var cockpitData = scope.ServiceProvider.GetRequiredService<ICockpitDataService>();
+                var now = DateTime.Now;
+                var bugun = now.Date;
+                var today = bugun.AddDays(1).AddSeconds(-1);
+                var ayBas = new DateTime(now.Year, now.Month, 1);
+                var aySon = new DateTime(now.Year, now.Month, DateTime.DaysInMonth(now.Year, now.Month), 23, 59, 59);
+                var ytdBas = new DateTime(now.Year, 1, 1);
+                var dow = bugun.DayOfWeek == DayOfWeek.Sunday ? 6 : (int)bugun.DayOfWeek - 1;
+                var haftaBas = bugun.AddDays(-dow);
+                var haftaSon = haftaBas.AddDays(4).AddHours(23).AddMinutes(59).AddSeconds(59);
+                var gecenBas = haftaBas.AddDays(-7);
+                var gecenSon = gecenBas.AddDays(4).AddHours(23).AddMinutes(59).AddSeconds(59);
+
+                await Task.WhenAll(
+                    cockpitData.GetFaturaOzetAsync(ayBas, aySon),
+                    cockpitData.GetFaturaOzetAsync(ytdBas, today),
+                    cockpitData.GetTahsilatOzetAsync(gecenBas, gecenSon),
+                    cockpitData.GetTahsilatOzetAsync(haftaBas, haftaSon),
+                    cockpitData.GetTahsilatOzetAsync(ayBas, aySon),
+                    cockpitData.GetTahsilatOzetAsync(ytdBas, today)
+                );
+
                 var elapsed = DateTime.UtcNow - startedAt;
                 _state.LastRefreshAt = DateTime.UtcNow;
                 _state.LastRefreshDurationMs = (int)elapsed.TotalMilliseconds;
