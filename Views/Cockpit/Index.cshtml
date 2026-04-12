@@ -254,10 +254,10 @@
     string MonthBarBg = "#3b82f6";
     string MonthTrackBg = "#f1f5f9";
 }
-<!-- ═══ 2x2 HEDEF GRID ═══ -->
+<!-- ═══ HEDEF: Bu Ay + YTD ═══ -->
 <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4 fade-ready">
 
-    <!-- SOL ÜST: NİSAN (en önemli, renk kodlu bar) -->
+    <!-- SOL: Bu Ay -->
     <div class="bg-white rounded-xl border-2 border-blue-200 px-5 py-4 shadow-sm">
         <div class="flex items-center justify-between mb-1">
             <div class="flex items-center gap-2">
@@ -275,25 +275,7 @@
         </div>
     </div>
 
-    <!-- SAĞ ÜST: Çeyrek -->
-    <div class="bg-slate-50 rounded-xl border border-slate-200 px-5 py-4">
-        <div class="flex items-center justify-between mb-1">
-            <div class="flex items-center gap-2">
-                <div class="w-7 h-7 rounded-lg bg-indigo-50 flex items-center justify-center"><i class="bi bi-calendar3 text-indigo-600" style="font-size:13px;"></i></div>
-                <span class="text-[12px] font-bold text-[#1e293b]">@qLabel</span>
-            </div>
-            <span class="text-xl font-bold text-slate-500">%@qPct.ToString("N0")</span>
-        </div>
-        <div class="flex items-end justify-between mb-1">
-            <p class="text-[1.75rem] font-bold text-[#1e293b]">₺@Model.FixedCurrentMonthActual.ToString("N0")</p>
-            <span class="text-sm text-slate-500 font-medium">/ ₺@Model.FixedQuarterTarget.ToString("N0")</span>
-        </div>
-        <div class="progress-track" style="height:6px;">
-            <div class="progress-fill h-full rounded-full" data-width="@(qPct.ToString(System.Globalization.CultureInfo.InvariantCulture))" style="transform:scaleX(0)"></div>
-        </div>
-    </div>
-
-    <!-- SOL ALT: YTD -->
+    <!-- SAĞ: YTD -->
     <div class="bg-white rounded-xl border-2 border-blue-200 px-5 py-4 shadow-sm">
         <div class="flex items-center justify-between mb-1">
             <div class="flex items-center gap-2">
@@ -310,25 +292,6 @@
             <div class="h-full rounded-full progress-fill" data-width="@(ytdPct.ToString(System.Globalization.CultureInfo.InvariantCulture))" style="transform:scaleX(0)"></div>
         </div>
         <p class="text-[10px] text-slate-400 mt-2">@ayAdi sonu hedef ₺@nisanSonuHedef.ToString("N0") — <span class="font-semibold text-amber-600">₺@nisanSonuKalan.ToString("N0") daha gerekli</span></p>
-    </div>
-
-    <!-- SAĞ ALT: 2026 YILLIK HEDEF -->
-    <div class="bg-slate-50 rounded-xl border border-slate-200 px-5 py-4">
-        <div class="flex items-center justify-between mb-1">
-            <div class="flex items-center gap-2">
-                <div class="w-7 h-7 rounded-lg bg-blue-100 flex items-center justify-center"><i class="bi bi-bullseye text-blue-600" style="font-size:13px;"></i></div>
-                <span class="text-[12px] font-bold text-[#1e293b]">2026 Yıllık Hedef</span>
-            </div>
-            <span class="text-xl font-bold text-slate-500">%@Model.FixedYTDPct.ToString("N0")</span>
-        </div>
-        <div class="flex items-end justify-between mb-1">
-            <p class="text-[1.75rem] font-extrabold text-[#1e293b] num" data-countup="@Model.FixedYTDTarget.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)" data-prefix="₺">₺0</p>
-            <span class="text-sm text-slate-500 font-medium">Kalan ₺@annualKalan.ToString("N0")</span>
-        </div>
-        <div class="progress-track" style="height:6px;">
-            <div class="h-full rounded-full progress-fill" data-width="@(annualPctClamped.ToString(System.Globalization.CultureInfo.InvariantCulture))" style="transform:scaleX(0)"></div>
-        </div>
-        <p class="text-[10px] text-slate-400 mt-2">@Model.RemainingMonths ay kaldı</p>
     </div>
 </div>
 
