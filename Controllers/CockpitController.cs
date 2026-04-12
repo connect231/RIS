@@ -416,24 +416,28 @@ namespace SOS.Controllers
                 var urunGrupMap = new Dictionary<string, List<(string Grup, decimal TlTutar)>>();
                 var urunByCrmOrder = urunler.Where(u => u.CrmOrderId != null)
                     .GroupBy(u => u.CrmOrderId!).ToDictionary(g => g.Key, g => g.ToList());
-                foreach (var siparis in siparisler.Where(s => s.SerialNumber != null && s.OrderId != null
+                foreach (var siparis in siparisler.Where(s => s.OrderId != null
                     && s.TotalNetAmount.HasValue && s.TotalNetAmount.Value > 0
                     && string.Equals(s.OrderStatus, "Closed", StringComparison.OrdinalIgnoreCase)))
                 {
-                    if (urunGrupMap.ContainsKey(siparis.SerialNumber!)) continue;
+                    // Key: SerialNumber varsa onu, yoksa SAP:xxx
+                    var mapKey = siparis.SerialNumber
+                        ?? (!string.IsNullOrEmpty(siparis.SAPOutReferenceCode)
+                            ? $"SAP:{siparis.SAPOutReferenceCode.Trim()}" : null);
+                    if (mapKey == null) continue;
+                    if (urunGrupMap.ContainsKey(mapKey)) continue;
                     if (!urunByCrmOrder.TryGetValue(siparis.OrderId!, out var sipUrunleri)) continue;
                     var toplamDoviz = sipUrunleri.Sum(u => u.Total ?? 0);
                     if (toplamDoviz == 0) continue;
                     var kalemler = new List<(string Grup, decimal TlTutar)>();
                     foreach (var u in sipUrunleri)
                     {
-                        // Eşleşmeyen StockCode'ları skip et — "Diğer" kategorisi UI'da gösterilmiyor
                         if (u.StockCode == null || !eslestirmeler.TryGetValue(u.StockCode, out var grup))
                             continue;
                         var tlTutar = (u.Total ?? 0) / toplamDoviz * siparis.TotalNetAmount!.Value;
                         kalemler.Add((grup, tlTutar));
                     }
-                    urunGrupMap[siparis.SerialNumber!] = kalemler;
+                    urunGrupMap[mapKey] = kalemler;
                 }
 
                 // Cache'e yaz — TTL 15 dk (CacheWarmer her 4 dk'da refresh eder, bu sliding buffer)
@@ -847,14 +851,14 @@ namespace SOS.Controllers
             var sozGecikmisToplam = sozGecikmisList.Sum(s => s.TotalAmount ?? 0);
             var sozGecikmiAdet = sozGecikmisList.Count;
 
-            // Ürün grubu kırılımı: dönemdeki faturalar → kalem bazlı TL dağılımı → ürün grubu toplam
-            // Ürün kırılımı: İade/Ret tamamen atlanır (çift sayım önleme)
+            // Ürün grubu kırılımı: SP fatura listesindeki FaturaNo'lar → urunGrupMap'ten kalem dağılımı
+            var spFaturalar = await _cockpitData.GetFaturalarAsync(start, end);
+            var spFaturaNoSet = new HashSet<string>(spFaturalar.Select(f => f.FaturaNo), StringComparer.OrdinalIgnoreCase);
+
             var urunKirilimDict = new Dictionary<string, (decimal toplam, int adet)>();
-            foreach (var f in allFaturalar.Where(f => f.EfektifFaturaTarihi.HasValue
-                && f.EfektifFaturaTarihi.Value >= start && f.EfektifFaturaTarihi.Value <= end
-                && !IsRetDurum(f.Durum) && !IsNegatifDurum(f.Durum)))
+            foreach (var faturaNo in spFaturaNoSet)
             {
-                if (f.Fatura_No != null && urunGrupMap.TryGetValue(f.Fatura_No, out var kalemler))
+                if (urunGrupMap.TryGetValue(faturaNo, out var kalemler))
                 {
                     foreach (var (grup, tlTutar) in kalemler)
                     {
@@ -1789,7 +1793,14 @@ namespace SOS.Controllers
             var rows = await db.Database.SqlQueryRaw<SpFaturaRow>(
                 "EXEC SP_COCKPIT_FATURA @p0, @p1", DateTime.Parse(sd), DateTime.Parse(ed)).ToListAsync();
             var toplam = rows.Sum(r => r.NetTutar);
-            return Json(new { satir = rows.Count, toplam, ornekler = rows.Take(5) });
+            var (_, _, _, _, _, _, ugm) = await LoadAllCachedDataAsync(_contextFactory, _cache);
+            var eslesmeyen = rows.Where(r => !ugm.ContainsKey(r.FaturaNo)).ToList();
+            return Json(new { satir = rows.Count, toplam,
+                urunEslesen = rows.Count - eslesmeyen.Count,
+                urunEslesmeyen = eslesmeyen.Count,
+                eslesemeyenToplam = eslesmeyen.Sum(r => r.NetTutar),
+                eslesemeyenDetay = eslesmeyen.OrderByDescending(r => r.NetTutar).Take(15).Select(r => new { r.FaturaNo, r.NetTutar, r.Firma, r.IsSentetik })
+            });
         }
         public class SpFaturaRow
         {
