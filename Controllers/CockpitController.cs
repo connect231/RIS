@@ -1,6 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.Authorization;
 using SOS.DbData;
+using SOS.Services;
 using Microsoft.EntityFrameworkCore;
 using SOS.Models.ViewModels;
 using SOS.Models.MsK;
@@ -13,6 +14,7 @@ namespace SOS.Controllers
     {
         private readonly IDbContextFactory<MskDbContext> _contextFactory;
         private readonly IMemoryCache _cache;
+        private readonly ICockpitDataService _cockpitData;
         private const string CACHE_KEY_FATURALAR = "cockpit_faturalar";
         private const string CACHE_KEY_SIPARISLER = "cockpit_siparisler";
         private const string CACHE_KEY_URUNLER = "cockpit_urunler";
@@ -25,10 +27,11 @@ namespace SOS.Controllers
 
         private static readonly SemaphoreSlim _cacheLock = new(1, 1);
 
-        public CockpitController(IDbContextFactory<MskDbContext> contextFactory, IMemoryCache cache)
+        public CockpitController(IDbContextFactory<MskDbContext> contextFactory, IMemoryCache cache, ICockpitDataService cockpitData)
         {
             _contextFactory = contextFactory;
             _cache = cache;
+            _cockpitData = cockpitData;
         }
 
         #region Filter Parsing
@@ -721,9 +724,19 @@ namespace SOS.Controllers
             var today = bugun.AddDays(1).AddSeconds(-1);
 
             // ══════════════════════════════════════════════════════════════
-            // Parallel cache load — tüm DB sorguları eşzamanlı
+            // SP'lerden kart verileri + eski cache (ürün kırılımı, CEI için)
             // ══════════════════════════════════════════════════════════════
-            var (allFaturalar, urunMap, musteriMap, sozlesmeler, hedefler, varunaTutarMap, urunGrupMap) = await LoadAllCachedDataAsync(_contextFactory, _cache);
+            var spFaturaTask = _cockpitData.GetFaturaOzetAsync(start, end);
+            var spTahsilatTask = _cockpitData.GetTahsilatOzetAsync(start, end);
+            var spSozlesmeTask = _cockpitData.GetSozlesmeOzetAsync(start, end);
+            var cacheTask = LoadAllCachedDataAsync(_contextFactory, _cache);
+
+            await Task.WhenAll(spFaturaTask, spTahsilatTask, spSozlesmeTask, cacheTask);
+
+            var spFatura = spFaturaTask.Result;
+            var spTahsilat = spTahsilatTask.Result;
+            var spSozlesme = spSozlesmeTask.Result;
+            var (allFaturalar, urunMap, musteriMap, sozlesmeler, hedefler, varunaTutarMap, urunGrupMap) = cacheTask.Result;
 
             // ══════════════════════════════════════════════════════════════
             // Single-pass: Tüm KPI'lar TEK döngüde hesaplanır
@@ -789,9 +802,9 @@ namespace SOS.Controllers
             var donemBasAy = start.Month;
             var donemSonAy = end.Month;
             var donemHedef = HedefToplam(donemBasAy, donemSonAy);
-            var hedefKalan = Math.Max(donemHedef - m.FatToplam, 0);
+            var hedefKalan = Math.Max(donemHedef - spFatura.Toplam, 0);
             var hedefYuzde = donemHedef > 0
-                ? Math.Round(Math.Min(m.FatToplam / donemHedef * 100, 100), 1) : 0;
+                ? Math.Round(Math.Min(spFatura.Toplam / donemHedef * 100, 100), 1) : 0;
 
             // YTD hedef: Ocak → filtrenin bitiş ayı
             var ytdAySayisi = Math.Max(1, end.Month);
@@ -864,19 +877,22 @@ namespace SOS.Controllers
             {
                 return Json(new
                 {
-                    faturalarToplam = m.FatToplam,
-                    faturalarAdet = m.FatAdet,
+                    // Fatura kartı — SP'den
+                    faturalarToplam = spFatura.Toplam,
+                    faturalarAdet = spFatura.Adet,
                     varunaDisiToplam = m.VarunaDisiToplam,
                     varunaDisiAdet = m.VarunaDisiAdet,
-                    tahsilatlarToplam = tahsilEdilecek,    // PAYDA = bakiye + tahsil
-                    tahsilatEdilen = m.TahEdilen,        // Tahsil_Edilen
-                    tahsilatlarAdet = m.TahAdet,
-                    sozlesmelerToplam = sozToplam,
-                    sozlesmelerAdet = sozDonem.Count,
-                    sozArchivedToplam,
-                    sozArchivedAdet,
-                    sozGecikmisToplam,
-                    sozGecikmiAdet,
+                    // Tahsilat kartı — SP'den
+                    tahsilatlarToplam = spTahsilat.BekleyenBakiyeToplam + spTahsilat.TahsilEdilen,
+                    tahsilatEdilen = spTahsilat.TahsilEdilen,
+                    tahsilatlarAdet = spTahsilat.TahsilAdet,
+                    // Sözleşme kartı — SP'den
+                    sozlesmelerToplam = spSozlesme.EskiTutar,
+                    sozlesmelerAdet = spSozlesme.Toplam,
+                    sozArchivedToplam = spSozlesme.YeniTutar,
+                    sozArchivedAdet = spSozlesme.YenilenenAdet,
+                    sozGecikmisToplam = spSozlesme.BekleyenTutar,
+                    sozGecikmiAdet = spSozlesme.BekleyenAdet,
                     urunKirilim,
                     faturalarTrend = m.PrevFatToplam > 0 ? Math.Round((m.FatToplam - m.PrevFatToplam) / m.PrevFatToplam * 100, 1) : 0,
                     tahsilatlarTrend = m.PrevTahToplam > 0 ? Math.Round((m.TahEdilen - m.PrevTahToplam) / m.PrevTahToplam * 100, 1) : 0,
@@ -902,7 +918,7 @@ namespace SOS.Controllers
                     legacy2025Bakiye = m.Legacy2025Bakiye,
                     // Hedef
                     aylikHedef = donemHedef,
-                    hedefGerceklesme = m.FatToplam,
+                    hedefGerceklesme = spFatura.Toplam,
                     hedefKalan,
                     hedefYuzde,
                     // Üst kartlar (DB bazlı)
@@ -969,18 +985,18 @@ namespace SOS.Controllers
 
             var vm = new CockpitViewModel
             {
-                FaturalarToplam = m.FatToplam,
-                FaturalarAdet = m.FatAdet,
+                FaturalarToplam = spFatura.Toplam,
+                FaturalarAdet = spFatura.Adet,
                 VarunaDisiToplam = m.VarunaDisiToplam,
                 VarunaDisiAdet = m.VarunaDisiAdet,
-                TahsilatlarToplam = tahsilEdilecek,
-                TahsilatlarAdet = m.TahAdet,
-                SozlesmelerToplam = sozToplam,
-                SozlesmelerAdet = sozDonem.Count,
-                SozArchivedToplam = sozArchivedToplam,
-                SozArchivedAdet = sozArchivedAdet,
-                SozGecikmisToplam = sozGecikmisToplam,
-                SozGecikmiAdet = sozGecikmiAdet,
+                TahsilatlarToplam = spTahsilat.BekleyenBakiyeToplam + spTahsilat.TahsilEdilen,
+                TahsilatlarAdet = spTahsilat.TahsilAdet,
+                SozlesmelerToplam = spSozlesme.EskiTutar,
+                SozlesmelerAdet = spSozlesme.Toplam,
+                SozArchivedToplam = spSozlesme.YeniTutar,
+                SozArchivedAdet = spSozlesme.YenilenenAdet,
+                SozGecikmisToplam = spSozlesme.BekleyenTutar,
+                SozGecikmiAdet = spSozlesme.BekleyenAdet,
                 FaturalarTrend = m.PrevFatToplam > 0 ? Math.Round((m.FatToplam - m.PrevFatToplam) / m.PrevFatToplam * 100, 1) : 0,
                 PrevFaturalarToplam = m.PrevFatToplam,
                 PrevTahsilatlarToplam = m.PrevTahToplam,
@@ -988,7 +1004,7 @@ namespace SOS.Controllers
                 SozlesmelerTrend = 0,
                 AylikHedef = donemHedef,
                 HedefTutar = donemHedef,
-                HedefGerceklesme = m.FatToplam,
+                HedefGerceklesme = spFatura.Toplam,
                 HedefKalan = hedefKalan,
                 HedefYuzde = hedefYuzde,
                 HedefAySayisi = months,
