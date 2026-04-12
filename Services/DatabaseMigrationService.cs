@@ -332,18 +332,8 @@ BEGIN
           AND DATEADD(DAY, 1, s.FinishDate) >= @StartDate
           AND DATEADD(DAY, 1, s.FinishDate) <  DATEADD(DAY, 1, @EndDate)
     ),
-    YeniSozlesme AS (
-        SELECT y.RelatedContractId AS EskiId,
-               y.Id AS YeniId,
-               y.ContractNo AS YeniContractNo,
-               y.ContractStatus AS YeniStatus,
-               y.TotalAmount AS YeniTutar,
-               y.TotalAmountLocal AS YeniTutarLocal,
-               y.StartDate AS YeniBaslangic,
-               y.FinishDate AS YeniBitis
-        FROM TBL_VARUNA_SOZLESME y
-        WHERE y.RelatedContractId IS NOT NULL
-    )
+    -- Dummy CTE (SQL syntax geregi)
+    Dummy AS (SELECT 1 AS x)
 
     SELECT
         e.Id,
@@ -355,7 +345,7 @@ BEGIN
         e.TotalAmountLocal AS EskiTutarLocal,
         e.FinishDate AS EskiBitis,
         e.Yenilemetarihi,
-        CASE WHEN y.EskiId IS NOT NULL THEN 1 ELSE 0 END AS Yenilendi,
+        CASE WHEN y.YeniId IS NOT NULL THEN 1 ELSE 0 END AS Yenilendi,
         y.YeniContractNo,
         y.YeniStatus,
         y.YeniTutar,
@@ -363,7 +353,19 @@ BEGIN
         y.YeniBaslangic,
         y.YeniBitis
     FROM EskiSozlesme e
-    LEFT JOIN YeniSozlesme y ON y.EskiId = e.Id
+    OUTER APPLY (
+        SELECT TOP 1
+            n.Id AS YeniId,
+            n.ContractNo AS YeniContractNo,
+            n.ContractStatus AS YeniStatus,
+            n.TotalAmount AS YeniTutar,
+            n.TotalAmountLocal AS YeniTutarLocal,
+            n.StartDate AS YeniBaslangic,
+            n.FinishDate AS YeniBitis
+        FROM TBL_VARUNA_SOZLESME n
+        WHERE n.RelatedContractId = e.Id
+        ORDER BY n.StartDate ASC
+    ) y
     ORDER BY e.FinishDate, e.AccountTitle;
 END;
 ");
