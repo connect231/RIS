@@ -60,8 +60,12 @@ public class SozlesmeOzet
     public int YenilenenAdet { get; set; }
     public int BekleyenAdet { get; set; }
     public decimal EskiTutar { get; set; }
+    /// <summary>Hedef: tüm yeni sözleşmelerin tutarı</summary>
     public decimal YeniTutar { get; set; }
     public decimal BekleyenTutar { get; set; }
+    /// <summary>Gerçekleşen: sadece Archived yeni sözleşmelerin tutarı</summary>
+    public decimal ArchivedTutar { get; set; }
+    public int ArchivedAdet { get; set; }
 }
 
 #endregion
@@ -148,14 +152,17 @@ public class CockpitDataService : ICockpitDataService
         var rows = await GetSozlesmelerAsync(start, end);
         var yen = rows.Where(r => r.Yenilendi == 1).ToList();
         var bek = rows.Where(r => r.Yenilendi == 0).ToList();
+        var archived = yen.Where(r => string.Equals(r.YeniStatus, "Archived", StringComparison.OrdinalIgnoreCase)).ToList();
         return new SozlesmeOzet
         {
             Toplam = rows.Count,
             YenilenenAdet = yen.Count,
             BekleyenAdet = bek.Count,
             EskiTutar = rows.Sum(r => r.EskiTutar ?? 0),
-            YeniTutar = yen.Sum(r => r.YeniTutar ?? 0),
-            BekleyenTutar = bek.Sum(r => r.EskiTutar ?? 0)
+            YeniTutar = yen.Sum(r => r.YeniTutar ?? 0),         // hedef
+            BekleyenTutar = bek.Sum(r => r.EskiTutar ?? 0),
+            ArchivedTutar = archived.Sum(r => r.YeniTutar ?? 0), // gerçekleşen
+            ArchivedAdet = archived.Count
         };
     }
 

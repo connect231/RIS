@@ -891,12 +891,15 @@ namespace SOS.Controllers
                     tahsilatEdilen = spTahsilat.TahsilEdilen,
                     tahsilatlarAdet = spTahsilat.TahsilAdet,
                     // Sözleşme kartı — SP'den
-                    sozlesmelerToplam = spSozlesme.EskiTutar,
+                    // Hedef = yeni sözleşme tutarları, Gerçekleşen = Archived olanlar
+                    sozlesmelerToplam = spSozlesme.YeniTutar,        // hedef (tüm yeni sözleşme tutarı)
                     sozlesmelerAdet = spSozlesme.Toplam,
-                    sozArchivedToplam = spSozlesme.YeniTutar,
-                    sozArchivedAdet = spSozlesme.YenilenenAdet,
-                    sozGecikmisToplam = spSozlesme.BekleyenTutar,
+                    sozArchivedToplam = spSozlesme.ArchivedTutar,    // gerçekleşen (sadece Archived)
+                    sozArchivedAdet = spSozlesme.ArchivedAdet,
+                    sozGecikmisToplam = spSozlesme.BekleyenTutar,    // henüz yenilenmemiş
                     sozGecikmiAdet = spSozlesme.BekleyenAdet,
+                    sozYenilenenToplam = spSozlesme.YeniTutar,       // tüm yenilenen tutar
+                    sozYenilenenAdet = spSozlesme.YenilenenAdet,
                     urunKirilim,
                     faturalarTrend = m.PrevFatToplam > 0 ? Math.Round((m.FatToplam - m.PrevFatToplam) / m.PrevFatToplam * 100, 1) : 0,
                     tahsilatlarTrend = m.PrevTahToplam > 0 ? Math.Round((m.TahEdilen - m.PrevTahToplam) / m.PrevTahToplam * 100, 1) : 0,
@@ -995,10 +998,10 @@ namespace SOS.Controllers
                 VarunaDisiAdet = m.VarunaDisiAdet,
                 TahsilatlarToplam = spTahsilat.BekleyenBakiyeToplam + spTahsilat.TahsilEdilen,
                 TahsilatlarAdet = spTahsilat.TahsilAdet,
-                SozlesmelerToplam = spSozlesme.EskiTutar,
+                SozlesmelerToplam = spSozlesme.YeniTutar,
                 SozlesmelerAdet = spSozlesme.Toplam,
-                SozArchivedToplam = spSozlesme.YeniTutar,
-                SozArchivedAdet = spSozlesme.YenilenenAdet,
+                SozArchivedToplam = spSozlesme.ArchivedTutar,
+                SozArchivedAdet = spSozlesme.ArchivedAdet,
                 SozGecikmisToplam = spSozlesme.BekleyenTutar,
                 SozGecikmiAdet = spSozlesme.BekleyenAdet,
                 FaturalarTrend = m.PrevFatToplam > 0 ? Math.Round((m.FatToplam - m.PrevFatToplam) / m.PrevFatToplam * 100, 1) : 0,
