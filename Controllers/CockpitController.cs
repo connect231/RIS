@@ -1715,6 +1715,60 @@ namespace SOS.Controllers
             public DateTime? InvoiceDate { get; set; }
         }
 
+        [HttpGet]
+        public async Task<IActionResult> TahsilatDurumAnaliz()
+        {
+            using var db = _contextFactory.CreateDbContext();
+            // Tüm faturalar vade <= 10 Nisan (İade/Ret hariç)
+            var tum = (await db.VIEW_CP_EXCEL_FATURAs.AsNoTracking().ToListAsync())
+                .GroupBy(f => f.Fatura_No ?? f.GetHashCode().ToString()).Select(g => g.First())
+                .Where(f => f.Fatura_Vade_Tarihi.HasValue && f.Fatura_Vade_Tarihi.Value <= new DateTime(2026,4,10,23,59,59))
+                .Where(f => {
+                    var d2 = (f.Durum ?? "").Trim();
+                    return d2 != "İADE" && d2 != "IADE" && d2 != "İPTAL" && d2 != "IPTAL" && d2 != "RET";
+                })
+                .ToList();
+
+            // Tahsil edilenler (hafta içi)
+            var tahsilHafta = tum.Where(f => f.Tahsil_Tarihi.HasValue
+                && f.Tahsil_Tarihi.Value >= new DateTime(2026,4,6)
+                && f.Tahsil_Tarihi.Value <= new DateTime(2026,4,10,23,59,59))
+                .Sum(f => f.Tahsil_Edilen ?? 0);
+
+            // Bekleyen bakiye
+            var bekleyen = tum.Where(f => (f.Bekleyen_Bakiye ?? ((f.Fatura_Toplam ?? 0) - (f.Tahsil_Edilen ?? 0))) > 0).ToList();
+
+            var byDurum = bekleyen.GroupBy(f => (f.Durum ?? "").Trim()).Select(g => new {
+                durum = g.Key == "" ? "(boş)" : g.Key, adet = g.Count(),
+                bakiye = g.Sum(f => f.Bekleyen_Bakiye ?? ((f.Fatura_Toplam ?? 0) - (f.Tahsil_Edilen ?? 0)))
+            }).OrderByDescending(x => x.bakiye).ToList();
+
+            var byHukuki = bekleyen.GroupBy(f => (f.Hukuki_Durum ?? "").Trim()).Select(g => new {
+                hukukiDurum = g.Key == "" ? "(boş)" : g.Key, adet = g.Count(),
+                bakiye = g.Sum(f => f.Bekleyen_Bakiye ?? ((f.Fatura_Toplam ?? 0) - (f.Tahsil_Edilen ?? 0)))
+            }).OrderByDescending(x => x.bakiye).ToList();
+
+            // Durum boş olmayan faturaların tahsil_edilen toplamı (PAYDA'ya katkısı)
+            var durumDoluTahsil = tum.Where(f => (f.Durum ?? "").Trim() != "" && f.Tahsil_Tarihi.HasValue
+                && f.Tahsil_Tarihi.Value >= new DateTime(2026,4,6)
+                && f.Tahsil_Tarihi.Value <= new DateTime(2026,4,10,23,59,59))
+                .GroupBy(f => (f.Durum ?? "").Trim())
+                .Select(g => new { durum = g.Key, adet = g.Count(), tahsil = g.Sum(f => f.Tahsil_Edilen ?? 0) })
+                .OrderByDescending(x => x.tahsil).ToList();
+
+            var toplamBakiye = bekleyen.Sum(f => f.Bekleyen_Bakiye ?? ((f.Fatura_Toplam ?? 0) - (f.Tahsil_Edilen ?? 0)));
+
+            return Json(new {
+                tahsilHafta,
+                toplamBakiye,
+                payda = tahsilHafta + toplamBakiye,
+                excelPayda = 30880797m,
+                fark = (tahsilHafta + toplamBakiye) - 30880797m,
+                bekleyenAdet = bekleyen.Count,
+                byDurum, byHukuki, durumDoluTahsil
+            });
+        }
+
         #endregion
     }
 }

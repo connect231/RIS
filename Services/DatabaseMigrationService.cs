@@ -276,12 +276,13 @@ BEGIN
         ) AS rn
         FROM VIEW_CP_EXCEL_FATURA
     ),
-    -- Sadece VIEW, Iade/Ret haric (Varuna join yok)
+    -- Sadece VIEW, Iade/Ret haric, Hukuki takip haric (Varuna join yok)
     Faturalar AS (
         SELECT Fatura_No, Fatura_Tarihi, Fatura_Toplam, Durum,
                Fatura_Vade_Tarihi, Tahsil_Edilen, Bekleyen_Bakiye, Tahsil_Tarihi
         FROM DistinctFatura
         WHERE rn = 1
+          AND ISNULL(LTRIM(RTRIM(Hukuki_Durum)), '') = ''
           AND LTRIM(RTRIM(ISNULL(Durum,''))) NOT IN (N'İADE',N'IADE',N'İPTAL',N'IPTAL',N'RET')
     )
 
