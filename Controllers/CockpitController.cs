@@ -728,19 +728,9 @@ namespace SOS.Controllers
             var today = bugun.AddDays(1).AddSeconds(-1);
 
             // ══════════════════════════════════════════════════════════════
-            // SP'lerden kart verileri + eski cache (ürün kırılımı, CEI için)
+            // Eski cache (ürün kırılımı, müşteri eşleşme için)
             // ══════════════════════════════════════════════════════════════
-            var spFaturaTask = _cockpitData.GetFaturaOzetAsync(start, end);
-            var spTahsilatTask = _cockpitData.GetTahsilatOzetAsync(start, end);
-            var spSozlesmeTask = _cockpitData.GetSozlesmeOzetAsync(start, end);
             var cacheTask = LoadAllCachedDataAsync(_contextFactory, _cache);
-
-            await Task.WhenAll(spFaturaTask, spTahsilatTask, spSozlesmeTask, cacheTask);
-
-            var spFatura = spFaturaTask.Result;
-            var spTahsilat = spTahsilatTask.Result;
-            var spSozlesme = spSozlesmeTask.Result;
-            var (allFaturalar, urunMap, musteriMap, sozlesmeler, hedefler, varunaTutarMap, urunGrupMap) = cacheTask.Result;
 
             // ══════════════════════════════════════════════════════════════
             // Single-pass: Tüm KPI'lar TEK döngüde hesaplanır
@@ -776,6 +766,34 @@ namespace SOS.Controllers
             var donemSonu = end;
             if (activeFilter == "month" || activeFilter == "lastmonth")
                 donemSonu = new DateTime(end.Year, end.Month, DateTime.DaysInMonth(end.Year, end.Month), 23, 59, 59);
+
+            // ══════════════════════════════════════════════════════════════
+            // SP çağrıları — parallel (tüm kartlar + üst kartlar + tahsilat oranları)
+            // ══════════════════════════════════════════════════════════════
+            var spFaturaTask = _cockpitData.GetFaturaOzetAsync(start, end);
+            var spTahsilatTask = _cockpitData.GetTahsilatOzetAsync(start, end);
+            var spSozlesmeTask = _cockpitData.GetSozlesmeOzetAsync(start, end);
+            var spFixedMonthTask = _cockpitData.GetFaturaOzetAsync(ayBaslangic, aySonu);
+            var spFixedYTDTask = _cockpitData.GetFaturaOzetAsync(ytdStart, today);
+            var spTahGecenHaftaTask = _cockpitData.GetTahsilatOzetAsync(gecenHaftaBaslangic, gecenHaftaSonu);
+            var spTahBuHaftaTask = _cockpitData.GetTahsilatOzetAsync(haftaBaslangic, haftaSonu);
+            var spTahAylikTask = _cockpitData.GetTahsilatOzetAsync(ayBaslangic, aySonu);
+            var spTahYillikTask = _cockpitData.GetTahsilatOzetAsync(ytdStart, today);
+
+            await Task.WhenAll(cacheTask, spFaturaTask, spTahsilatTask, spSozlesmeTask,
+                spFixedMonthTask, spFixedYTDTask,
+                spTahGecenHaftaTask, spTahBuHaftaTask, spTahAylikTask, spTahYillikTask);
+
+            var (allFaturalar, urunMap, musteriMap, sozlesmeler, hedefler, varunaTutarMap, urunGrupMap) = cacheTask.Result;
+            var spFatura = spFaturaTask.Result;
+            var spTahsilat = spTahsilatTask.Result;
+            var spSozlesme = spSozlesmeTask.Result;
+            var spFixedMonth = spFixedMonthTask.Result;
+            var spFixedYTD = spFixedYTDTask.Result;
+            var spTahGecenHafta = spTahGecenHaftaTask.Result;
+            var spTahBuHafta = spTahBuHaftaTask.Result;
+            var spTahAylik = spTahAylikTask.Result;
+            var spTahYillik = spTahYillikTask.Result;
 
             var m = ComputeMetrics(allFaturalar, start, end, prevStart, prevEnd,
                 donemSonuCei, haftaBaslangic, haftaSonu,
@@ -915,41 +933,41 @@ namespace SOS.Controllers
                     ceiDonemVadesiGecmis = m.CeiDonemVgBakiye,
                     tahsilEdilecek,
                     tahsilKalan,
-                    // Geçen hafta — allFaturalar'dan basit hesap
-                    gecenHaftaTah = allFaturalar.Where(f => !IsRetDurum(f.Durum) && !IsNegatifDurum(f.Durum)
-                        && f.Tahsil_Tarihi.HasValue && f.Tahsil_Tarihi.Value >= gecenHaftaBaslangic && f.Tahsil_Tarihi.Value <= gecenHaftaSonu)
-                        .Sum(f => f.Tahsil_Edilen ?? 0),
-                    gecenHaftaBakiye = allFaturalar.Where(f => !IsRetDurum(f.Durum) && !IsNegatifDurum(f.Durum)
-                        && f.Fatura_Vade_Tarihi.HasValue && f.Fatura_Vade_Tarihi.Value <= gecenHaftaSonu
-                        && (f.Bekleyen_Bakiye ?? ((f.Fatura_Toplam ?? 0) - (f.Tahsil_Edilen ?? 0))) > 0)
-                        .Sum(f => f.Bekleyen_Bakiye ?? ((f.Fatura_Toplam ?? 0) - (f.Tahsil_Edilen ?? 0))),
+                    // Geçen hafta (SP'den)
+                    gecenHaftaTah = spTahGecenHafta.TahsilEdilen,
+                    gecenHaftaBakiye = spTahGecenHafta.BekleyenBakiyeToplam,
                     gecenHaftaBaslangicStr = gecenHaftaBaslangic.ToString("dd.MM"),
                     gecenHaftaSonuStr = gecenHaftaSonu.ToString("dd.MM.yyyy"),
-                    // Bu hafta
-                    ceiHaftalikOran,
-                    ceiHaftalikTahsilat = m.HaftalikTah,
-                    ceiHaftalikToplam = haftalikPayda,
+                    // Bu hafta (SP'den)
+                    ceiHaftalikTahsilat = spTahBuHafta.TahsilEdilen,
+                    ceiHaftalikToplam = spTahBuHafta.BekleyenBakiyeToplam + spTahBuHafta.TahsilEdilen,
+                    ceiHaftalikOran = (spTahBuHafta.BekleyenBakiyeToplam + spTahBuHafta.TahsilEdilen) > 0
+                        ? Math.Round(spTahBuHafta.TahsilEdilen / (spTahBuHafta.BekleyenBakiyeToplam + spTahBuHafta.TahsilEdilen) * 100, 1) : 0,
                     haftaBaslangicStr = haftaBaslangic.ToString("dd.MM"),
                     haftaSonuStr = haftaSonu.ToString("dd.MM.yyyy"),
-                    ceiAylikOran,
-                    ceiAylikTahsilat = m.AylikTah,
-                    ceiAylikToplam = aylikPayda,
-                    ceiYillikOran,
-                    ceiYillikTahsilat = m.YtdTahToplam,
-                    ceiYillikToplam = ytdPayda,
-                    legacy2025Bakiye = m.Legacy2025Bakiye,
-                    // Hedef
+                    // Aylık (SP'den)
+                    ceiAylikTahsilat = spTahAylik.TahsilEdilen,
+                    ceiAylikToplam = spTahAylik.BekleyenBakiyeToplam + spTahAylik.TahsilEdilen,
+                    ceiAylikOran = (spTahAylik.BekleyenBakiyeToplam + spTahAylik.TahsilEdilen) > 0
+                        ? Math.Round(spTahAylik.TahsilEdilen / (spTahAylik.BekleyenBakiyeToplam + spTahAylik.TahsilEdilen) * 100, 1) : 0,
+                    // Yıllık (SP'den)
+                    ceiYillikTahsilat = spTahYillik.TahsilEdilen,
+                    ceiYillikToplam = spTahYillik.BekleyenBakiyeToplam + spTahYillik.TahsilEdilen,
+                    ceiYillikOran = (spTahYillik.BekleyenBakiyeToplam + spTahYillik.TahsilEdilen) > 0
+                        ? Math.Round(spTahYillik.TahsilEdilen / (spTahYillik.BekleyenBakiyeToplam + spTahYillik.TahsilEdilen) * 100, 1) : 0,
+                    legacy2025Bakiye = 0,
+                    // Hedef (SP'den)
                     aylikHedef = donemHedef,
                     hedefGerceklesme = spFatura.Toplam,
                     hedefKalan,
                     hedefYuzde,
-                    // Üst kartlar (DB bazlı)
+                    // Üst kartlar (SP'den)
                     fixedCurrentMonthTarget = fixedMonthTarget,
-                    fixedCurrentMonthActual = m.FixedMonthActual,
-                    fixedCurrentMonthPct = fixedMonthPct,
+                    fixedCurrentMonthActual = spFixedMonth.Toplam,
+                    fixedCurrentMonthPct = fixedMonthTarget > 0 ? Math.Round(spFixedMonth.Toplam / fixedMonthTarget * 100, 1) : 0,
                     fixedYTDTarget = fixedYTDTarget,
-                    fixedYTDActual = fixedYTDActual,
-                    fixedYTDPct = fixedYTDPct,
+                    fixedYTDActual = spFixedYTD.Toplam,
+                    fixedYTDPct = fixedAnnualTarget > 0 ? Math.Round(spFixedYTD.Toplam / fixedAnnualTarget * 100, 1) : 0,
                     fixedQuarterTarget,
                     currentQuarter,
                     // Vadesi geçmiş & beklenen
