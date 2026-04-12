@@ -1089,10 +1089,12 @@ namespace SOS.Controllers
             {
                 case "faturalar":
                 {
-                    // İade/İptal/Ret faturalar listeden ÇIKARILIR
+                    // SP fatura listesiyle senkron: sadece SP'de olan FaturaNo'lar
+                    var spFatList = await _cockpitData.GetFaturalarAsync(start, end);
+                    var spFatNoSet = new HashSet<string>(spFatList.Select(f => f.FaturaNo), StringComparer.OrdinalIgnoreCase);
+
                     var filtered = allFaturalar
-                        .Where(f => f.EfektifFaturaTarihi.HasValue && f.EfektifFaturaTarihi.Value >= start && f.EfektifFaturaTarihi.Value <= end
-                            && !IsRetDurum(f.Durum) && !IsNegatifDurum(f.Durum))
+                        .Where(f => f.Fatura_No != null && spFatNoSet.Contains(f.Fatura_No))
                         .OrderBy(f => f.EfektifFaturaTarihi)
                         .ToList();
                     MapMusteriUrun(filtered, urunMap, musteriMap);
