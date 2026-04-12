@@ -1305,56 +1305,63 @@ namespace SOS.Controllers
                 }
                 case "sozlesmeler":
                 {
-                    var sozDonemDt = sozlesmeler.Where(s => s.RenewalDate.HasValue && s.RenewalDate.Value >= start && s.RenewalDate.Value <= end)
-                        .OrderBy(s => s.RenewalDate)
-                        .ToList();
-                    var total = sozDonemDt.Count;
-                    var dipToplam = sozDonemDt.Sum(s => s.TotalAmount ?? 0);
-                    var archivedToplam = sozDonemDt.Where(s => string.Equals(s.ContractStatus, "Archived", StringComparison.OrdinalIgnoreCase)).Sum(s => s.TotalAmount ?? 0);
+                    // SP'den — FinishDate+1 bazlı, RelatedContractId ile yeni sözleşme
+                    var spSozList = await _cockpitData.GetSozlesmelerAsync(start, end);
+                    var spOzet = await _cockpitData.GetSozlesmeOzetAsync(start, end);
 
-                    var hierarchy = sozDonemDt
-                        .GroupBy(s => s.RenewalDate!.Value.Year)
+                    var hierarchy = spSozList
+                        .GroupBy(s => (s.Yenilemetarihi ?? s.EskiBitis ?? DateTime.Now).Year)
                         .OrderBy(y => y.Key)
                         .Select(yGrp => new
                         {
                             yil = yGrp.Key,
-                            toplam = yGrp.Sum(s => s.TotalAmount ?? 0),
+                            toplam = yGrp.Sum(s => s.EskiTutar ?? 0),
                             adet = yGrp.Count(),
-                            archivedAdet = yGrp.Count(s => string.Equals(s.ContractStatus, "Archived", StringComparison.OrdinalIgnoreCase)),
+                            archivedAdet = yGrp.Count(s => s.Yenilendi == 1 && string.Equals(s.YeniStatus, "Archived", StringComparison.OrdinalIgnoreCase)),
                             ceyrekler = yGrp
-                                .GroupBy(s => (s.RenewalDate!.Value.Month - 1) / 3 + 1)
+                                .GroupBy(s => ((s.Yenilemetarihi ?? s.EskiBitis ?? DateTime.Now).Month - 1) / 3 + 1)
                                 .OrderBy(q => q.Key)
                                 .Select(qGrp => new
                                 {
                                     ceyrek = qGrp.Key,
                                     label = qGrp.Key + ". Çeyrek",
-                                    toplam = qGrp.Sum(s => s.TotalAmount ?? 0),
+                                    toplam = qGrp.Sum(s => s.EskiTutar ?? 0),
                                     adet = qGrp.Count(),
-                                    archivedAdet = qGrp.Count(s => string.Equals(s.ContractStatus, "Archived", StringComparison.OrdinalIgnoreCase)),
+                                    archivedAdet = qGrp.Count(s => s.Yenilendi == 1 && string.Equals(s.YeniStatus, "Archived", StringComparison.OrdinalIgnoreCase)),
                                     aylar = qGrp
-                                        .GroupBy(s => s.RenewalDate!.Value.Month)
+                                        .GroupBy(s => (s.Yenilemetarihi ?? s.EskiBitis ?? DateTime.Now).Month)
                                         .OrderBy(m => m.Key)
                                         .Select(mGrp => new
                                         {
                                             ay = mGrp.Key,
                                             ayAdi = new DateTime(yGrp.Key, mGrp.Key, 1).ToString("MMMM", new System.Globalization.CultureInfo("tr-TR")),
-                                            toplam = mGrp.Sum(s => s.TotalAmount ?? 0),
+                                            toplam = mGrp.Sum(s => s.EskiTutar ?? 0),
                                             adet = mGrp.Count(),
-                                            archivedAdet = mGrp.Count(s => string.Equals(s.ContractStatus, "Archived", StringComparison.OrdinalIgnoreCase)),
-                                            sozlesmeler = mGrp.OrderByDescending(s => s.TotalAmount).Select(s => new
+                                            archivedAdet = mGrp.Count(s => s.Yenilendi == 1 && string.Equals(s.YeniStatus, "Archived", StringComparison.OrdinalIgnoreCase)),
+                                            sozlesmeler = mGrp.OrderByDescending(s => s.EskiTutar).Select(s => new
                                             {
-                                                musteri = s.AccountTitle,
-                                                baslangic = s.StartDate?.ToString("dd.MM.yyyy"),
-                                                bitis = s.FinishDate?.ToString("dd.MM.yyyy"),
-                                                yenileme = s.RenewalDate?.ToString("dd.MM.yyyy"),
-                                                tutar = s.TotalAmount ?? 0,
-                                                durum = s.ContractStatus
+                                                musteri = s.Firma,
+                                                baslangic = s.EskiBitis?.AddYears(-1).ToString("dd.MM.yyyy"),
+                                                bitis = s.EskiBitis?.ToString("dd.MM.yyyy"),
+                                                yenileme = s.Yenilemetarihi?.ToString("dd.MM.yyyy"),
+                                                tutar = s.EskiTutar ?? 0,
+                                                durum = s.ContractStatus,
+                                                yenilendi = s.Yenilendi == 1,
+                                                yeniTutar = s.YeniTutar,
+                                                yeniDurum = s.YeniStatus,
+                                                yeniBitis = s.YeniBitis?.ToString("dd.MM.yyyy")
                                             })
                                         })
                                 })
                         });
 
-                    return Json(new { total, dipToplam, archivedToplam, startLevel, hierarchy });
+                    return Json(new {
+                        total = spOzet.Toplam,
+                        dipToplam = spOzet.YeniTutar,
+                        archivedToplam = spOzet.ArchivedTutar,
+                        startLevel,
+                        hierarchy
+                    });
                 }
                 default:
                     return BadRequest(new { error = "Geçersiz tip" });
