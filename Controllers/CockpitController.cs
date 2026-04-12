@@ -1196,25 +1196,27 @@ namespace SOS.Controllers
                         })
                         .ToList();
 
-                    // Tahsil edilenler: Tahsil_Tarihi dönemde
-                    var tahsilEdilenler = viewFaturalar
-                        .Where(f => f.Tahsil_Tarihi.HasValue
-                            && f.Tahsil_Tarihi.Value >= start && f.Tahsil_Tarihi.Value <= end
-                            && (f.Tahsil_Edilen ?? 0) > 0)
-                        .Select(f => new { fatura = f, tarih = f.Tahsil_Tarihi!.Value, odendi = true })
+                    // Vade tarihi dönemde olan faturalar — hiyerarşi Fatura_Vade_Tarihi bazlı
+                    var vadeDonemdeFaturalar = viewFaturalar
+                        .Where(f => f.Fatura_Vade_Tarihi.HasValue
+                            && f.Fatura_Vade_Tarihi.Value >= start && f.Fatura_Vade_Tarihi.Value <= end)
                         .ToList();
 
-                    // Bekleyen bakiye: Fatura_Vade_Tarihi dönemde & bakiye > 0
-                    var bekleyenler = viewFaturalar
-                        .Where(f => f.Fatura_Vade_Tarihi.HasValue
-                            && f.Fatura_Vade_Tarihi.Value >= start && f.Fatura_Vade_Tarihi.Value <= end
-                            && (f.Bekleyen_Bakiye ?? ((f.Fatura_Toplam ?? 0) - (f.Tahsil_Edilen ?? 0))) > 0
+                    // Tahsil edilenler: Tahsil_Edilen > 0
+                    var tahsilEdilenler = vadeDonemdeFaturalar
+                        .Where(f => (f.Tahsil_Edilen ?? 0) > 0)
+                        .Select(f => new { fatura = f, vadeTarih = f.Fatura_Vade_Tarihi!.Value, odendi = true })
+                        .ToList();
+
+                    // Bekleyen bakiye: bakiye > 0
+                    var bekleyenler = vadeDonemdeFaturalar
+                        .Where(f => (f.Bekleyen_Bakiye ?? ((f.Fatura_Toplam ?? 0) - (f.Tahsil_Edilen ?? 0))) > 0
                             && !tahsilEdilenler.Any(t => t.fatura.Fatura_No == f.Fatura_No))
-                        .Select(f => new { fatura = f, tarih = f.Fatura_Vade_Tarihi!.Value, odendi = false })
+                        .Select(f => new { fatura = f, vadeTarih = f.Fatura_Vade_Tarihi!.Value, odendi = false })
                         .ToList();
 
                     var combined = tahsilEdilenler.Concat(bekleyenler)
-                        .OrderBy(x => x.tarih)
+                        .OrderBy(x => x.vadeTarih)
                         .ToList();
 
                     // Müşteri bilgisi: VIEW'den Ilgili_Kisi veya Varuna AccountTitle
@@ -1234,7 +1236,7 @@ namespace SOS.Controllers
                     var dipToplam = spTahDip.TahsilEdilen;
 
                     var hierarchy = combined
-                        .GroupBy(x => x.tarih.Year)
+                        .GroupBy(x => x.vadeTarih.Year)
                         .OrderBy(y => y.Key)
                         .Select(yGrp => new
                         {
@@ -1242,7 +1244,7 @@ namespace SOS.Controllers
                             toplam = yGrp.Where(x => x.odendi).Sum(x => x.fatura.Tahsil_Edilen ?? 0),
                             adet = yGrp.Count(),
                             ceyrekler = yGrp
-                                .GroupBy(x => (x.tarih.Month - 1) / 3 + 1)
+                                .GroupBy(x => (x.vadeTarih.Month - 1) / 3 + 1)
                                 .OrderBy(q => q.Key)
                                 .Select(qGrp => new
                                 {
@@ -1251,7 +1253,7 @@ namespace SOS.Controllers
                                     toplam = qGrp.Where(x => x.odendi).Sum(x => x.fatura.Tahsil_Edilen ?? 0),
                                     adet = qGrp.Count(),
                                     aylar = qGrp
-                                        .GroupBy(x => x.tarih.Month)
+                                        .GroupBy(x => x.vadeTarih.Month)
                                         .OrderBy(m => m.Key)
                                         .Select(mGrp => new
                                         {
@@ -1260,12 +1262,11 @@ namespace SOS.Controllers
                                             toplam = mGrp.Where(x => x.odendi).Sum(x => x.fatura.Tahsil_Edilen ?? 0),
                                             adet = mGrp.Count(),
                                             haftalar = mGrp
-                                                .GroupBy(x => GetIsoWeek(x.tarih))
+                                                .GroupBy(x => GetIsoWeek(x.vadeTarih))
                                                 .OrderBy(w => w.Key)
                                                 .Select(wGrp =>
                                                 {
-                                                    // Hafta başı/sonu: ISO week'e göre Pazartesi-Pazar
-                                                    var anyDate = wGrp.First().tarih;
+                                                    var anyDate = wGrp.First().vadeTarih;
                                                     var wStart = System.Globalization.ISOWeek.ToDateTime(anyDate.Year, wGrp.Key, DayOfWeek.Monday);
                                                     var wEnd = wStart.AddDays(6);
                                                     var haftaHedef = allOpenInvoices
@@ -1282,7 +1283,7 @@ namespace SOS.Controllers
                                                         alinmasiGereken = haftaHedef,
                                                         adet = wGrp.Count(),
                                                         gunler = wGrp
-                                                            .GroupBy(x => x.tarih.Date)
+                                                            .GroupBy(x => x.vadeTarih.Date)
                                                             .OrderBy(d => d.Key)
                                                             .Select(dGrp => new
                                                             {
