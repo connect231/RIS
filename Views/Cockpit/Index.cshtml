@@ -1349,7 +1349,14 @@
             // İlk yükleme: ürün kırılımı
             fetch('/Cockpit/Index?' + getFilterParams(), { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
                 .then(r => r.json())
-                .then(d => renderUrunKirilim(d.urunKirilim))
+                .then(d => {
+                    renderUrunKirilim(d.urunKirilim);
+                    // Geçen hafta kartını güncelle (ilk yükleme)
+                    var ghToplam = (d.gecenHaftaBakiye || 0) + (d.gecenHaftaTah || 0);
+                    var ghOran = ghToplam > 0 ? Math.round(d.gecenHaftaTah / ghToplam * 1000) / 10 : 0;
+                    updateCeiBar('ceiGecenHafta', ghOran, d.gecenHaftaTah || 0, ghToplam);
+                    smoothUpdate(document.getElementById('ceiGecenHaftaRange'), (d.gecenHaftaBaslangicStr||'') + ' → ' + (d.gecenHaftaSonuStr||''));
+                })
                 .catch(() => {});
         }, 300);
 
