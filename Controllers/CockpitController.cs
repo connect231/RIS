@@ -1204,17 +1204,17 @@ namespace SOS.Controllers
                         .Select(f => new { fatura = f, tarih = f.Tahsil_Tarihi!.Value, odendi = true })
                         .ToList();
 
-                    // Bekleyen bakiye: Fatura_Vade_Tarihi <= dönem sonu & bakiye > 0
+                    // Bekleyen bakiye: Fatura_Vade_Tarihi dönemde & bakiye > 0
                     var bekleyenler = viewFaturalar
                         .Where(f => f.Fatura_Vade_Tarihi.HasValue
-                            && f.Fatura_Vade_Tarihi.Value <= end
+                            && f.Fatura_Vade_Tarihi.Value >= start && f.Fatura_Vade_Tarihi.Value <= end
                             && (f.Bekleyen_Bakiye ?? ((f.Fatura_Toplam ?? 0) - (f.Tahsil_Edilen ?? 0))) > 0
                             && !tahsilEdilenler.Any(t => t.fatura.Fatura_No == f.Fatura_No))
                         .Select(f => new { fatura = f, tarih = f.Fatura_Vade_Tarihi!.Value, odendi = false })
                         .ToList();
 
                     var combined = tahsilEdilenler.Concat(bekleyenler)
-                        .OrderByDescending(x => x.tarih)
+                        .OrderBy(x => x.tarih)
                         .ToList();
 
                     // Müşteri bilgisi: VIEW'den Ilgili_Kisi veya Varuna AccountTitle
@@ -1235,7 +1235,7 @@ namespace SOS.Controllers
 
                     var hierarchy = combined
                         .GroupBy(x => x.tarih.Year)
-                        .OrderByDescending(y => y.Key)
+                        .OrderBy(y => y.Key)
                         .Select(yGrp => new
                         {
                             yil = yGrp.Key,
@@ -1243,7 +1243,7 @@ namespace SOS.Controllers
                             adet = yGrp.Count(),
                             ceyrekler = yGrp
                                 .GroupBy(x => (x.tarih.Month - 1) / 3 + 1)
-                                .OrderByDescending(q => q.Key)
+                                .OrderBy(q => q.Key)
                                 .Select(qGrp => new
                                 {
                                     ceyrek = qGrp.Key,
@@ -1252,7 +1252,7 @@ namespace SOS.Controllers
                                     adet = qGrp.Count(),
                                     aylar = qGrp
                                         .GroupBy(x => x.tarih.Month)
-                                        .OrderByDescending(m => m.Key)
+                                        .OrderBy(m => m.Key)
                                         .Select(mGrp => new
                                         {
                                             ay = mGrp.Key,
@@ -1261,7 +1261,7 @@ namespace SOS.Controllers
                                             adet = mGrp.Count(),
                                             haftalar = mGrp
                                                 .GroupBy(x => GetIsoWeek(x.tarih))
-                                                .OrderByDescending(w => w.Key)
+                                                .OrderBy(w => w.Key)
                                                 .Select(wGrp =>
                                                 {
                                                     // Hafta başı/sonu: ISO week'e göre Pazartesi-Pazar

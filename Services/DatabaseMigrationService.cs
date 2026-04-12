@@ -370,6 +370,14 @@ BEGIN
 END;
 ");
 
+                // ── Raporlama ana ürünü kaldır: StockCode'ları Enroute/Quest'e taşı ──
+                await ExecuteSqlAsync(
+                    "UPDATE TBLSOS_URUN_ESLESTIRME SET AnaUrunId = 3 WHERE StokKodu = N'EH.05.002' AND AnaUrunId = 9"); // → Enroute
+                await ExecuteSqlAsync(
+                    "UPDATE TBLSOS_URUN_ESLESTIRME SET AnaUrunId = 5 WHERE StokKodu = N'QH.07.001' AND AnaUrunId = 9"); // → Quest
+                await ExecuteSqlAsync(
+                    "UPDATE TBLSOS_URUN_ESLESTIRME SET AnaUrunId = 5 WHERE StokKodu = N'QH.07.002' AND AnaUrunId = 9"); // → Quest
+
                 _logger.LogInformation("SOS database migrations completed successfully");
             }
             catch (Exception ex)
