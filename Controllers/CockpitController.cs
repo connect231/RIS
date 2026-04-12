@@ -1181,9 +1181,11 @@ namespace SOS.Controllers
                 }
                 case "tahsilatlar":
                 {
-                    // Tüm faturalar: Fatura_Vade_Tarihi dönemde, iade/ret hariç
+                    // VIEW'den gelen faturalar (sentetik hariç), İade/Ret hariç, Fatura_Vade_Tarihi dönemde
+                    // SP_COCKPIT_TAHSILAT ile aynı mantık
                     var donemFaturalar = allFaturalar
                         .Where(f => !IsNegatifDurum(f.Durum) && !IsRetDurum(f.Durum))
+                        .Where(f => f.Fatura_No == null || !f.Fatura_No.StartsWith("SAP:")) // sentetik hariç
                         .Where(f => f.Fatura_Vade_Tarihi.HasValue)
                         .Where(f => f.Fatura_Vade_Tarihi!.Value >= start && f.Fatura_Vade_Tarihi!.Value <= end)
                         .ToList();
