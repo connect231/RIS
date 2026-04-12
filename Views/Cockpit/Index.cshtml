@@ -809,6 +809,7 @@
     // parentStack: parent group id'lerini takip eder (renderLevel'da set edilir)
     var parentStack = [];
 
+    var hierColSpan = 3; // default: fatura (3+tutar+kdv=5 kolon)
     function hierHeader(level, label, toplam, adet, extra, kdvDahilToplam, closed) {
         var uid = 'h'+(hierUid++);
         var indent = level === 0 ? '' : level === 1 ? 'pl-4' : level === 2 ? 'pl-8' : level === 3 ? 'pl-12' : 'pl-16';
@@ -819,7 +820,7 @@
         var parentAttr = parentStack.length > 0 ? ` data-parent="${parentStack[parentStack.length-1]}"` : '';
         var kdvHtml = kdvDahilToplam != null ? fmtN.format(kdvDahilToplam) : '';
         return { uid, closed, html: `<tr class="cursor-pointer hover:bg-blue-50/30 ${bg}" data-group="${uid}"${parentAttr}>
-            <td colspan="3" class="py-2 px-2 ${indent}">
+            <td colspan="${hierColSpan}" class="py-2 px-2 ${indent}">
                 <div class="flex items-center gap-2">
                     <i class="bi bi-chevron-right text-slate-400 transition-transform duration-200 ${arrowCls}" id="arr-${uid}" style="font-size:10px;"></i>
                     <span class="${size} text-[#1e293b]">${esc(label)}</span>
@@ -965,6 +966,7 @@
             const sl = result.startLevel; // 'yil', 'ceyrek', 'ay'
             let h = '<table class="w-full">';
             if (isFatura) {
+                hierColSpan = 3;
                 h += `<thead class="sticky top-0 z-10 bg-white"><tr class="border-b border-slate-200 text-[10px] text-slate-400 uppercase tracking-wider">
                     <th class="py-2 px-2 w-5"></th>
                     <th class="text-left py-2 px-2 font-semibold">Fatura No</th>
@@ -973,6 +975,7 @@
                     <th class="text-right py-2 px-2 font-semibold">KDV Dahil</th>
                 </tr></thead>`;
             } else if (type === 'tahsilatlar') {
+                hierColSpan = 4;
                 h += `<thead class="sticky top-0 z-10 bg-white"><tr class="border-b border-slate-200 text-[10px] text-slate-400 uppercase tracking-wider">
                     <th class="py-2 px-2 w-5"></th>
                     <th class="text-left py-2 px-2 font-semibold">Müşteri</th>
