@@ -306,12 +306,28 @@
     <div class="h-px w-6 bg-slate-200"></div>
     <span class="text-[10px] font-semibold text-slate-400 tracking-widest">Tahsilat Başarı Oranları</span>
 </div>
-<div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-5 fade-ready" id="ceiRow">
+<div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-5 fade-ready" id="ceiRow">
+    <!-- Geçen Hafta -->
+    <div class="rounded-xl border px-4 py-3 bg-slate-50 border-slate-200" id="ceiGecenHafta">
+        <div class="flex items-center justify-between mb-1.5">
+            <div class="flex items-center gap-1.5">
+                <i class="bi bi-clock-history text-slate-500" style="font-size:14px;"></i>
+                <span class="text-[12px] font-semibold text-slate-700 tracking-wide">Geçen Hafta</span>
+            </div>
+            <span class="text-lg font-bold text-slate-500" id="ceiGecenHaftaOranText">—</span>
+        </div>
+        <div class="h-2 rounded-full overflow-hidden mb-1.5" style="background:rgba(100,116,139,0.1);">
+            <div class="cei-bar" id="ceiGecenHaftaBar" data-width="0" style="background:#64748b;"></div>
+        </div>
+        <div class="text-[11px] text-slate-600" id="ceiGecenHaftaDetail">—</div>
+        <p class="text-[10px] text-slate-500 mt-0.5" id="ceiGecenHaftaRange">—</p>
+    </div>
+    <!-- Bu Hafta -->
     <div class="rounded-xl border px-4 py-3 bg-blue-50 border-blue-200" id="ceiHaftalik">
         <div class="flex items-center justify-between mb-1.5">
             <div class="flex items-center gap-1.5">
                 <i class="bi @CeiIcon(Model.CeiHaftalikOran)" style="font-size:14px;"></i>
-                <span class="text-[12px] font-semibold text-slate-700 tracking-wide">Haftalık Tahsilat</span>
+                <span class="text-[12px] font-semibold text-slate-700 tracking-wide">Bu Hafta</span>
             </div>
             <span class="text-lg font-bold text-blue-700" id="ceiHaftalikOranText">%@Model.CeiHaftalikOran.ToString("N0")</span>
         </div>
@@ -1188,6 +1204,15 @@
 
             // Trends
             smoothHtmlUpdate(document.getElementById('faturalarTrend'), trendHtml(d.faturalarTrend, d.prevFaturalarToplam));
+
+            // Geçen hafta
+            var ghToplam = (d.gecenHaftaBakiye || 0) + (d.gecenHaftaTah || 0);
+            var ghOran = ghToplam > 0 ? Math.round(d.gecenHaftaTah / ghToplam * 1000) / 10 : 0;
+            smoothUpdate(document.getElementById('ceiGecenHaftaOranText'), '%' + ghOran.toFixed(0));
+            smoothUpdate(document.getElementById('ceiGecenHaftaDetail'), '₺' + fmtN.format(d.gecenHaftaTah || 0) + ' / ₺' + fmtN.format(ghToplam));
+            smoothUpdate(document.getElementById('ceiGecenHaftaRange'), (d.gecenHaftaBaslangicStr||'') + ' → ' + (d.gecenHaftaSonuStr||''));
+            var ghBar = document.getElementById('ceiGecenHaftaBar');
+            if (ghBar) { ghBar.style.width = Math.min(ghOran, 100) + '%'; }
 
             // CEI bars — scaleX GPU animation
             updateCeiBar('ceiHaftalik', d.ceiHaftalikOran, d.ceiHaftalikTahsilat, d.ceiHaftalikToplam);

@@ -764,6 +764,10 @@ namespace SOS.Controllers
             var haftaBaslangic = bugun.AddDays(-dayOfWeek);
             var haftaSonu = haftaBaslangic.AddDays(4).AddHours(23).AddMinutes(59).AddSeconds(59);
 
+            // Geçen hafta: bu haftanın Pazartesi'sinden 7 gün geri → geçen Pazartesi-Cuma
+            var gecenHaftaBaslangic = haftaBaslangic.AddDays(-7);
+            var gecenHaftaSonu = gecenHaftaBaslangic.AddDays(4).AddHours(23).AddMinutes(59).AddSeconds(59);
+
             var fixedMonthStart = ayBaslangic;
             var fixedMonthEnd = aySonu;
             var fixedYTDStart = ytdStart;
@@ -911,6 +915,17 @@ namespace SOS.Controllers
                     ceiDonemVadesiGecmis = m.CeiDonemVgBakiye,
                     tahsilEdilecek,
                     tahsilKalan,
+                    // Geçen hafta — allFaturalar'dan basit hesap
+                    gecenHaftaTah = allFaturalar.Where(f => !IsRetDurum(f.Durum) && !IsNegatifDurum(f.Durum)
+                        && f.Tahsil_Tarihi.HasValue && f.Tahsil_Tarihi.Value >= gecenHaftaBaslangic && f.Tahsil_Tarihi.Value <= gecenHaftaSonu)
+                        .Sum(f => f.Tahsil_Edilen ?? 0),
+                    gecenHaftaBakiye = allFaturalar.Where(f => !IsRetDurum(f.Durum) && !IsNegatifDurum(f.Durum)
+                        && f.Fatura_Vade_Tarihi.HasValue && f.Fatura_Vade_Tarihi.Value <= gecenHaftaSonu
+                        && (f.Bekleyen_Bakiye ?? ((f.Fatura_Toplam ?? 0) - (f.Tahsil_Edilen ?? 0))) > 0)
+                        .Sum(f => f.Bekleyen_Bakiye ?? ((f.Fatura_Toplam ?? 0) - (f.Tahsil_Edilen ?? 0))),
+                    gecenHaftaBaslangicStr = gecenHaftaBaslangic.ToString("dd.MM"),
+                    gecenHaftaSonuStr = gecenHaftaSonu.ToString("dd.MM.yyyy"),
+                    // Bu hafta
                     ceiHaftalikOran,
                     ceiHaftalikTahsilat = m.HaftalikTah,
                     ceiHaftalikToplam = haftalikPayda,
