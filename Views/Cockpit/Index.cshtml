@@ -1208,11 +1208,8 @@
             // Geçen hafta
             var ghToplam = (d.gecenHaftaBakiye || 0) + (d.gecenHaftaTah || 0);
             var ghOran = ghToplam > 0 ? Math.round(d.gecenHaftaTah / ghToplam * 1000) / 10 : 0;
-            smoothUpdate(document.getElementById('ceiGecenHaftaOranText'), '%' + ghOran.toFixed(0));
-            smoothUpdate(document.getElementById('ceiGecenHaftaDetail'), '₺' + fmtN.format(d.gecenHaftaTah || 0) + ' / ₺' + fmtN.format(ghToplam));
+            updateCeiBar('ceiGecenHafta', ghOran, d.gecenHaftaTah || 0, ghToplam);
             smoothUpdate(document.getElementById('ceiGecenHaftaRange'), (d.gecenHaftaBaslangicStr||'') + ' → ' + (d.gecenHaftaSonuStr||''));
-            var ghBar = document.getElementById('ceiGecenHaftaBar');
-            if (ghBar) { ghBar.style.width = Math.min(ghOran, 100) + '%'; }
 
             // CEI bars — scaleX GPU animation
             updateCeiBar('ceiHaftalik', d.ceiHaftalikOran, d.ceiHaftalikTahsilat, d.ceiHaftalikToplam);
@@ -1286,7 +1283,7 @@
         const cardIds = { ceiDonem: 'ceiDonem' };
         // Tüm CEI kartlarını bul (prefix'e göre)
         const allCards = document.querySelectorAll('#ceiRow > div');
-        const cardIndex = prefix === 'ceiHaftalik' ? 0 : prefix === 'ceiAylik' ? 1 : 2;
+        const cardIndex = prefix === 'ceiGecenHafta' ? 0 : prefix === 'ceiHaftalik' ? 1 : prefix === 'ceiAylik' ? 2 : 3;
         const card = allCards[cardIndex];
         if (card) {
             card.className = card.className.replace(/bg-\S+|border-\S+/g, '');
