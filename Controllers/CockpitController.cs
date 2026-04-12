@@ -1214,11 +1214,15 @@ namespace SOS.Controllers
                         .ToList();
 
                     var combined = tahsilEdilenler.Concat(bekleyenler)
-                        .OrderBy(x => x.tarih)
+                        .OrderByDescending(x => x.tarih)
                         .ToList();
 
+                    // Müşteri bilgisi: VIEW'den Ilgili_Kisi veya Varuna AccountTitle
                     var filteredFaturalar = combined.Select(x => x.fatura).ToList();
                     MapMusteriUrun(filteredFaturalar, urunMap, musteriMap);
+                    // Ilgili_Kisi fallback
+                    foreach (var f in filteredFaturalar)
+                        if (string.IsNullOrEmpty(f.MusteriUnvan)) f.MusteriUnvan = f.Ilgili_Kisi;
 
                     // Haftalık hedef hesapla
                     var allOpenInvoices = allFaturalar
@@ -1231,33 +1235,33 @@ namespace SOS.Controllers
 
                     var hierarchy = combined
                         .GroupBy(x => x.tarih.Year)
-                        .OrderBy(y => y.Key)
+                        .OrderByDescending(y => y.Key)
                         .Select(yGrp => new
                         {
                             yil = yGrp.Key,
-                            toplam = yGrp.Where(x => x.odendi).Sum(x => x.fatura.Fatura_Toplam ?? 0),
+                            toplam = yGrp.Where(x => x.odendi).Sum(x => x.fatura.Tahsil_Edilen ?? 0),
                             adet = yGrp.Count(),
                             ceyrekler = yGrp
                                 .GroupBy(x => (x.tarih.Month - 1) / 3 + 1)
-                                .OrderBy(q => q.Key)
+                                .OrderByDescending(q => q.Key)
                                 .Select(qGrp => new
                                 {
                                     ceyrek = qGrp.Key,
                                     label = qGrp.Key + ". Çeyrek",
-                                    toplam = qGrp.Where(x => x.odendi).Sum(x => x.fatura.Fatura_Toplam ?? 0),
+                                    toplam = qGrp.Where(x => x.odendi).Sum(x => x.fatura.Tahsil_Edilen ?? 0),
                                     adet = qGrp.Count(),
                                     aylar = qGrp
                                         .GroupBy(x => x.tarih.Month)
-                                        .OrderBy(m => m.Key)
+                                        .OrderByDescending(m => m.Key)
                                         .Select(mGrp => new
                                         {
                                             ay = mGrp.Key,
                                             ayAdi = new DateTime(yGrp.Key, mGrp.Key, 1).ToString("MMMM", new System.Globalization.CultureInfo("tr-TR")),
-                                            toplam = mGrp.Where(x => x.odendi).Sum(x => x.fatura.Fatura_Toplam ?? 0),
+                                            toplam = mGrp.Where(x => x.odendi).Sum(x => x.fatura.Tahsil_Edilen ?? 0),
                                             adet = mGrp.Count(),
                                             haftalar = mGrp
                                                 .GroupBy(x => GetIsoWeek(x.tarih))
-                                                .OrderBy(w => w.Key)
+                                                .OrderByDescending(w => w.Key)
                                                 .Select(wGrp =>
                                                 {
                                                     // Hafta başı/sonu: ISO week'e göre Pazartesi-Pazar
@@ -1269,7 +1273,7 @@ namespace SOS.Controllers
                                                             && inv.Fatura_Vade_Tarihi.Value.Date >= wStart
                                                             && inv.Fatura_Vade_Tarihi.Value.Date <= wEnd)
                                                         .Sum(inv => inv.Bekleyen_Bakiye ?? ((inv.Fatura_Toplam ?? 0) - (inv.Tahsil_Edilen ?? 0)));
-                                                    var alinan = wGrp.Where(x => x.odendi).Sum(x => x.fatura.Fatura_Toplam ?? 0);
+                                                    var alinan = wGrp.Where(x => x.odendi).Sum(x => x.fatura.Tahsil_Edilen ?? 0);
 
                                                     return new
                                                     {
@@ -1283,14 +1287,16 @@ namespace SOS.Controllers
                                                             .Select(dGrp => new
                                                             {
                                                                 tarih = dGrp.Key.ToString("dd.MM.yyyy"),
-                                                                toplam = dGrp.Where(x => x.odendi).Sum(x => x.fatura.Fatura_Toplam ?? 0),
+                                                                toplam = dGrp.Where(x => x.odendi).Sum(x => x.fatura.Tahsil_Edilen ?? 0),
                                                                 adet = dGrp.Count(),
                                                                 faturalar = dGrp.Select(x => new
                                                                 {
                                                                     faturaNo = x.fatura.Fatura_No,
-                                                                    musteri = x.fatura.MusteriUnvan,
-                                                                    tutar = x.fatura.Fatura_Toplam ?? 0,
+                                                                    musteri = x.fatura.MusteriUnvan ?? x.fatura.Ilgili_Kisi,
+                                                                    tahsilEdilen = x.fatura.Tahsil_Edilen ?? 0,
                                                                     bakiye = x.fatura.Bekleyen_Bakiye ?? ((x.fatura.Fatura_Toplam ?? 0) - (x.fatura.Tahsil_Edilen ?? 0)),
+                                                                    tutar = x.odendi ? (x.fatura.Tahsil_Edilen ?? 0) : (x.fatura.Bekleyen_Bakiye ?? ((x.fatura.Fatura_Toplam ?? 0) - (x.fatura.Tahsil_Edilen ?? 0))),
+                                                                    tarih = x.odendi ? x.fatura.Tahsil_Tarihi?.ToString("dd.MM.yyyy") : x.fatura.Fatura_Vade_Tarihi?.ToString("dd.MM.yyyy"),
                                                                     durum = x.fatura.Durum?.Trim()?.ToUpper(),
                                                                     odendi = x.odendi
                                                                 })
