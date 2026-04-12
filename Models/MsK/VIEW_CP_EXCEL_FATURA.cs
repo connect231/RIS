@@ -84,4 +84,17 @@ public class VIEW_CP_EXCEL_FATURA
 
     [NotMapped]
     public bool VarunaEslesti { get; set; }
+
+    /// <summary>
+    /// Tahakkuk override tarihi varsa onu, yoksa Fatura_Tarihi'ni döner.
+    /// Tüm dashboard fatura/tarih hesapları bunu kullanmalı.
+    /// </summary>
+    [NotMapped]
+    public DateTime? EfektifFaturaTarihi { get; set; }
+
+    /// <summary>
+    /// Bu fatura için TBLSOS_FATURA_TAHAKKUK'ta aktif kayıt var mı?
+    /// </summary>
+    [NotMapped]
+    public bool TahakkukVar { get; set; }
 }

@@ -1,0 +1,290 @@
+@{
+    ViewData["Title"] = "Fatura Tahakkuk Yönetimi";
+}
+
+<div class="px-6 py-5">
+    <!-- Header -->
+    <div class="flex items-center gap-3 mb-5">
+        <div class="w-9 h-9 rounded-lg bg-amber-100 flex items-center justify-center">
+            <i class="bi bi-calendar-check text-amber-700" style="font-size:16px;"></i>
+        </div>
+        <div>
+            <h1 class="text-xl font-semibold text-[#1e293b] tracking-tight">Fatura Tahakkuk Yönetimi</h1>
+            <p class="text-[10px] text-slate-400">
+                SAP referans no veya matbu fatura no ile aratarak tahakkuk tarihi belirleyin.
+            </p>
+        </div>
+    </div>
+
+    <!-- Arama Kutusu -->
+    <div class="card bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mb-5">
+        <label class="text-[11px] font-semibold text-slate-500 tracking-wider uppercase mb-2 block">
+            <i class="bi bi-search mr-1"></i> SAP no veya fatura no ile ara
+        </label>
+        <div class="flex gap-2">
+            <input id="aramaInput" type="text" placeholder="1000005731 veya UNB2026000000067"
+                   class="flex-1 px-4 py-2.5 rounded-xl border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                   autocomplete="off" />
+            <button id="searchBtn" class="px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-medium transition-colors">
+                Ara
+            </button>
+        </div>
+        <p id="searchError" class="text-[11px] text-red-500 mt-2 hidden"></p>
+    </div>
+
+    <!-- Bulunan Fatura Detayı -->
+    <div id="faturaDetail" class="hidden card bg-white rounded-2xl shadow-sm border border-slate-200 p-5 mb-5">
+        <div class="flex items-center justify-between mb-4">
+            <h2 class="text-sm font-bold text-[#1e293b]">
+                <i class="bi bi-receipt text-blue-600 mr-1"></i> Sipariş Bilgisi
+            </h2>
+            <span id="tahakkukBadge" class="hidden text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-semibold">
+                Mevcut tahakkuk var
+            </span>
+        </div>
+
+        <div class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-5">
+            <div>
+                <div class="text-[10px] text-slate-400 uppercase tracking-wide">SAP referans no</div>
+                <div id="dSapNo" class="text-sm font-bold text-[#1e293b]">—</div>
+            </div>
+            <div>
+                <div class="text-[10px] text-slate-400 uppercase tracking-wide">Fatura no (matbu)</div>
+                <div id="dFaturaNo" class="text-sm font-medium text-slate-700">—</div>
+            </div>
+            <div>
+                <div class="text-[10px] text-slate-400 uppercase tracking-wide">Firma</div>
+                <div id="dFirma" class="text-sm font-medium text-slate-700 truncate">—</div>
+            </div>
+            <div>
+                <div class="text-[10px] text-slate-400 uppercase tracking-wide">Tutar</div>
+                <div id="dTutar" class="text-sm font-bold text-blue-700">—</div>
+            </div>
+            <div>
+                <div class="text-[10px] text-slate-400 uppercase tracking-wide">Orijinal tarih</div>
+                <div id="dOrijinalTarih" class="text-sm font-medium text-slate-700">—</div>
+            </div>
+        </div>
+
+        <!-- Tahakkuk Form -->
+        <div class="border-t border-slate-100 pt-4">
+            <h3 class="text-[11px] font-bold text-slate-500 uppercase tracking-wider mb-3">
+                <i class="bi bi-calendar-event mr-1"></i> Tahakkuk Tarihi
+            </h3>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-3">
+                <div>
+                    <label class="text-[10px] text-slate-500 mb-1 block">Yeni tahakkuk tarihi</label>
+                    <input id="tahakkukDate" type="date" class="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+                <div class="md:col-span-2">
+                    <label class="text-[10px] text-slate-500 mb-1 block">Açıklama (opsiyonel)</label>
+                    <input id="tahakkukAciklama" type="text" placeholder="Mart muhasebe kapanışı"
+                           class="w-full px-3 py-2 rounded-lg border border-slate-300 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" />
+                </div>
+            </div>
+
+            <div id="mevcutTahakkukBilgi" class="hidden mb-3 p-3 rounded-lg bg-amber-50 border border-amber-200 text-[11px] text-amber-900">
+                <strong>Mevcut tahakkuk:</strong> <span id="mevcutTahakkukDetay"></span>
+            </div>
+
+            <div class="flex gap-2">
+                <button id="saveBtn" class="px-5 py-2.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-medium transition-colors">
+                    <i class="bi bi-check2 mr-1"></i> Kaydet
+                </button>
+                <button id="deleteBtn" class="hidden px-5 py-2.5 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-medium transition-colors">
+                    <i class="bi bi-trash mr-1"></i> Tahakkuku sil
+                </button>
+            </div>
+            <p id="saveMsg" class="text-[11px] mt-2 hidden"></p>
+        </div>
+    </div>
+
+    <!-- Mevcut Tahakkuklar Listesi -->
+    <div class="card bg-white rounded-2xl shadow-sm border border-slate-200 p-5">
+        <div class="flex items-center justify-between mb-3">
+            <h2 class="text-sm font-bold text-[#1e293b]">
+                <i class="bi bi-list-ul text-slate-500 mr-1"></i> Mevcut Tahakkuklar
+            </h2>
+            <span id="listCount" class="text-[10px] text-slate-400">— kayıt</span>
+        </div>
+        <div class="overflow-x-auto">
+            <table class="w-full text-[12px]">
+                <thead class="text-[10px] text-slate-400 uppercase tracking-wider border-b border-slate-200">
+                    <tr>
+                        <th class="text-left py-2 px-2 font-semibold">SAP no</th>
+                        <th class="text-left py-2 px-2 font-semibold">Fatura no</th>
+                        <th class="text-left py-2 px-2 font-semibold">Firma</th>
+                        <th class="text-right py-2 px-2 font-semibold">Tutar</th>
+                        <th class="text-center py-2 px-2 font-semibold">Orijinal tarih</th>
+                        <th class="text-center py-2 px-2 font-semibold">Tahakkuk tarihi</th>
+                        <th class="text-center py-2 px-2 font-semibold">İşlem</th>
+                    </tr>
+                </thead>
+                <tbody id="tahakkukList">
+                    <tr><td colspan="7" class="py-6 text-center text-slate-400">Yükleniyor...</td></tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+<script>
+(function(){
+    'use strict';
+    const fmtN = new Intl.NumberFormat('tr-TR', { maximumFractionDigits: 0 });
+
+    function esc(s) {
+        if (s == null) return '';
+        return String(s).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    }
+    function showError(msg) {
+        const e = document.getElementById('searchError');
+        e.textContent = msg;
+        e.classList.remove('hidden');
+    }
+    function hideError() { document.getElementById('searchError').classList.add('hidden'); }
+    function showSaveMsg(msg, isError) {
+        const e = document.getElementById('saveMsg');
+        e.textContent = msg;
+        e.className = 'text-[11px] mt-2 ' + (isError ? 'text-red-500' : 'text-emerald-600');
+        e.classList.remove('hidden');
+        setTimeout(() => e.classList.add('hidden'), 4000);
+    }
+
+    let mevcutSapNo = '';
+    let mevcutFaturaNo = '';
+
+    async function lookup(aranan) {
+        hideError();
+        try {
+            const params = new URLSearchParams({ sapNo: aranan, faturaNo: aranan });
+            const r = await fetch('/Tahakkuk/Lookup?' + params, { credentials: 'same-origin' });
+            const d = await r.json();
+            if (!d.success) {
+                showError(d.message || 'Bulunamadı');
+                document.getElementById('faturaDetail').classList.add('hidden');
+                return;
+            }
+
+            mevcutSapNo = d.sapReferansNo || '';
+            mevcutFaturaNo = d.faturaNo || '';
+
+            document.getElementById('dSapNo').textContent = mevcutSapNo || '—';
+            document.getElementById('dFaturaNo').textContent = mevcutFaturaNo || '—';
+            document.getElementById('dFirma').textContent = d.firma || '—';
+            document.getElementById('dOrijinalTarih').textContent = d.orijinalTarih || '—';
+            document.getElementById('dTutar').textContent = d.tutar || '—';
+
+            // Tahakkuk varsa
+            const badge = document.getElementById('tahakkukBadge');
+            const bilgi = document.getElementById('mevcutTahakkukBilgi');
+            const delBtn = document.getElementById('deleteBtn');
+            if (d.mevcutTahakkuk) {
+                badge.classList.remove('hidden');
+                bilgi.classList.remove('hidden');
+                delBtn.classList.remove('hidden');
+                document.getElementById('mevcutTahakkukDetay').textContent = d.mevcutTahakkuk;
+                document.getElementById('tahakkukDate').value = d.mevcutTahakkuk;
+            } else {
+                badge.classList.add('hidden');
+                bilgi.classList.add('hidden');
+                delBtn.classList.add('hidden');
+                document.getElementById('tahakkukDate').value = '';
+            }
+            document.getElementById('tahakkukAciklama').value = '';
+            document.getElementById('faturaDetail').classList.remove('hidden');
+        } catch(e) {
+            showError('Bağlantı hatası: ' + e.message);
+        }
+    }
+
+    async function save() {
+        if (!mevcutSapNo) { showSaveMsg('Önce arama yapın', true); return; }
+        const tarih = document.getElementById('tahakkukDate').value;
+        if (!tarih) { showSaveMsg('Tahakkuk tarihi zorunlu', true); return; }
+
+        const body = new URLSearchParams({
+            sapReferansNo: mevcutSapNo,
+            faturaNo: mevcutFaturaNo,
+            tahakkukTarihi: tarih,
+            aciklama: document.getElementById('tahakkukAciklama').value
+        });
+
+        try {
+            const r = await fetch('/Tahakkuk/Save', { method: 'POST', headers: {'Content-Type':'application/x-www-form-urlencoded'}, body: body.toString(), credentials: 'same-origin' });
+            const d = await r.json();
+            if (d.success) {
+                showSaveMsg(d.message || 'Kaydedildi', false);
+                await lookup(mevcutSapNo);
+                await loadList();
+            } else {
+                showSaveMsg(d.message || 'Hata', true);
+            }
+        } catch(e) { showSaveMsg('Hata: ' + e.message, true); }
+    }
+
+    async function deleteTahakkuk() {
+        if (!mevcutSapNo) return;
+        if (!confirm('Tahakkuk silinsin mi? Fatura orijinal tarihine geri döner.')) return;
+
+        const body = new URLSearchParams({ sapReferansNo: mevcutSapNo });
+        try {
+            const r = await fetch('/Tahakkuk/Delete', { method: 'POST', headers: {'Content-Type':'application/x-www-form-urlencoded'}, body: body.toString(), credentials: 'same-origin' });
+            const d = await r.json();
+            if (d.success) {
+                showSaveMsg(d.message || 'Silindi', false);
+                document.getElementById('faturaDetail').classList.add('hidden');
+                mevcutSapNo = ''; mevcutFaturaNo = '';
+                await loadList();
+            } else { showSaveMsg(d.message || 'Hata', true); }
+        } catch(e) { showSaveMsg('Hata: ' + e.message, true); }
+    }
+
+    async function loadList() {
+        try {
+            const r = await fetch('/Tahakkuk/List', { credentials: 'same-origin' });
+            const rows = await r.json();
+            const tbody = document.getElementById('tahakkukList');
+            document.getElementById('listCount').textContent = rows.length + ' kayıt';
+            if (!rows.length) {
+                tbody.innerHTML = '<tr><td colspan="7" class="py-6 text-center text-slate-400">Henüz tahakkuk girilmemiş</td></tr>';
+                return;
+            }
+            tbody.innerHTML = rows.map(r => `
+                <tr class="border-t border-slate-50 hover:bg-blue-50/30">
+                    <td class="py-2 px-2 font-medium text-[#1e293b]">${esc(r.sapReferansNo)}</td>
+                    <td class="py-2 px-2 text-slate-600">${esc(r.faturaNo) || '—'}</td>
+                    <td class="py-2 px-2 text-slate-600 max-w-[180px] truncate">${esc(r.firma) || '—'}</td>
+                    <td class="py-2 px-2 text-right font-semibold">${r.tutar ? '₺' + fmtN.format(r.tutar) : '—'}</td>
+                    <td class="py-2 px-2 text-center text-slate-500">${esc(r.orijinalTarih)}</td>
+                    <td class="py-2 px-2 text-center font-semibold text-amber-700">${esc(r.tahakkukTarihi)}</td>
+                    <td class="py-2 px-2 text-center">
+                        <button onclick="window._editRow('${esc(r.sapReferansNo).replace(/'/g, "\\'")}')" class="text-blue-600 hover:text-blue-800"><i class="bi bi-pencil"></i></button>
+                    </td>
+                </tr>
+            `).join('');
+        } catch(e) { /* sessiz */ }
+    }
+
+    window._editRow = function(sapNo) {
+        document.getElementById('aramaInput').value = sapNo;
+        lookup(sapNo);
+        window.scrollTo({ top: 0, behavior: 'smooth' });
+    };
+
+    document.getElementById('searchBtn').addEventListener('click', () => {
+        const v = document.getElementById('aramaInput').value.trim();
+        if (v) lookup(v);
+    });
+    document.getElementById('aramaInput').addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); const v = e.target.value.trim(); if (v) lookup(v); }
+    });
+    document.getElementById('saveBtn').addEventListener('click', save);
+    document.getElementById('deleteBtn').addEventListener('click', deleteTahakkuk);
+
+    loadList();
+    document.getElementById('aramaInput').focus();
+})();
+</script>
+}

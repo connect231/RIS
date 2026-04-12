@@ -127,13 +127,6 @@ namespace SOS.Controllers
         private static bool IsDurumBos(string? durum)
             => string.IsNullOrWhiteSpace(durum);
 
-        private static decimal NetTutarSingle(VIEW_CP_EXCEL_FATURA f)
-        {
-            if (IsRetDurum(f.Durum)) return 0;
-            var tutar = f.Fatura_Toplam ?? 0;
-            return IsNegatifDurum(f.Durum) ? -tutar : tutar;
-        }
-
         #endregion
 
         #region Cache (Parallel Loading)
@@ -195,14 +188,16 @@ namespace SOS.Controllers
                     .ToList();
 
                 var siparisler = await db.TBL_VARUNA_SIPARIs.AsNoTracking()
-                    .Where(s => s.SerialNumber != null)
+                    .Where(s => s.OrderId != null)
                     .Select(s => new SiparisDto
                     {
                         SerialNumber = s.SerialNumber,
                         OrderId = s.OrderId,
                         AccountTitle = s.AccountTitle,
                         OrderStatus = s.OrderStatus,
-                        TotalNetAmount = s.TotalNetAmount
+                        TotalNetAmount = s.TotalNetAmount,
+                        InvoiceDate = s.InvoiceDate,
+                        SAPOutReferenceCode = s.SAPOutReferenceCode
                     })
                     .ToListAsync();
 
@@ -239,14 +234,46 @@ namespace SOS.Controllers
                     .GroupBy(s => s.SerialNumber!)
                     .ToDictionary(g => g.Key, g => g.First().AccountTitle);
 
-                // Varuna KDV hariç tutar map'i: Closed siparişlerin TotalNetAmount'u
-                // Fatura_No (SerialNumber) → KDV hariç tutar
-                var varunaTutarMap = siparisler
-                    .Where(s => s.SerialNumber != null
-                        && s.TotalNetAmount.HasValue && s.TotalNetAmount.Value > 0
-                        && string.Equals(s.OrderStatus, "Closed", StringComparison.OrdinalIgnoreCase))
-                    .GroupBy(s => s.SerialNumber!)
-                    .ToDictionary(g => g.Key, g => g.First().TotalNetAmount!.Value);
+                // Varuna kalem bazlı net tutar: OrderId → SUM(kalem.Total)
+                // İptal kalemleri negatif Total taşır → net toplam Excel ile tutarlı olur
+                var kalemToplamByOrder = urunler
+                    .GroupBy(u => u.CrmOrderId!)
+                    .ToDictionary(g => g.Key, g => g.Sum(u => u.Total ?? 0));
+
+                // SerialNumber → TL tutar map
+                // Kalem toplamı varsa: (kalemNet / kalemBrüt) * TotalNetAmount → TL net
+                // Kalem toplamı yoksa veya sıfırsa: TotalNetAmount direkt
+                var varunaTutarMap = new Dictionary<string, decimal>(StringComparer.OrdinalIgnoreCase);
+                foreach (var sip in siparisler.Where(s =>
+                    s.SerialNumber != null
+                    && s.TotalNetAmount.HasValue && s.TotalNetAmount.Value > 0
+                    && string.Equals(s.OrderStatus, "Closed", StringComparison.OrdinalIgnoreCase)))
+                {
+                    var tna = sip.TotalNetAmount!.Value;
+
+                    // Kalemlerin net toplamı (iptal kalemleri negatif)
+                    if (sip.OrderId != null && kalemToplamByOrder.TryGetValue(sip.OrderId, out var kalemNet))
+                    {
+                        // Kalemlerin brüt toplamı (mutlak değer — oran hesabı için)
+                        var kalemBrut = urunler
+                            .Where(u => u.CrmOrderId == sip.OrderId && (u.Total ?? 0) > 0)
+                            .Sum(u => u.Total ?? 0);
+
+                        if (kalemBrut > 0 && kalemNet < kalemBrut)
+                        {
+                            // İptal/iade kalemleri var → TL tutarı oranla düşür
+                            varunaTutarMap[sip.SerialNumber!] = tna * (kalemNet / kalemBrut);
+                        }
+                        else
+                        {
+                            varunaTutarMap[sip.SerialNumber!] = tna;
+                        }
+                    }
+                    else
+                    {
+                        varunaTutarMap[sip.SerialNumber!] = tna;
+                    }
+                }
 
                 // Aylık hedefler (Ay → HedefTutar) — 2026 GENEL
                 var hedefler = await db.TBLSOS_HEDEF_AYLIKs
@@ -254,7 +281,38 @@ namespace SOS.Controllers
                     .Where(h => h.Yil == DateTime.Now.Year && h.Tip == "GENEL" && h.Aktif)
                     .ToDictionaryAsync(h => h.Ay, h => h.HedefTutar);
 
-                // Her faturaya NetTutar (Varuna KDV hariç) ve KdvDahilTutar (Excel) ata
+                // Tahakkuk override map: SapReferansNo + FaturaNo → TahakkukTarihi (dual-key)
+                var tahakkukRecords = await db.TBLSOS_FATURA_TAHAKKUKs.AsNoTracking()
+                    .Where(t => t.Aktif)
+                    .Select(t => new { t.SapReferansNo, t.FaturaNo, t.TahakkukTarihi })
+                    .ToListAsync();
+                var tahakkukMap = new Dictionary<string, DateTime>(StringComparer.OrdinalIgnoreCase);
+                foreach (var r in tahakkukRecords)
+                {
+                    tahakkukMap[r.SapReferansNo] = r.TahakkukTarihi;       // SAP key (primary)
+                    if (!string.IsNullOrEmpty(r.FaturaNo))
+                        tahakkukMap[r.FaturaNo] = r.TahakkukTarihi;          // FaturaNo key (compat)
+                }
+
+                // İade/Ret faturalarının Varuna karşılığını blacklist'e al
+                // VIEW'de İADE/RET olan VE Varuna'da eşleşen fatura → aynı sipariş iptal olmuş
+                // O siparişin pozitif tutarını da dip toplamdan çıkarmalıyız
+                var iadeRetBlacklist = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+                foreach (var f in faturalar)
+                {
+                    if (f.Fatura_No != null
+                        && (IsRetDurum(f.Durum) || IsNegatifDurum(f.Durum))
+                        && varunaTutarMap.ContainsKey(f.Fatura_No))
+                    {
+                        iadeRetBlacklist.Add(f.Fatura_No);
+                    }
+                }
+                // Blacklist'teki siparişleri varunaTutarMap'ten çıkar
+                foreach (var fn in iadeRetBlacklist)
+                    varunaTutarMap.Remove(fn);
+
+                // Her faturaya NetTutar (Varuna KDV hariç), KdvDahilTutar (Excel), VarunaEslesti
+                // ve EfektifFaturaTarihi (tahakkuk varsa onu, yoksa Fatura_Tarihi'ni) ata
                 foreach (var f in faturalar)
                 {
                     var excelTutar = f.Fatura_Toplam ?? 0;
@@ -269,18 +327,89 @@ namespace SOS.Controllers
                         f.NetTutar = excelTutar; // Varuna'da yoksa Excel tutarı fallback
                         f.VarunaEslesti = false;
                     }
+
+                    // Tahakkuk override
+                    if (f.Fatura_No != null && tahakkukMap.TryGetValue(f.Fatura_No, out var tahakkukTarihi))
+                    {
+                        f.EfektifFaturaTarihi = tahakkukTarihi;
+                        f.TahakkukVar = true;
+                    }
+                    else
+                    {
+                        f.EfektifFaturaTarihi = f.Fatura_Tarihi;
+                        f.TahakkukVar = false;
+                    }
+                }
+
+                // ── Sentetik fatura: Varuna Closed + tahakkuklu ama VIEW'de yok ──
+                // Sadece tahakkuk kaydı olan siparişler sentetik olarak eklenir.
+                // Tahakkuksuz Varuna siparişleri dahil edilmez (VIEW'e girinceye kadar beklenir).
+                var excelFaturaNoSet = new HashSet<string>(
+                    faturalar.Where(f => f.Fatura_No != null).Select(f => f.Fatura_No!),
+                    StringComparer.OrdinalIgnoreCase);
+
+                var sentetikEklenen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+
+                foreach (var sip in siparisler.Where(s =>
+                    s.TotalNetAmount.HasValue && s.TotalNetAmount.Value > 0
+                    && string.Equals(s.OrderStatus, "Closed", StringComparison.OrdinalIgnoreCase)))
+                {
+                    var faturaNo = sip.SerialNumber
+                        ?? (!string.IsNullOrEmpty(sip.SAPOutReferenceCode) ? $"SAP:{sip.SAPOutReferenceCode.Trim()}" : null);
+                    if (faturaNo == null) continue;
+
+                    // Zaten VIEW'de varsa atla
+                    if (excelFaturaNoSet.Contains(faturaNo) || !sentetikEklenen.Add(faturaNo)) continue;
+
+                    // Tahakkuk lookup: SN, SAP no, veya SAP: prefix
+                    DateTime? tahakkukOverride = null;
+                    if (sip.SerialNumber != null && tahakkukMap.TryGetValue(sip.SerialNumber, out var thDate))
+                        tahakkukOverride = thDate;
+                    else if (!string.IsNullOrEmpty(sip.SAPOutReferenceCode) && tahakkukMap.TryGetValue(sip.SAPOutReferenceCode.Trim(), out var thDate2))
+                        tahakkukOverride = thDate2;
+                    else if (tahakkukMap.TryGetValue(faturaNo, out var thDate3))
+                        tahakkukOverride = thDate3;
+
+                    // Tahakkuk yoksa sentetik ekleme — VIEW'e girinceye kadar bekle
+                    if (!tahakkukOverride.HasValue) continue;
+
+                    var efektifTarih = tahakkukOverride.Value;
+
+                    var sentetik = new VIEW_CP_EXCEL_FATURA
+                    {
+                        Fatura_No = faturaNo,
+                        Fatura_Tarihi = sip.InvoiceDate,
+                        Fatura_Toplam = sip.TotalNetAmount,
+                        Fatura_Vade_Tarihi = sip.InvoiceDate,
+                        Tahsil_Edilen = 0,
+                        Bekleyen_Bakiye = sip.TotalNetAmount,
+                        Durum = null,
+                        NetTutar = sip.TotalNetAmount,
+                        KdvDahilTutar = sip.TotalNetAmount,
+                        VarunaEslesti = true,
+                        MusteriUnvan = sip.AccountTitle,
+                        EfektifFaturaTarihi = efektifTarih,
+                        TahakkukVar = tahakkukOverride.HasValue
+                    };
+                    faturalar.Add(sentetik);
+                    if (!varunaTutarMap.ContainsKey(faturaNo))
+                        varunaTutarMap[faturaNo] = sip.TotalNetAmount.Value;
                 }
 
                 // Ürün grup eşleştirme: StockCode → AnaUrunAd
                 // NOT: DB'de nadiren duplicate StokKodu olabiliyor (EH.02.018 gibi) — GroupBy ilk kaydı alır
+                // AnaUrun null ise (FK bozuksa) kayıt atlanır → kalem ürün kırılımına girmez
                 var eslestirmeler = (await db.TBLSOS_URUN_ESLESTIRMEs.AsNoTracking()
                     .Include(e => e.AnaUrun)
                     .ToListAsync())
+                    .Where(e => e.AnaUrun != null && !string.IsNullOrEmpty(e.AnaUrun.Ad))
                     .GroupBy(e => e.StokKodu)
-                    .ToDictionary(g => g.Key, g => g.First().AnaUrun?.Ad ?? "Diğer");
+                    .ToDictionary(g => g.Key, g => g.First().AnaUrun!.Ad);
 
                 // Fatura_No (SerialNumber) → kalem bazlı ürün grubu TL dağılımı
                 // Her kalem için: (kalem.Total / toplamDöviz) * TotalNetAmount → ürün grubuna
+                // NOT: TBLSOS_URUN_ESLESTIRME'de bulunmayan StockCode'lar SKIP edilir (UI'da "Diğer" gösterilmez).
+                //      Bu durumda ürün kırılımı toplamı, fatura dip toplamından küçük olabilir.
                 var urunGrupMap = new Dictionary<string, List<(string Grup, decimal TlTutar)>>();
                 var urunByCrmOrder = urunler.Where(u => u.CrmOrderId != null)
                     .GroupBy(u => u.CrmOrderId!).ToDictionary(g => g.Key, g => g.ToList());
@@ -295,7 +424,9 @@ namespace SOS.Controllers
                     var kalemler = new List<(string Grup, decimal TlTutar)>();
                     foreach (var u in sipUrunleri)
                     {
-                        var grup = (u.StockCode != null && eslestirmeler.TryGetValue(u.StockCode, out var ad)) ? ad : "Diğer";
+                        // Eşleşmeyen StockCode'ları skip et — "Diğer" kategorisi UI'da gösterilmiyor
+                        if (u.StockCode == null || !eslestirmeler.TryGetValue(u.StockCode, out var grup))
+                            continue;
                         var tlTutar = (u.Total ?? 0) / toplamDoviz * siparis.TotalNetAmount!.Value;
                         kalemler.Add((grup, tlTutar));
                     }
@@ -349,6 +480,8 @@ namespace SOS.Controllers
             public string? AccountTitle { get; set; }
             public string? OrderStatus { get; set; }
             public decimal? TotalNetAmount { get; set; }
+            public DateTime? InvoiceDate { get; set; }
+            public string? SAPOutReferenceCode { get; set; }
         }
 
         private class UrunDto
@@ -437,28 +570,47 @@ namespace SOS.Controllers
                 var f = allFaturalar[i];
                 // NetTutar: Varuna KDV hariç (yoksa Excel fallback) — LoadAllCachedDataAsync'te atandı
                 var tutar = f.NetTutar ?? 0m;
-                var netTutar = IsRetDurum(f.Durum) ? 0m : (IsNegatifDurum(f.Durum) ? -tutar : tutar);
                 var durumBos = IsDurumBos(f.Durum);
                 var isTahsilat = IsTahsilatOrKrediKarti(f.Durum);
+
+                // ── İade/İptal/Ret faturalar tamamen atlanır ──
+                if (IsRetDurum(f.Durum) || IsNegatifDurum(f.Durum))
+                    continue;
+
+                // ── VarunaDışı faturalar dip toplama dahil edilmez ──
+                // Sadece Varuna Closed eşleşen faturalar sayılır (sentetik dahil)
+                // VarunaDışı ayrı metrikte takip edilir
+                if (!f.VarunaEslesti)
+                {
+                    // VarunaDışı metrikleri (ayrı gösterim)
+                    if (f.EfektifFaturaTarihi.HasValue)
+                    {
+                        var ftVd = f.EfektifFaturaTarihi.Value;
+                        var fNoVd = f.Fatura_No ?? $"__vd_{i}";
+                        if (ftVd >= start && ftVd <= end && fatNoDonem.Add(fNoVd))
+                        {
+                            m.VarunaDisiToplam += tutar;
+                            m.VarunaDisiAdet++;
+                        }
+                    }
+                    continue;
+                }
+
+                var netTutar = tutar;
                 // Bakiye: Fatura_Toplam - Tahsil_Edilen (finans mantığı)
                 var bakiye = (f.Fatura_Toplam ?? 0) - (f.Tahsil_Edilen ?? 0);
 
                 // ── Fatura tarihi bazlı metrikler (unique Fatura_No bazında) ──
-                if (f.Fatura_Tarihi.HasValue)
+                if (f.EfektifFaturaTarihi.HasValue)
                 {
-                    var ft = f.Fatura_Tarihi.Value;
-                    var fNo = f.Fatura_No ?? $"__row_{i}"; // Fatura_No yoksa satır bazlı say
+                    var ft = f.EfektifFaturaTarihi.Value;
+                    var fNo = f.Fatura_No ?? $"__row_{i}";
 
-                    // Dönem fatura — unique Fatura_No bazında
+                    // Dönem fatura — unique Fatura_No bazında (sadece Varuna eşleşen)
                     if (ft >= start && ft <= end && fatNoDonem.Add(fNo))
                     {
                         m.FatToplam += netTutar;
                         m.FatAdet++;
-                        if (!f.VarunaEslesti)
-                        {
-                            m.VarunaDisiToplam += netTutar;
-                            m.VarunaDisiAdet++;
-                        }
                     }
 
                     // Önceki dönem fatura (trend) — unique
@@ -683,24 +835,22 @@ namespace SOS.Controllers
             var sozGecikmiAdet = sozGecikmisList.Count;
 
             // Ürün grubu kırılımı: dönemdeki faturalar → kalem bazlı TL dağılımı → ürün grubu toplam
+            // Ürün kırılımı: İade/Ret tamamen atlanır (çift sayım önleme)
             var urunKirilimDict = new Dictionary<string, (decimal toplam, int adet)>();
-            foreach (var f in allFaturalar.Where(f => f.Fatura_Tarihi.HasValue
-                && f.Fatura_Tarihi.Value >= start && f.Fatura_Tarihi.Value <= end
-                && !IsRetDurum(f.Durum)))
+            foreach (var f in allFaturalar.Where(f => f.EfektifFaturaTarihi.HasValue
+                && f.EfektifFaturaTarihi.Value >= start && f.EfektifFaturaTarihi.Value <= end
+                && !IsRetDurum(f.Durum) && !IsNegatifDurum(f.Durum)))
             {
-                var isNegatif = IsNegatifDurum(f.Durum);
                 if (f.Fatura_No != null && urunGrupMap.TryGetValue(f.Fatura_No, out var kalemler))
                 {
                     foreach (var (grup, tlTutar) in kalemler)
                     {
-                        var tutar = isNegatif ? -tlTutar : tlTutar;
                         if (urunKirilimDict.TryGetValue(grup, out var mevcut))
-                            urunKirilimDict[grup] = (mevcut.toplam + tutar, mevcut.adet + 1);
+                            urunKirilimDict[grup] = (mevcut.toplam + tlTutar, mevcut.adet + 1);
                         else
-                            urunKirilimDict[grup] = (tutar, 1);
+                            urunKirilimDict[grup] = (tlTutar, 1);
                     }
                 }
-                // Varuna'da eşleşmeyen faturalar ürün kırılımına dahil edilmez
             }
             var urunKirilim = urunKirilimDict
                 .Select(kv => new { grup = kv.Key, toplam = kv.Value.toplam, adet = kv.Value.adet })
@@ -783,8 +933,9 @@ namespace SOS.Controllers
             // ══════════════════════════════════════════════════════════════
             // Full page: Detay listelerini hazırla (sadece ilk yükleme)
             // ══════════════════════════════════════════════════════════════
+            // Tüm faturalar listede görünür (iade/iptal dahil — UI'da rozetle ayırt edilir)
             var faturalar = allFaturalar
-                .Where(f => f.Fatura_Tarihi.HasValue && f.Fatura_Tarihi.Value >= start && f.Fatura_Tarihi.Value <= end)
+                .Where(f => f.EfektifFaturaTarihi.HasValue && f.EfektifFaturaTarihi.Value >= start && f.EfektifFaturaTarihi.Value <= end)
                 .ToList();
             MapMusteriUrun(faturalar, urunMap, musteriMap);
 
@@ -806,15 +957,13 @@ namespace SOS.Controllers
                 .ToList();
             MapMusteriUrun(beklenenList, urunMap, musteriMap);
 
-            // Kümülatif hesaplama
-            var orderedFaturalar = faturalar.OrderBy(f => f.Fatura_Tarihi).ToList();
+            // Kümülatif hesaplama — iade/ret faturalar komple atlanır
+            var orderedFaturalar = faturalar.OrderBy(f => f.EfektifFaturaTarihi).ToList();
             decimal running = 0;
             foreach (var f in orderedFaturalar)
             {
-                if (!IsRetDurum(f.Durum))
-                {
-                    running += IsNegatifDurum(f.Durum) ? -(f.NetTutar ?? 0m) : (f.NetTutar ?? 0m);
-                }
+                if (!IsRetDurum(f.Durum) && !IsNegatifDurum(f.Durum))
+                    running += f.NetTutar ?? 0m;
                 f.KumulatifToplam = running;
             }
 
@@ -920,31 +1069,32 @@ namespace SOS.Controllers
             {
                 case "faturalar":
                 {
+                    // İade/İptal/Ret faturalar listeden ÇIKARILIR
                     var filtered = allFaturalar
-                        .Where(f => f.Fatura_Tarihi.HasValue && f.Fatura_Tarihi.Value >= start && f.Fatura_Tarihi.Value <= end)
-                        .OrderBy(f => f.Fatura_Tarihi)
+                        .Where(f => f.EfektifFaturaTarihi.HasValue && f.EfektifFaturaTarihi.Value >= start && f.EfektifFaturaTarihi.Value <= end
+                            && !IsRetDurum(f.Durum) && !IsNegatifDurum(f.Durum))
+                        .OrderBy(f => f.EfektifFaturaTarihi)
                         .ToList();
                     MapMusteriUrun(filtered, urunMap, musteriMap);
 
-                    // Kümülatif (NetTutar bazlı)
+                    // Kümülatif
                     decimal running = 0;
                     foreach (var f in filtered)
                     {
-                        if (!IsRetDurum(f.Durum))
-                            running += IsNegatifDurum(f.Durum) ? -(f.NetTutar ?? 0m) : (f.NetTutar ?? 0m);
+                        running += f.NetTutar ?? 0m;
                         f.KumulatifToplam = running;
                     }
 
                     // Net tutar helper (Varuna KDV hariç bazlı)
                     decimal FatNet(IEnumerable<VIEW_CP_EXCEL_FATURA> grp) =>
-                        grp.Where(f => !IsRetDurum(f.Durum)).Sum(f => IsNegatifDurum(f.Durum) ? -(f.NetTutar ?? 0m) : (f.NetTutar ?? 0m));
+                        grp.Sum(f => f.NetTutar ?? 0m);
                     // KDV dahil toplam helper
                     decimal FatBrut(IEnumerable<VIEW_CP_EXCEL_FATURA> grp) =>
-                        grp.Where(f => !IsRetDurum(f.Durum)).Sum(f => IsNegatifDurum(f.Durum) ? -(f.KdvDahilTutar ?? 0m) : (f.KdvDahilTutar ?? 0m));
+                        grp.Sum(f => f.KdvDahilTutar ?? 0m);
 
                     // Hiyerarşi: Yıl → Çeyrek → Ay → Hafta → Gün → Detay
                     var hierarchy = filtered
-                        .GroupBy(f => f.Fatura_Tarihi!.Value.Year)
+                        .GroupBy(f => f.EfektifFaturaTarihi!.Value.Year)
                         .OrderBy(y => y.Key)
                         .Select(yGrp => new
                         {
@@ -953,7 +1103,7 @@ namespace SOS.Controllers
                             kdvDahilToplam = FatBrut(yGrp),
                             adet = yGrp.Count(),
                             ceyrekler = yGrp
-                                .GroupBy(f => (f.Fatura_Tarihi!.Value.Month - 1) / 3 + 1)
+                                .GroupBy(f => (f.EfektifFaturaTarihi!.Value.Month - 1) / 3 + 1)
                                 .OrderBy(q => q.Key)
                                 .Select(qGrp => new
                                 {
@@ -963,7 +1113,7 @@ namespace SOS.Controllers
                                     kdvDahilToplam = FatBrut(qGrp),
                                     adet = qGrp.Count(),
                                     aylar = qGrp
-                                        .GroupBy(f => f.Fatura_Tarihi!.Value.Month)
+                                        .GroupBy(f => f.EfektifFaturaTarihi!.Value.Month)
                                         .OrderBy(m => m.Key)
                                         .Select(mGrp => new
                                         {
@@ -973,7 +1123,7 @@ namespace SOS.Controllers
                                             kdvDahilToplam = FatBrut(mGrp),
                                             adet = mGrp.Count(),
                                             haftalar = mGrp
-                                                .GroupBy(f => GetIsoWeek(f.Fatura_Tarihi!.Value))
+                                                .GroupBy(f => GetIsoWeek(f.EfektifFaturaTarihi!.Value))
                                                 .OrderBy(w => w.Key)
                                                 .Select(wGrp => new
                                                 {
@@ -982,7 +1132,7 @@ namespace SOS.Controllers
                                                     kdvDahilToplam = FatBrut(wGrp),
                                                     adet = wGrp.Count(),
                                                     gunler = wGrp
-                                                        .GroupBy(f => f.Fatura_Tarihi!.Value.Date)
+                                                        .GroupBy(f => f.EfektifFaturaTarihi!.Value.Date)
                                                         .OrderBy(d => d.Key)
                                                         .Select(dGrp => new
                                                         {
@@ -1188,10 +1338,17 @@ namespace SOS.Controllers
             {
                 case "faturalar":
                 {
+                    // İade/Ret tamamen atlanır
                     var daily = allFaturalar
-                        .Where(f => f.Fatura_Tarihi.HasValue && f.Fatura_Tarihi.Value >= start && f.Fatura_Tarihi.Value <= end)
-                        .GroupBy(f => f.Fatura_Tarihi!.Value.Date)
-                        .Select(g => new { tarih = g.Key.ToString("yyyy-MM-dd"), toplam = g.Where(x => !IsRetDurum(x.Durum)).Sum(x => IsNegatifDurum(x.Durum) ? -(x.NetTutar ?? 0) : (x.NetTutar ?? 0)), adet = g.Count() })
+                        .Where(f => f.EfektifFaturaTarihi.HasValue && f.EfektifFaturaTarihi.Value >= start && f.EfektifFaturaTarihi.Value <= end
+                            && !IsRetDurum(f.Durum) && !IsNegatifDurum(f.Durum))
+                        .GroupBy(f => f.EfektifFaturaTarihi!.Value.Date)
+                        .Select(g => new
+                        {
+                            tarih = g.Key.ToString("yyyy-MM-dd"),
+                            toplam = g.Sum(x => x.NetTutar ?? 0),
+                            adet = g.Count()
+                        })
                         .OrderBy(x => x.tarih).ToList();
                     return Json(daily);
                 }
@@ -1296,12 +1453,12 @@ namespace SOS.Controllers
 
             // PAYDA alternatif: Fatura_Tarihi bazlı (dönemde kesilen faturalar)
             var faturaTarihiBazli = allFaturalar
-                .Where(f => f.Fatura_Tarihi.HasValue && f.Fatura_Tarihi.Value >= start && f.Fatura_Tarihi.Value <= end)
+                .Where(f => f.EfektifFaturaTarihi.HasValue && f.EfektifFaturaTarihi.Value >= start && f.EfektifFaturaTarihi.Value <= end)
                 .Where(f => !new[] { "İADE","IADE","İPTAL","IPTAL","RET" }.Contains(f.Durum?.Trim() ?? "", StringComparer.OrdinalIgnoreCase))
                 .ToList();
 
             var ytdFaturaTarihiBazli = allFaturalar
-                .Where(f => f.Fatura_Tarihi.HasValue && f.Fatura_Tarihi.Value >= ytdStart && f.Fatura_Tarihi.Value <= ytdEnd)
+                .Where(f => f.EfektifFaturaTarihi.HasValue && f.EfektifFaturaTarihi.Value >= ytdStart && f.EfektifFaturaTarihi.Value <= ytdEnd)
                 .Where(f => !new[] { "İADE","IADE","İPTAL","IPTAL","RET" }.Contains(f.Durum?.Trim() ?? "", StringComparer.OrdinalIgnoreCase))
                 .ToList();
 
@@ -1365,22 +1522,20 @@ namespace SOS.Controllers
 
             // YTD faturalar: Varuna'lı vs Varuna'sız karşılaştırma
             var ytdFaturalar = allFaturalar
-                .Where(f => f.Fatura_Tarihi.HasValue && f.Fatura_Tarihi.Value >= ytdStart && f.Fatura_Tarihi.Value <= today)
+                .Where(f => f.EfektifFaturaTarihi.HasValue && f.EfektifFaturaTarihi.Value >= ytdStart && f.EfektifFaturaTarihi.Value <= today)
                 .ToList();
 
             decimal ytdExcelToplam = 0, ytdVarunaToplam = 0;
             int varunaKullanilan = 0, excelKullanilan = 0;
             foreach (var f in ytdFaturalar)
             {
-                if (IsRetDurum(f.Durum)) continue;
+                if (IsRetDurum(f.Durum) || IsNegatifDurum(f.Durum)) continue;
                 var excelTutar = f.Fatura_Toplam ?? 0;
                 decimal vt2 = 0;
                 var varunaVar = f.Fatura_No != null && varunaTutarMap.TryGetValue(f.Fatura_No, out vt2);
                 var tutar = varunaVar ? vt2 : excelTutar;
-                var net = IsNegatifDurum(f.Durum) ? -tutar : tutar;
-                var netExcel = IsNegatifDurum(f.Durum) ? -excelTutar : excelTutar;
-                ytdVarunaToplam += net;
-                ytdExcelToplam += netExcel;
+                ytdVarunaToplam += tutar;
+                ytdExcelToplam += excelTutar;
                 if (varunaVar) varunaKullanilan++; else excelKullanilan++;
             }
 
@@ -1543,6 +1698,183 @@ namespace SOS.Controllers
         }
 
         [HttpGet]
+        public async Task<IActionResult> SapLookup(string sapNos)
+        {
+            using var db = _contextFactory.CreateDbContext();
+            var sapList = sapNos.Split(',').Select(s => s.Trim()).Where(s => !string.IsNullOrEmpty(s)).ToList();
+
+            var siparisler = await db.TBL_VARUNA_SIPARIs.AsNoTracking()
+                .Where(s => s.SAPOutReferenceCode != null)
+                .Select(s => new { s.OrderId, s.SerialNumber, s.SAPOutReferenceCode, s.OrderStatus, s.InvoiceDate, s.AccountTitle, s.TotalNetAmount })
+                .ToListAsync();
+
+            var results = new List<object>();
+            foreach (var sap in sapList)
+            {
+                var matches = siparisler.Where(s => s.SAPOutReferenceCode != null && s.SAPOutReferenceCode.Trim().Contains(sap)).ToList();
+                results.Add(new { sap, eslesen = matches.Count, detay = matches.Select(m => new { m.OrderId, m.SerialNumber, m.SAPOutReferenceCode, m.OrderStatus, m.InvoiceDate, m.AccountTitle, m.TotalNetAmount }).ToList() });
+            }
+            return Json(results);
+        }
+
+        /// <summary>
+        /// VIEW'de olup Varuna'da olmayan faturaları Varuna'ya ekler (SAP bazlı).
+        /// </summary>
+        [HttpPost]
+        public async Task<IActionResult> AddMissingVaruna([FromBody] List<MissingSiparisDto> items)
+        {
+            if (items == null || items.Count == 0)
+                return Json(new { ok = false, error = "Liste boş" });
+            using var db = _contextFactory.CreateDbContext();
+            int eklenen = 0;
+            foreach (var item in items)
+            {
+                // Zaten var mı kontrol
+                var exists = await db.TBL_VARUNA_SIPARIs.AnyAsync(s =>
+                    s.SAPOutReferenceCode == item.SapNo || s.SerialNumber == item.SerialNumber);
+                if (exists) continue;
+
+                db.TBL_VARUNA_SIPARIs.Add(new Models.MsK.TBL_VARUNA_SIPARI
+                {
+                    OrderId = item.OrderId ?? Guid.NewGuid().ToString(),
+                    SerialNumber = item.SerialNumber,
+                    SAPOutReferenceCode = item.SapNo,
+                    OrderStatus = "Closed",
+                    TotalNetAmount = item.TotalNetAmount,
+                    AccountTitle = item.AccountTitle,
+                    InvoiceDate = item.InvoiceDate,
+                    CreateOrderDate = item.InvoiceDate,
+                    CreatedOn = DateTime.Now
+                });
+                eklenen++;
+            }
+            await db.SaveChangesAsync();
+            // Cache invalidate
+            _cache.Remove(CACHE_KEY_FATURALAR);
+            _cache.Remove(CACHE_KEY_VARUNA_TUTAR);
+            return Json(new { ok = true, eklenen });
+        }
+        public class MissingSiparisDto
+        {
+            public string? OrderId { get; set; }
+            public string SerialNumber { get; set; } = "";
+            public string SapNo { get; set; } = "";
+            public decimal TotalNetAmount { get; set; }
+            public string? AccountTitle { get; set; }
+            public DateTime? InvoiceDate { get; set; }
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> TestSpFatura(string? startDate, string? endDate)
+        {
+            var sd = startDate ?? "2026-03-01";
+            var ed = endDate ?? "2026-03-31";
+            using var db = _contextFactory.CreateDbContext();
+            var rows = await db.Database.SqlQueryRaw<SpFaturaRow>(
+                "EXEC SP_COCKPIT_FATURA @p0, @p1", DateTime.Parse(sd), DateTime.Parse(ed)).ToListAsync();
+            var toplam = rows.Sum(r => r.NetTutar);
+            return Json(new { satir = rows.Count, toplam, ornekler = rows.Take(5) });
+        }
+        public class SpFaturaRow
+        {
+            public string FaturaNo { get; set; } = "";
+            public DateTime EfektifTarih { get; set; }
+            public decimal NetTutar { get; set; }
+            public string? Firma { get; set; }
+            public int VarunaEslesti { get; set; }
+            public int TahakkukVar { get; set; }
+            public int IsSentetik { get; set; }
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> TestSpTahsilat(string? startDate, string? endDate)
+        {
+            var sd = startDate ?? "2026-03-01";
+            var ed = endDate ?? "2026-03-31";
+            using var db = _contextFactory.CreateDbContext();
+            var rows = await db.Database.SqlQueryRaw<SpTahsilatRow>(
+                "EXEC SP_COCKPIT_TAHSILAT @p0, @p1", DateTime.Parse(sd), DateTime.Parse(ed)).ToListAsync();
+            return Json(rows.FirstOrDefault());
+        }
+        public class SpTahsilatRow
+        {
+            public decimal TahsilEdilen { get; set; }
+            public int TahsilAdet { get; set; }
+            public decimal BekleyenBakiyeToplam { get; set; }
+            public decimal VadesiGelenToplam { get; set; }
+            public int VadesiGelenAdet { get; set; }
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> ViewLookup(string faturaNo)
+        {
+            using var db = _contextFactory.CreateDbContext();
+            var f = await db.VIEW_CP_EXCEL_FATURAs.AsNoTracking()
+                .Where(x => x.Fatura_No == faturaNo)
+                .FirstOrDefaultAsync();
+            if (f == null) return Json(new { ok = false });
+            return Json(new {
+                ok = true, faturaNo = f.Fatura_No, faturaTarihi = f.Fatura_Tarihi,
+                faturaToplam = f.Fatura_Toplam, dovizTutar = f.Doviz_Tutar,
+                ilgiliKisi = f.Ilgili_Kisi, saticiAdi = f.Satici_Adi,
+                proje = f.Proje, durum = f.Durum, vadeTarihi = f.Fatura_Vade_Tarihi,
+                tahsilEdilen = f.Tahsil_Edilen, bekleyenBakiye = f.Bekleyen_Bakiye
+            });
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> FaturaAnaliz(string? filter)
+        {
+            var (allFaturalar2, _, _, _, _, _, _) = await LoadAllCachedDataAsync(_contextFactory, _cache);
+            var (s2, e2, _, _) = ParseFilter(filter, null, null);
+
+            var donemTum = allFaturalar2
+                .Where(f => f.EfektifFaturaTarihi.HasValue && f.EfektifFaturaTarihi.Value >= s2 && f.EfektifFaturaTarihi.Value <= e2)
+                .ToList();
+
+            var pozitif = donemTum.Where(f => !IsRetDurum(f.Durum) && !IsNegatifDurum(f.Durum)).ToList();
+            var negatif = donemTum.Where(f => IsRetDurum(f.Durum) || IsNegatifDurum(f.Durum)).ToList();
+            var varunaDisi = donemTum.Where(f => !f.VarunaEslesti).ToList();
+            var varunaDisiPoz = varunaDisi.Where(f => !IsRetDurum(f.Durum) && !IsNegatifDurum(f.Durum)).ToList();
+            var varunaDisiNeg = varunaDisi.Where(f => IsRetDurum(f.Durum) || IsNegatifDurum(f.Durum)).ToList();
+
+            // Excel Fatura_Tarihi Mart olanlar (tahakkuk override'sız)
+            var excelMart = allFaturalar2
+                .Where(f => f.Fatura_Tarihi.HasValue && f.Fatura_Tarihi.Value.Month == s2.Month && f.Fatura_Tarihi.Value.Year == s2.Year)
+                .ToList();
+
+            // Tahakkuk ile Mart'a GELEN (orijinal tarihi Mart dışı)
+            var tahakkukGelen = donemTum.Where(f => f.TahakkukVar && f.Fatura_Tarihi.HasValue
+                && !(f.Fatura_Tarihi.Value >= s2 && f.Fatura_Tarihi.Value <= e2)).ToList();
+            // Tahakkuk ile Mart'tan ÇIKAN (orijinal tarihi Mart ama efektif başka)
+            var tahakkukCikan = excelMart.Where(f => f.TahakkukVar && f.EfektifFaturaTarihi.HasValue
+                && !(f.EfektifFaturaTarihi.Value >= s2 && f.EfektifFaturaTarihi.Value <= e2)).ToList();
+
+            return Json(new {
+                donem = s2.ToString("dd.MM.yyyy") + " - " + e2.ToString("dd.MM.yyyy"),
+                toplamKayit = donemTum.Count,
+                pozitifAdet = pozitif.Count,
+                pozitifToplam = pozitif.Sum(f => f.NetTutar ?? 0),
+                negatifAdet = negatif.Count,
+                negatifToplam = negatif.Sum(f => f.NetTutar ?? 0),
+                netToplam = pozitif.Sum(f => f.NetTutar ?? 0) - negatif.Sum(f => f.NetTutar ?? 0),
+                negatifDetay = negatif.Select(f => new { f.Fatura_No, f.Durum, netTutar = f.NetTutar, f.EfektifFaturaTarihi, f.VarunaEslesti }).ToList(),
+                varunaDisi = new {
+                    toplam = varunaDisi.Count,
+                    pozitif = varunaDisiPoz.Count,
+                    pozitifTutar = varunaDisiPoz.Sum(f => f.NetTutar ?? 0),
+                    negatif = varunaDisiNeg.Count,
+                    negatifTutar = varunaDisiNeg.Sum(f => f.NetTutar ?? 0),
+                    detay = varunaDisi.Select(f => new { f.Fatura_No, f.Durum, netTutar = f.NetTutar, f.Fatura_Tarihi, f.EfektifFaturaTarihi, f.VarunaEslesti }).ToList()
+                },
+                excelFaturaTarihiMart = excelMart.Count,
+                excelFaturaTarihiMartToplam = excelMart.Where(f => !IsRetDurum(f.Durum) && !IsNegatifDurum(f.Durum)).Sum(f => f.NetTutar ?? 0),
+                tahakkukGelen = tahakkukGelen.Select(f => new { f.Fatura_No, f.Fatura_Tarihi, f.EfektifFaturaTarihi, netTutar = f.NetTutar }).ToList(),
+                tahakkukCikan = tahakkukCikan.Select(f => new { f.Fatura_No, f.Fatura_Tarihi, f.EfektifFaturaTarihi, netTutar = f.NetTutar }).ToList()
+            });
+        }
+
+        [HttpGet]
         public async Task<IActionResult> FaturaDebug(string? filter)
         {
             var (allFaturalar, _, _, _, _, varunaTutarMap, urunGrupMap) = await LoadAllCachedDataAsync(_contextFactory, _cache);
@@ -1551,8 +1883,8 @@ namespace SOS.Controllers
 
             // Dönemdeki Varuna eşleşen faturalar
             var donemFaturalar = allFaturalar
-                .Where(f => f.VarunaEslesti && f.Fatura_Tarihi.HasValue
-                    && f.Fatura_Tarihi.Value >= start && f.Fatura_Tarihi.Value <= end
+                .Where(f => f.VarunaEslesti && f.EfektifFaturaTarihi.HasValue
+                    && f.EfektifFaturaTarihi.Value >= start && f.EfektifFaturaTarihi.Value <= end
                     && !IsRetDurum(f.Durum))
                 .ToList();
 

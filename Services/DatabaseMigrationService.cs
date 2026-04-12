@@ -109,6 +109,208 @@ namespace SOS.Services
                     "INSERT INTO TBLSOS_HEDEF_AYLIK (Yil, Ay, Tip, AnaUrunId, HedefTutar, Aktif) VALUES " +
                     "(2026, 1, 'GENEL', NULL, 42000000, 1), (2026, 2, 'GENEL', NULL, 42000000, 1), (2026, 3, 'GENEL', NULL, 48000000, 1), (2026, 4, 'GENEL', NULL, 45000000, 1), (2026, 5, 'GENEL', NULL, 50000000, 1), (2026, 6, 'GENEL', NULL, 55000000, 1), (2026, 7, 'GENEL', NULL, 50000000, 1), (2026, 8, 'GENEL', NULL, 55000000, 1), (2026, 9, 'GENEL', NULL, 50000000, 1), (2026, 10, 'GENEL', NULL, 55000000, 1), (2026, 11, 'GENEL', NULL, 53000000, 1), (2026, 12, 'GENEL', NULL, 55000000, 1)");
 
+                // ── TBLSOS_FATURA_TAHAKKUK: Tahakkuk override tablosu ──
+                // Bazı faturalar Nisan'da kesilmiş ama muhasebe açısından Mart'a ait kabul edilmeli.
+                // Bu tablo Fatura_No için manuel "tahakkuk tarihi" override'ı tutar.
+                // Tüm dashboard hesapları, eğer fatura için tahakkuk varsa Fatura_Tarihi yerine TahakkukTarihi'ni kullanır.
+                await ExecuteSqlAsync(
+                    "IF NOT EXISTS (SELECT * FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_NAME = 'TBLSOS_FATURA_TAHAKKUK') " +
+                    "CREATE TABLE TBLSOS_FATURA_TAHAKKUK (" +
+                    "  Id INT IDENTITY(1,1) PRIMARY KEY, " +
+                    "  FaturaNo NVARCHAR(64) NOT NULL, " +
+                    "  TahakkukTarihi DATETIME NOT NULL, " +
+                    "  OrijinalFaturaTarihi DATETIME NULL, " +
+                    "  Aciklama NVARCHAR(500) NULL, " +
+                    "  OlusturulmaTarihi DATETIME NOT NULL DEFAULT GETDATE(), " +
+                    "  OlusturanKullanici NVARCHAR(256) NULL, " +
+                    "  GuncellemeTarihi DATETIME NULL, " +
+                    "  GuncelleyenKullanici NVARCHAR(256) NULL, " +
+                    "  Aktif BIT NOT NULL DEFAULT 1" +
+                    ")");
+
+                // Filtered unique index — aynı fatura için sadece 1 aktif tahakkuk
+                await ExecuteSqlAsync(
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_TBLSOS_FATURA_TAHAKKUK_FaturaNo_Aktif') " +
+                    "CREATE UNIQUE INDEX UX_TBLSOS_FATURA_TAHAKKUK_FaturaNo_Aktif " +
+                    "ON TBLSOS_FATURA_TAHAKKUK (FaturaNo) WHERE Aktif = 1");
+
+                // ── TBLSOS_FATURA_TAHAKKUK: SapReferansNo kolonu ekleme (SAP bazlı tahakkuk) ──
+                // Her adım ayrı çalışmalı — SQL Server tek batch'te henüz eklenmemiş kolonu parse edemez
+                await ExecuteSqlAsync(
+                    "IF COL_LENGTH('TBLSOS_FATURA_TAHAKKUK', 'SapReferansNo') IS NULL " +
+                    "ALTER TABLE TBLSOS_FATURA_TAHAKKUK ADD SapReferansNo NVARCHAR(64) NULL");
+                await ExecuteSqlAsync(
+                    "UPDATE TBLSOS_FATURA_TAHAKKUK SET SapReferansNo = FaturaNo WHERE SapReferansNo IS NULL");
+                await ExecuteSqlAsync(
+                    "IF EXISTS (SELECT 1 FROM TBLSOS_FATURA_TAHAKKUK WHERE SapReferansNo IS NULL) " +
+                    "UPDATE TBLSOS_FATURA_TAHAKKUK SET SapReferansNo = CAST(Id AS NVARCHAR(64)) WHERE SapReferansNo IS NULL");
+                await ExecuteSqlAsync(
+                    "ALTER TABLE TBLSOS_FATURA_TAHAKKUK ALTER COLUMN SapReferansNo NVARCHAR(64) NOT NULL");
+                await ExecuteSqlAsync(
+                    "ALTER TABLE TBLSOS_FATURA_TAHAKKUK ALTER COLUMN FaturaNo NVARCHAR(64) NULL");
+
+                // SapReferansNo bazlı unique index — eski FaturaNo index'i kaldır
+                await ExecuteSqlAsync(
+                    "IF EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_TBLSOS_FATURA_TAHAKKUK_FaturaNo_Aktif') " +
+                    "DROP INDEX UX_TBLSOS_FATURA_TAHAKKUK_FaturaNo_Aktif ON TBLSOS_FATURA_TAHAKKUK");
+                await ExecuteSqlAsync(
+                    "IF NOT EXISTS (SELECT 1 FROM sys.indexes WHERE name = 'UX_TBLSOS_FATURA_TAHAKKUK_SapRef_Aktif') " +
+                    "CREATE UNIQUE INDEX UX_TBLSOS_FATURA_TAHAKKUK_SapRef_Aktif " +
+                    "ON TBLSOS_FATURA_TAHAKKUK (SapReferansNo) WHERE Aktif = 1");
+
+                // ── SP_COCKPIT_FATURA: Fatura kartı hesaplama SP ──
+                await ExecuteSqlAsync(@"
+CREATE OR ALTER PROCEDURE SP_COCKPIT_FATURA
+    @StartDate DATE,
+    @EndDate   DATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- 1) VIEW faturalari: Fatura_No bazinda dedupe
+    ;WITH DistinctFatura AS (
+        SELECT *, ROW_NUMBER() OVER (
+            PARTITION BY ISNULL(Fatura_No, CAST(NEWID() AS NVARCHAR(50)))
+            ORDER BY (SELECT NULL)
+        ) AS rn
+        FROM VIEW_CP_EXCEL_FATURA
+    ),
+    Faturalar AS (
+        SELECT Fatura_No, Fatura_Tarihi, Fatura_Toplam, Durum,
+               Fatura_Vade_Tarihi, Ilgili_Kisi, Tahsil_Edilen, Bekleyen_Bakiye
+        FROM DistinctFatura WHERE rn = 1
+    ),
+
+    -- 2) Iade/Ret blacklist: VIEW'de iade/ret + Varuna eslesen SN'ler
+    IadeRetBL AS (
+        SELECT DISTINCT f.Fatura_No
+        FROM Faturalar f
+        INNER JOIN TBL_VARUNA_SIPARIS v ON v.SerialNumber = f.Fatura_No
+            AND v.OrderStatus = 'Closed' AND v.TotalNetAmount > 0
+        WHERE LTRIM(RTRIM(f.Durum)) IN (N'İADE',N'IADE',N'İPTAL',N'IPTAL',N'RET')
+    ),
+
+    -- 3) Varuna Closed (blacklist haric)
+    VarunaClosed AS (
+        SELECT SerialNumber, TotalNetAmount, InvoiceDate, AccountTitle, SAPOutReferenceCode, OrderId
+        FROM TBL_VARUNA_SIPARIS
+        WHERE OrderStatus = 'Closed' AND TotalNetAmount > 0
+          AND SerialNumber IS NOT NULL
+          AND SerialNumber NOT IN (SELECT Fatura_No FROM IadeRetBL)
+    ),
+
+    -- 4) Tahakkuk
+    TH AS (
+        SELECT SapReferansNo, FaturaNo, TahakkukTarihi
+        FROM TBLSOS_FATURA_TAHAKKUK WHERE Aktif = 1
+    ),
+
+    -- 5) VIEW + Varuna INNER JOIN + Tahakkuk + filtre
+    --    INNER JOIN: sadece Varuna'da Closed olan faturalar sayilir
+    FaturalarJoin AS (
+        SELECT
+            f.Fatura_No AS FaturaNo,
+            COALESCE(t1.TahakkukTarihi, t2.TahakkukTarihi, f.Fatura_Tarihi) AS EfektifTarih,
+            vc.TotalNetAmount AS NetTutar,
+            vc.AccountTitle AS Firma,
+            1 AS VarunaEslesti,
+            CASE WHEN COALESCE(t1.TahakkukTarihi, t2.TahakkukTarihi) IS NOT NULL THEN 1 ELSE 0 END AS TahakkukVar,
+            0 AS IsSentetik
+        FROM Faturalar f
+        INNER JOIN VarunaClosed vc ON vc.SerialNumber = f.Fatura_No
+        LEFT JOIN TH t1 ON t1.SapReferansNo = LTRIM(RTRIM(vc.SAPOutReferenceCode))
+        LEFT JOIN TH t2 ON t2.FaturaNo = f.Fatura_No AND t1.TahakkukTarihi IS NULL
+        WHERE LTRIM(RTRIM(ISNULL(f.Durum,''))) NOT IN (N'İADE',N'IADE',N'İPTAL',N'IPTAL',N'RET')
+          AND f.Fatura_No NOT IN (SELECT Fatura_No FROM IadeRetBL)
+    ),
+
+    -- 6) Sentetik: Varuna Closed + Tahakkuk var + VIEW'de yok
+    ViewFNSet AS (
+        SELECT DISTINCT Fatura_No FROM Faturalar WHERE Fatura_No IS NOT NULL
+    ),
+    Sentetik AS (
+        SELECT
+            COALESCE(v.SerialNumber, 'SAP:'+LTRIM(RTRIM(v.SAPOutReferenceCode))) AS FaturaNo,
+            COALESCE(t1.TahakkukTarihi, t2.TahakkukTarihi) AS EfektifTarih,
+            v.TotalNetAmount AS NetTutar,
+            v.AccountTitle AS Firma,
+            1 AS VarunaEslesti,
+            1 AS TahakkukVar,
+            1 AS IsSentetik
+        FROM TBL_VARUNA_SIPARIS v
+        LEFT JOIN TH t1 ON t1.SapReferansNo = LTRIM(RTRIM(v.SAPOutReferenceCode))
+        LEFT JOIN TH t2 ON t2.FaturaNo = v.SerialNumber AND t1.TahakkukTarihi IS NULL
+        WHERE v.OrderStatus = 'Closed' AND v.TotalNetAmount > 0
+          AND (v.SerialNumber IS NULL OR v.SerialNumber NOT IN (SELECT Fatura_No FROM ViewFNSet))
+          AND (v.SerialNumber IS NULL OR v.SerialNumber NOT IN (SELECT Fatura_No FROM IadeRetBL))
+          AND COALESCE(t1.TahakkukTarihi, t2.TahakkukTarihi) IS NOT NULL
+    )
+
+    -- 7) UNION + tarih filtresi
+    SELECT FaturaNo, CAST(EfektifTarih AS DATE) AS EfektifTarih, NetTutar,
+           Firma, VarunaEslesti, TahakkukVar, IsSentetik
+    FROM (
+        SELECT * FROM FaturalarJoin
+        UNION ALL
+        SELECT * FROM Sentetik
+    ) Tum
+    WHERE EfektifTarih >= @StartDate AND EfektifTarih < DATEADD(DAY,1,@EndDate)
+    ORDER BY EfektifTarih, FaturaNo;
+END;
+");
+
+                // ── SP_COCKPIT_TAHSILAT: Tahsilat kartı hesaplama SP ──
+                await ExecuteSqlAsync(@"
+CREATE OR ALTER PROCEDURE SP_COCKPIT_TAHSILAT
+    @StartDate DATE,
+    @EndDate   DATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- VIEW faturalari dedupe
+    ;WITH DistinctFatura AS (
+        SELECT *, ROW_NUMBER() OVER (
+            PARTITION BY ISNULL(Fatura_No, CAST(NEWID() AS NVARCHAR(50)))
+            ORDER BY (SELECT NULL)
+        ) AS rn
+        FROM VIEW_CP_EXCEL_FATURA
+    ),
+    -- Sadece VIEW, Iade/Ret haric (Varuna join yok)
+    Faturalar AS (
+        SELECT Fatura_No, Fatura_Tarihi, Fatura_Toplam, Durum,
+               Fatura_Vade_Tarihi, Tahsil_Edilen, Bekleyen_Bakiye, Tahsil_Tarihi
+        FROM DistinctFatura
+        WHERE rn = 1
+          AND LTRIM(RTRIM(ISNULL(Durum,''))) NOT IN (N'İADE',N'IADE',N'İPTAL',N'IPTAL',N'RET')
+    )
+
+    SELECT
+        -- PAY: Tahsil_Tarihi donemde
+        ISNULL(SUM(CASE WHEN Tahsil_Tarihi >= @StartDate AND Tahsil_Tarihi < DATEADD(DAY,1,@EndDate)
+                        THEN ISNULL(Tahsil_Edilen, 0) END), 0) AS TahsilEdilen,
+
+        -- PAY Adet
+        ISNULL(SUM(CASE WHEN Tahsil_Tarihi >= @StartDate AND Tahsil_Tarihi < DATEADD(DAY,1,@EndDate)
+                        THEN 1 END), 0) AS TahsilAdet,
+
+        -- PAYDA bakiye: Fatura_Vade_Tarihi <= donem sonu VE bekleyen > 0
+        ISNULL(SUM(CASE WHEN Fatura_Vade_Tarihi <= @EndDate
+                         AND ISNULL(Bekleyen_Bakiye, ISNULL(Fatura_Toplam,0) - ISNULL(Tahsil_Edilen,0)) > 0
+                        THEN ISNULL(Bekleyen_Bakiye, ISNULL(Fatura_Toplam,0) - ISNULL(Tahsil_Edilen,0)) END), 0) AS BekleyenBakiyeToplam,
+
+        -- Vade donemde fatura toplam
+        ISNULL(SUM(CASE WHEN Fatura_Vade_Tarihi >= @StartDate AND Fatura_Vade_Tarihi < DATEADD(DAY,1,@EndDate)
+                        THEN ISNULL(Fatura_Toplam, 0) END), 0) AS VadesiGelenToplam,
+
+        -- Vade donemde fatura adet
+        ISNULL(SUM(CASE WHEN Fatura_Vade_Tarihi >= @StartDate AND Fatura_Vade_Tarihi < DATEADD(DAY,1,@EndDate)
+                        THEN 1 END), 0) AS VadesiGelenAdet
+
+    FROM Faturalar;
+END;
+");
+
                 _logger.LogInformation("SOS database migrations completed successfully");
             }
             catch (Exception ex)

@@ -26,6 +26,8 @@ builder.Services.AddSingleton<IUrlEncryptionService, UrlEncryptionService>();
 builder.Services.AddScoped<ILogService, DbLogService>();
 builder.Services.AddMemoryCache();
 builder.Services.AddResponseCaching();
+// Tahakkuk override servisi (Cockpit + FirsatAnaliz tarafından paylaşılır)
+builder.Services.AddScoped<ITahakkukService, TahakkukService>();
 // Cockpit cache warmer — app startup'tan sonra her 4 dakikada cache'i DB'den yeniler
 builder.Services.AddSingleton<CockpitCacheWarmerState>();
 builder.Services.AddHostedService<CockpitCacheWarmer>();

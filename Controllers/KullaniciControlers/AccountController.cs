@@ -235,8 +235,10 @@ public class AccountController : Controller
                  return await RedirectToAuthorizedPage(user);
         }
 
-        // DEV MODE: Otomatik giriş — ilk admin kullanıcıyı bul ve sign-in yap
-        var adminUser = _userManager.Users.FirstOrDefault();
+        // DEV MODE: Otomatik giriş — melih.bulut kullanıcısıyla sign-in yap
+        var adminUser = _userManager.Users.FirstOrDefault(u => u.UserName != null && u.UserName.Contains("melih"))
+            ?? _userManager.Users.FirstOrDefault(u => u.Email != null && u.Email.Contains("melih"))
+            ?? _userManager.Users.FirstOrDefault();
         if (adminUser != null)
         {
             var claims = new List<Claim>();

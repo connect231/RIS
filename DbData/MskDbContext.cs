@@ -44,6 +44,7 @@ public partial class MskDbContext : DbContext
     public virtual DbSet<TBLSOS_CRM_KULLANICI_GECICI> TBLSOS_CRM_KULLANICI_GECICIs { get; set; }
     public virtual DbSet<TBLSOS_CRM_PERSON_ODATA> TBLSOS_CRM_PERSON_ODATAs { get; set; }
     public virtual DbSet<TBLSOS_VARUNA_FIRSAT_ODATA> TBLSOS_VARUNA_FIRSAT_ODATAs { get; set; }
+    public virtual DbSet<TBLSOS_FATURA_TAHAKKUK> TBLSOS_FATURA_TAHAKKUKs { get; set; }
 
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         => optionsBuilder.UseSqlServer("Name=ConnectionStrings:MsKConnection");
