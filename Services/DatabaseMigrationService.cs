@@ -311,6 +311,63 @@ BEGIN
 END;
 ");
 
+                // ── SP_COCKPIT_SOZLESME: Sözleşme kartı hesaplama SP ──
+                await ExecuteSqlAsync(@"
+CREATE OR ALTER PROCEDURE SP_COCKPIT_SOZLESME
+    @StartDate DATE,
+    @EndDate   DATE
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- Eski sözleşmeler: FinishDate+1 dönemde olan (yenilenmesi gereken)
+    -- Yeni sözleşme: RelatedContractId = eski.Id olan kayıt (ters bağlantı)
+    ;WITH EskiSozlesme AS (
+        SELECT s.Id, s.ContractNo, s.ContractName, s.ContractStatus,
+               s.AccountTitle, s.TotalAmount, s.TotalAmountLocal,
+               s.FinishDate, s.RenewalDate, s.StartDate,
+               DATEADD(DAY, 1, s.FinishDate) AS Yenilemetarihi
+        FROM TBL_VARUNA_SOZLESME s
+        WHERE s.RenewalDate IS NOT NULL
+          AND DATEADD(DAY, 1, s.FinishDate) >= @StartDate
+          AND DATEADD(DAY, 1, s.FinishDate) <  DATEADD(DAY, 1, @EndDate)
+    ),
+    YeniSozlesme AS (
+        SELECT y.RelatedContractId AS EskiId,
+               y.Id AS YeniId,
+               y.ContractNo AS YeniContractNo,
+               y.ContractStatus AS YeniStatus,
+               y.TotalAmount AS YeniTutar,
+               y.TotalAmountLocal AS YeniTutarLocal,
+               y.StartDate AS YeniBaslangic,
+               y.FinishDate AS YeniBitis
+        FROM TBL_VARUNA_SOZLESME y
+        WHERE y.RelatedContractId IS NOT NULL
+    )
+
+    SELECT
+        e.Id,
+        e.ContractNo,
+        e.ContractName,
+        e.ContractStatus,
+        e.AccountTitle AS Firma,
+        e.TotalAmount AS EskiTutar,
+        e.TotalAmountLocal AS EskiTutarLocal,
+        e.FinishDate AS EskiBitis,
+        e.Yenilemetarihi,
+        CASE WHEN y.EskiId IS NOT NULL THEN 1 ELSE 0 END AS Yenilendi,
+        y.YeniContractNo,
+        y.YeniStatus,
+        y.YeniTutar,
+        y.YeniTutarLocal,
+        y.YeniBaslangic,
+        y.YeniBitis
+    FROM EskiSozlesme e
+    LEFT JOIN YeniSozlesme y ON y.EskiId = e.Id
+    ORDER BY e.FinishDate, e.AccountTitle;
+END;
+");
+
                 _logger.LogInformation("SOS database migrations completed successfully");
             }
             catch (Exception ex)

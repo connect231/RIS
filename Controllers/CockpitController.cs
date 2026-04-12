@@ -1806,6 +1806,106 @@ namespace SOS.Controllers
         }
 
         [HttpGet]
+        public async Task<IActionResult> DbColumns(string table)
+        {
+            using var db = _contextFactory.CreateDbContext();
+            var cols = await db.Database.SqlQueryRaw<ColInfo>(
+                "SELECT COLUMN_NAME AS Name, DATA_TYPE AS DataType, ORDINAL_POSITION AS Pos FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_NAME = {0} ORDER BY ORDINAL_POSITION", table).ToListAsync();
+            return Json(cols);
+        }
+        public class ColInfo { public string Name { get; set; } = ""; public string DataType { get; set; } = ""; public int Pos { get; set; } }
+
+        [HttpGet]
+        public async Task<IActionResult> SozlesmeAnaliz()
+        {
+            using var db = _contextFactory.CreateDbContext();
+            var raw = await db.Database.SqlQueryRaw<SozlesmeRaw>(@"
+                SELECT
+                    s.Id, s.ContractNo, s.ContractName, s.ContractStatus,
+                    s.AccountTitle, s.RenewalDate, s.TotalAmount, s.TotalAmountLocal,
+                    s.RelatedContractId, s.StartDate, s.FinishDate,
+                    r.ContractNo AS RelatedContractNo,
+                    r.ContractStatus AS RelatedContractStatus,
+                    r.AccountTitle AS RelatedAccountTitle,
+                    r.TotalAmount AS RelatedTotalAmount,
+                    r.RenewalDate AS RelatedRenewalDate
+                FROM TBL_VARUNA_SOZLESME s
+                LEFT JOIN TBL_VARUNA_SOZLESME r ON r.Id = s.RelatedContractId
+                WHERE s.RenewalDate IS NOT NULL AND YEAR(s.RenewalDate) >= 2025
+                ORDER BY s.RenewalDate DESC
+            ").ToListAsync();
+
+            return Json(new {
+                toplam = raw.Count,
+                relatedDolu = raw.Count(r => r.RelatedContractId != null),
+                relatedNull = raw.Count(r => r.RelatedContractId == null),
+                detay = raw
+            });
+        }
+        public class SozlesmeRaw
+        {
+            public Guid? Id { get; set; }
+            public string? ContractNo { get; set; }
+            public string? ContractName { get; set; }
+            public string? ContractStatus { get; set; }
+            public string? AccountTitle { get; set; }
+            public DateTime? RenewalDate { get; set; }
+            public decimal? TotalAmount { get; set; }
+            public decimal? TotalAmountLocal { get; set; }
+            public Guid? RelatedContractId { get; set; }
+            public DateTime? StartDate { get; set; }
+            public DateTime? FinishDate { get; set; }
+            public string? RelatedContractNo { get; set; }
+            public string? RelatedContractStatus { get; set; }
+            public string? RelatedAccountTitle { get; set; }
+            public decimal? RelatedTotalAmount { get; set; }
+            public DateTime? RelatedRenewalDate { get; set; }
+        }
+
+        [HttpGet]
+        public async Task<IActionResult> TestSpSozlesme(string? startDate, string? endDate)
+        {
+            var sd = startDate ?? "2026-03-01";
+            var ed = endDate ?? "2026-03-31";
+            using var db = _contextFactory.CreateDbContext();
+            var rows = await db.Database.SqlQueryRaw<SpSozlesmeRow>(
+                "EXEC SP_COCKPIT_SOZLESME @p0, @p1", DateTime.Parse(sd), DateTime.Parse(ed)).ToListAsync();
+            var yenilenen = rows.Where(r => r.Yenilendi == 1).ToList();
+            var bekleyen = rows.Where(r => r.Yenilendi == 0).ToList();
+            return Json(new {
+                toplam = rows.Count,
+                yenilenenAdet = yenilenen.Count,
+                yenilenenEskiTutar = yenilenen.Sum(r => r.EskiTutar ?? 0),
+                yenilenenYeniTutar = yenilenen.Sum(r => r.YeniTutar ?? 0),
+                bekleyenAdet = bekleyen.Count,
+                bekleyenTutar = bekleyen.Sum(r => r.EskiTutar ?? 0),
+                detay = rows.Select(r => new {
+                    r.Firma, r.EskiTutar, r.Yenilendi, r.YeniTutar, r.YeniStatus,
+                    eskiBitis = r.EskiBitis?.ToString("dd.MM.yyyy")
+                })
+            });
+        }
+        public class SpSozlesmeRow
+        {
+            public Guid? Id { get; set; }
+            public string? ContractNo { get; set; }
+            public string? ContractName { get; set; }
+            public string? ContractStatus { get; set; }
+            public string? Firma { get; set; }
+            public decimal? EskiTutar { get; set; }
+            public decimal? EskiTutarLocal { get; set; }
+            public DateTime? EskiBitis { get; set; }
+            public DateTime? Yenilemetarihi { get; set; }
+            public int Yenilendi { get; set; }
+            public string? YeniContractNo { get; set; }
+            public string? YeniStatus { get; set; }
+            public decimal? YeniTutar { get; set; }
+            public decimal? YeniTutarLocal { get; set; }
+            public DateTime? YeniBaslangic { get; set; }
+            public DateTime? YeniBitis { get; set; }
+        }
+
+        [HttpGet]
         public async Task<IActionResult> ViewLookup(string faturaNo)
         {
             using var db = _contextFactory.CreateDbContext();
