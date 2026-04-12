@@ -853,6 +853,7 @@
                     <th class="text-center py-2 px-2 font-semibold">Eski bitiş</th>
                     <th class="text-right py-2 px-2 font-semibold">Eski tutar</th>
                     <th class="text-right py-2 px-2 font-semibold">Yeni tutar</th>
+                    <th class="text-center py-2 px-2 font-semibold">Değişim</th>
                     <th class="text-center py-2 px-2 font-semibold">Yeni bitiş</th>
                     <th class="text-center py-2 px-2 font-semibold">Durum</th>
                 </tr></thead><tbody>`;
@@ -881,23 +882,36 @@
                             </div>
                         </td>
                         <td class="py-2 px-2 text-right ${size} text-[#1e293b] num">₺${fmtN.format(toplam)}</td>
-                        <td colspan="2"></td>
+                        <td colspan="3"></td>
                     </tr>`;
                     return uid;
                 }
 
                 function addSozRows(parentUid, items, hide) {
                     (items||[]).forEach(s => {
-                        var yeniTutarHtml = s.yenilendi ? `<span class="font-semibold text-emerald-700">₺${fmtN.format(s.yeniTutar)}</span>` : '<span class="text-slate-300">—</span>';
-                        var yeniBitisHtml = s.yenilendi ? esc(s.yeniBitis) : '—';
-                        var durumHtml = s.yenilendi ? sozDurumBadge(s.yeniDurum) : '<span class="text-[10px] text-red-500 font-medium">Yenilenmedi</span>';
+                        var yeniTutarHtml, yeniBitisHtml, durumHtml, degisimHtml;
+                        if (s.yenilendi) {
+                            yeniTutarHtml = `<span class="font-semibold text-emerald-700">₺${fmtN.format(s.yeniTutar)}</span>`;
+                            yeniBitisHtml = esc(s.yeniBitis);
+                            durumHtml = sozDurumBadge(s.yeniDurum);
+                            var pct = s.tutar > 0 ? ((s.yeniTutar - s.tutar) / s.tutar * 100) : 0;
+                            var pctCls = pct >= 0 ? 'text-emerald-600' : 'text-red-500';
+                            var pctIcon = pct >= 0 ? '↑' : '↓';
+                            degisimHtml = `<span class="${pctCls} text-[10px] font-semibold">${pctIcon}%${Math.abs(pct).toFixed(1)}</span>`;
+                        } else {
+                            yeniTutarHtml = '<span class="text-slate-300">—</span>';
+                            yeniBitisHtml = '—';
+                            durumHtml = '<span class="text-[10px] text-red-500 font-medium">Yenilenmedi</span>';
+                            degisimHtml = '—';
+                        }
                         h += `<tr class="detail-row border-t border-slate-50 hover:bg-sky-50/30 ${hide?'hidden':''}" data-parent="${parentUid}">
                             <td></td>
-                            <td class="py-1.5 px-2 text-[#1e293b] font-medium truncate max-w-[220px]">${esc(s.musteri)||'—'}</td>
-                            <td class="py-1.5 px-2 text-center text-slate-500">${esc(s.bitis)||'—'}</td>
+                            <td class="py-1.5 px-2 text-[#1e293b] font-medium truncate max-w-[200px]">${esc(s.musteri)||'—'}</td>
+                            <td class="py-1.5 px-2 text-center text-slate-500 text-[10px]">${esc(s.bitis)||'—'}</td>
                             <td class="py-1.5 px-2 text-right text-slate-500">₺${fmtN.format(s.tutar)}</td>
                             <td class="py-1.5 px-2 text-right">${yeniTutarHtml}</td>
-                            <td class="py-1.5 px-2 text-center text-slate-500">${yeniBitisHtml}</td>
+                            <td class="py-1.5 px-2 text-center text-[10px]">${degisimHtml}</td>
+                            <td class="py-1.5 px-2 text-center text-slate-500 text-[10px]">${yeniBitisHtml}</td>
                             <td class="py-1.5 px-2 text-center">${durumHtml}</td>
                         </tr>`;
                     });
@@ -922,12 +936,23 @@
                     if (showYil) sozParent.pop();
                 });
 
+                // Yenilenmemiş not
+                var bekleyenNot = result.total - (result.archivedAdet || 0);
+                var yenilenmemisCount = 0;
+                result.hierarchy.forEach(y => (y.ceyrekler||[]).forEach(q => (q.aylar||[]).forEach(m => (m.sozlesmeler||[]).forEach(s => { if (!s.yenilendi) yenilenmemisCount++; }))));
+
                 h += `</tbody><tfoot><tr class="border-t-2 border-slate-200 bg-slate-50">
-                    <td></td><td class="py-2 px-2 font-bold text-[12px]">Toplam</td>
+                    <td></td><td class="py-2 px-2 font-bold text-[12px]">Hedef (yeni sözleşme tutarı)</td>
+                    <td colspan="2"></td>
+                    <td class="py-2 px-2 text-right font-bold text-[12px] text-emerald-700">₺${fmtN.format(result.dipToplam)}</td>
                     <td colspan="3"></td>
-                    <td class="py-2 px-2 text-right font-bold text-[12px]">₺${fmtN.format(result.dipToplam)}</td>
-                    <td class="py-2 px-2 text-center text-[10px] text-emerald-600 font-semibold">${result.total} sözleşme</td>
-                </tr></tfoot></table>`;
+                </tr>`;
+                if (yenilenmemisCount > 0) {
+                    h += `<tr class="bg-amber-50"><td colspan="8" class="py-1.5 px-4 text-[10px] text-amber-700">
+                        <i class="bi bi-exclamation-triangle mr-1"></i> ${yenilenmemisCount} sözleşmenin yenilemesi bulunamadı
+                    </td></tr>`;
+                }
+                h += `</tfoot></table>`;
                 container.innerHTML = h;
                 return;
             }
@@ -1140,9 +1165,10 @@
             countUp(document.getElementById('tahsilatlarTutar'), d.tahsilatEdilen, 800, '₺');
             smoothUpdate(document.getElementById('tahsilatlarPayda'), '/ ₺' + fmtN.format(d.tahsilEdilecek));
             smoothUpdate(document.getElementById('tahsilatlarAdet'), d.tahsilatlarAdet + ' adet');
+            // Sözleşme kartı: büyük tutar = gerçekleşen (Archived), payda = hedef (yeni sözleşme)
             countUp(document.getElementById('sozlesmelerTutar'), d.sozArchivedToplam, 800, '₺');
             smoothUpdate(document.getElementById('sozlesmelerPayda'), '/ ₺' + fmtN.format(d.sozlesmelerToplam));
-            smoothUpdate(document.getElementById('sozlesmelerAdet'), d.sozArchivedAdet + ' / ' + d.sozlesmelerAdet + ' adet');
+            smoothUpdate(document.getElementById('sozlesmelerAdet'), d.sozArchivedAdet + ' / ' + (d.sozYenilenenAdet || d.sozlesmelerAdet) + ' adet');
             var sozPct = d.sozlesmelerToplam > 0 ? Math.round(d.sozArchivedToplam / d.sozlesmelerToplam * 1000) / 10 : 0;
             var sozClamp = Math.min(sozPct, 100);
             var sozClr = sozPct >= 80 ? '#10b981' : sozPct >= 50 ? '#f59e0b' : '#ef4444';
@@ -1154,9 +1180,9 @@
             var sozKalanEl = document.getElementById('sozKalan');
             if (sozKalanEl) { var sozKalan = d.sozlesmelerToplam - d.sozArchivedToplam; sozKalanEl.innerHTML = 'Kalan: <span class="font-bold text-blue-700">₺' + fmtN.format(sozKalan) + '</span>'; }
             var sgaEl = document.getElementById('sozGecikmiAdet');
-            if (sgaEl) smoothUpdate(sgaEl, d.sozGecikmiAdet + ' sözleşme');
+            if (sgaEl) smoothUpdate(sgaEl, (d.sozBekleyenAdet || d.sozGecikmiAdet || 0) + ' sözleşme');
             var sgtEl = document.getElementById('sozGecikmiToplam');
-            if (sgtEl) smoothUpdate(sgtEl, '₺' + fmtN.format(d.sozGecikmisToplam));
+            if (sgtEl) smoothUpdate(sgtEl, '₺' + fmtN.format(d.sozBekleyenTutar || d.sozGecikmisToplam || 0));
             var sglEl = document.getElementById('sozGecikmiLabel');
             if (sglEl) smoothUpdate(sglEl, d.filtreBaslangic + ' öncesi yenilenmemiş');
 

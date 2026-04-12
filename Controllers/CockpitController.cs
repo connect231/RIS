@@ -891,15 +891,15 @@ namespace SOS.Controllers
                     tahsilatEdilen = spTahsilat.TahsilEdilen,
                     tahsilatlarAdet = spTahsilat.TahsilAdet,
                     // Sözleşme kartı — SP'den
-                    // Hedef = yeni sözleşme tutarları, Gerçekleşen = Archived olanlar
-                    sozlesmelerToplam = spSozlesme.YeniTutar,        // hedef (tüm yeni sözleşme tutarı)
-                    sozlesmelerAdet = spSozlesme.Toplam,
-                    sozArchivedToplam = spSozlesme.ArchivedTutar,    // gerçekleşen (sadece Archived)
-                    sozArchivedAdet = spSozlesme.ArchivedAdet,
-                    sozGecikmisToplam = spSozlesme.BekleyenTutar,    // henüz yenilenmemiş
-                    sozGecikmiAdet = spSozlesme.BekleyenAdet,
-                    sozYenilenenToplam = spSozlesme.YeniTutar,       // tüm yenilenen tutar
-                    sozYenilenenAdet = spSozlesme.YenilenenAdet,
+                    // Büyük tutar = gerçekleşen (Archived yeni sözleşme), payda = hedef (tüm yeni sözleşme)
+                    sozlesmelerToplam = spSozlesme.YeniTutar,        // hedef = yeni sözleşmelerin tutarı
+                    sozlesmelerAdet = spSozlesme.Toplam,             // toplam eski sözleşme sayısı
+                    sozArchivedToplam = spSozlesme.ArchivedTutar,    // gerçekleşen = Archived yeni tutarı
+                    sozArchivedAdet = spSozlesme.ArchivedAdet,       // Archived yeni sayısı
+                    sozYenilenenAdet = spSozlesme.YenilenenAdet,     // tüm yenilenen sayısı
+                    sozBekleyenTutar = spSozlesme.BekleyenTutar,     // yenilenmemiş eski tutar
+                    sozBekleyenAdet = spSozlesme.BekleyenAdet,       // yenilenmemiş sayısı
+                    sozEskiTutar = spSozlesme.EskiTutar,             // tüm eski sözleşme tutarı
                     urunKirilim,
                     faturalarTrend = m.PrevFatToplam > 0 ? Math.Round((m.FatToplam - m.PrevFatToplam) / m.PrevFatToplam * 100, 1) : 0,
                     tahsilatlarTrend = m.PrevTahToplam > 0 ? Math.Round((m.TahEdilen - m.PrevTahToplam) / m.PrevTahToplam * 100, 1) : 0,
