@@ -843,17 +843,17 @@
             if (countEl) countEl.textContent = result.total + ' kayıt';
 
             if (type === 'sozlesmeler') {
-                // Sözleşmeler — hiyerarşik (Yıl → Çeyrek → Ay → Detay)
+                // Sözleşmeler — hiyerarşik, SP'den (eski + yeni sözleşme)
                 if (!result.hierarchy || !result.hierarchy.length) { container.innerHTML = '<p class="text-[11px] text-slate-400 text-center py-4">Veri bulunamadı.</p>'; return; }
                 const sozSl = result.startLevel;
                 let h = '<table class="w-full text-[11px]">';
                 h += `<thead class="sticky top-0 z-10 bg-white"><tr class="border-b border-slate-200 text-[10px] text-slate-400 uppercase tracking-wider">
                     <th class="py-2 px-2 w-5"></th>
                     <th class="text-left py-2 px-2 font-semibold">Müşteri</th>
-                    <th class="text-center py-2 px-2 font-semibold">Başlangıç</th>
-                    <th class="text-center py-2 px-2 font-semibold">Bitiş</th>
-                    <th class="text-center py-2 px-2 font-semibold">Yenileme</th>
-                    <th class="text-right py-2 px-2 font-semibold">Tutar</th>
+                    <th class="text-center py-2 px-2 font-semibold">Eski bitiş</th>
+                    <th class="text-right py-2 px-2 font-semibold">Eski tutar</th>
+                    <th class="text-right py-2 px-2 font-semibold">Yeni tutar</th>
+                    <th class="text-center py-2 px-2 font-semibold">Yeni bitiş</th>
                     <th class="text-center py-2 px-2 font-semibold">Durum</th>
                 </tr></thead><tbody>`;
 
@@ -872,30 +872,33 @@
                     var pAttr = sozParent.length > 0 ? ` data-parent="${sozParent[sozParent.length-1]}"` : '';
                     var hiddenCls = closed ? 'hidden' : '';
                     h += `<tr class="cursor-pointer hover:bg-blue-50/30 ${bg} ${hiddenCls}" data-group="${uid}"${pAttr}>
-                        <td colspan="5" class="py-2 px-2 ${indent}">
+                        <td colspan="4" class="py-2 px-2 ${indent}">
                             <div class="flex items-center gap-2">
                                 <i class="bi bi-chevron-right text-slate-400 transition-transform duration-200 ${arrowCls}" id="arr-${uid}" style="font-size:10px;"></i>
                                 <span class="${size} text-[#1e293b]">${esc(label)}</span>
                                 <span class="text-[10px] text-slate-400">${adet} adet</span>
-                                <span class="text-[10px] text-emerald-600 font-medium">${archivedAdet}/${adet} archived</span>
+                                <span class="text-[10px] text-emerald-600 font-medium">${archivedAdet}/${adet} yenilendi</span>
                             </div>
                         </td>
                         <td class="py-2 px-2 text-right ${size} text-[#1e293b] num">₺${fmtN.format(toplam)}</td>
-                        <td></td>
+                        <td colspan="2"></td>
                     </tr>`;
                     return uid;
                 }
 
                 function addSozRows(parentUid, items, hide) {
                     (items||[]).forEach(s => {
+                        var yeniTutarHtml = s.yenilendi ? `<span class="font-semibold text-emerald-700">₺${fmtN.format(s.yeniTutar)}</span>` : '<span class="text-slate-300">—</span>';
+                        var yeniBitisHtml = s.yenilendi ? esc(s.yeniBitis) : '—';
+                        var durumHtml = s.yenilendi ? sozDurumBadge(s.yeniDurum) : '<span class="text-[10px] text-red-500 font-medium">Yenilenmedi</span>';
                         h += `<tr class="detail-row border-t border-slate-50 hover:bg-sky-50/30 ${hide?'hidden':''}" data-parent="${parentUid}">
                             <td></td>
                             <td class="py-1.5 px-2 text-[#1e293b] font-medium truncate max-w-[220px]">${esc(s.musteri)||'—'}</td>
-                            <td class="py-1.5 px-2 text-center text-slate-500">${esc(s.baslangic)||'—'}</td>
                             <td class="py-1.5 px-2 text-center text-slate-500">${esc(s.bitis)||'—'}</td>
-                            <td class="py-1.5 px-2 text-center text-slate-500">${esc(s.yenileme)||'—'}</td>
-                            <td class="py-1.5 px-2 text-right font-semibold text-[#1e293b]">₺${fmtN.format(s.tutar)}</td>
-                            <td class="py-1.5 px-2 text-center">${sozDurumBadge(s.durum)}</td>
+                            <td class="py-1.5 px-2 text-right text-slate-500">₺${fmtN.format(s.tutar)}</td>
+                            <td class="py-1.5 px-2 text-right">${yeniTutarHtml}</td>
+                            <td class="py-1.5 px-2 text-center text-slate-500">${yeniBitisHtml}</td>
+                            <td class="py-1.5 px-2 text-center">${durumHtml}</td>
                         </tr>`;
                     });
                 }
@@ -907,8 +910,8 @@
                         const showQ = showYil || sozSl === 'ceyrek';
                         if (showQ) { var qUid = addSozHeader('ceyrek', q.label, q.toplam, q.adet, q.archivedAdet, showYil); sozParent.push(qUid); }
                         (q.aylar||[]).forEach(m => {
-                            var mClosed = sozSl !== 'ay';
-                            var mOpen = !mClosed;
+                            var mClosed = false; // default açık
+                            var mOpen = true;
                             var mUid = addSozHeader('ay', m.ayAdi, m.toplam, m.adet, m.archivedAdet, mClosed);
                             sozParent.push(mUid);
                             addSozRows(mUid, m.sozlesmeler, !mOpen);
