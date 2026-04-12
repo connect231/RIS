@@ -1181,32 +1181,36 @@ namespace SOS.Controllers
                 }
                 case "tahsilatlar":
                 {
-                    // VIEW'den gelen faturalar (sentetik hariç), İade/Ret hariç, Fatura_Vade_Tarihi dönemde
-                    // SP_COCKPIT_TAHSILAT ile aynı mantık
-                    var donemFaturalar = allFaturalar
-                        .Where(f => !IsNegatifDurum(f.Durum) && !IsRetDurum(f.Durum))
-                        .Where(f => f.Fatura_No == null || !f.Fatura_No.StartsWith("SAP:")) // sentetik hariç
-                        .Where(f => f.Fatura_Vade_Tarihi.HasValue)
-                        .Where(f => f.Fatura_Vade_Tarihi!.Value >= start && f.Fatura_Vade_Tarihi!.Value <= end)
-                        .ToList();
-
-                    // Tahsil edilenler: Tahsil_Edilen > 0
-                    var tahsilEdilenler = donemFaturalar
-                        .Where(f => (f.Tahsil_Edilen ?? 0) > 0)
-                        .Select(f => new { fatura = f, tarih = f.Fatura_Vade_Tarihi!.Value, odendi = true })
-                        .ToList();
-
-                    // Ödenmeyenler: bakiye > 0
-                    var odenmeyenler = donemFaturalar
+                    // SP_COCKPIT_TAHSILAT ile aynı mantık:
+                    // Direkt VIEW'den, Fatura_No dedupe, İade/Ret hariç
+                    using var dbTah = _contextFactory.CreateDbContext();
+                    var viewFaturalar = (await dbTah.VIEW_CP_EXCEL_FATURAs.AsNoTracking().ToListAsync())
+                        .GroupBy(f => f.Fatura_No ?? f.GetHashCode().ToString())
+                        .Select(g => g.First())
                         .Where(f => {
-                            var bak = f.Bekleyen_Bakiye ?? ((f.Fatura_Toplam ?? 0) - (f.Tahsil_Edilen ?? 0));
-                            return bak > 0;
+                            var d2 = (f.Durum ?? "").Trim();
+                            return d2 != "İADE" && d2 != "IADE" && d2 != "İPTAL" && d2 != "IPTAL" && d2 != "RET";
                         })
+                        .ToList();
+
+                    // Tahsil edilenler: Tahsil_Tarihi dönemde
+                    var tahsilEdilenler = viewFaturalar
+                        .Where(f => f.Tahsil_Tarihi.HasValue
+                            && f.Tahsil_Tarihi.Value >= start && f.Tahsil_Tarihi.Value <= end
+                            && (f.Tahsil_Edilen ?? 0) > 0)
+                        .Select(f => new { fatura = f, tarih = f.Tahsil_Tarihi!.Value, odendi = true })
+                        .ToList();
+
+                    // Bekleyen bakiye: Fatura_Vade_Tarihi <= dönem sonu & bakiye > 0
+                    var bekleyenler = viewFaturalar
+                        .Where(f => f.Fatura_Vade_Tarihi.HasValue
+                            && f.Fatura_Vade_Tarihi.Value <= end
+                            && (f.Bekleyen_Bakiye ?? ((f.Fatura_Toplam ?? 0) - (f.Tahsil_Edilen ?? 0))) > 0
+                            && !tahsilEdilenler.Any(t => t.fatura.Fatura_No == f.Fatura_No))
                         .Select(f => new { fatura = f, tarih = f.Fatura_Vade_Tarihi!.Value, odendi = false })
                         .ToList();
 
-                    // Birleştir
-                    var combined = tahsilEdilenler.Concat(odenmeyenler)
+                    var combined = tahsilEdilenler.Concat(bekleyenler)
                         .OrderBy(x => x.tarih)
                         .ToList();
 
@@ -1218,7 +1222,9 @@ namespace SOS.Controllers
                         .Where(f => IsDurumBos(f.Durum) && (f.Bekleyen_Bakiye ?? (f.Fatura_Toplam ?? 0) - (f.Tahsil_Edilen ?? 0)) > 0)
                         .ToList();
 
-                    var dipToplam = tahsilEdilenler.Sum(x => x.fatura.Fatura_Toplam ?? 0);
+                    // dipToplam SP'den — kart ile tutarlı
+                    var spTahDip = await _cockpitData.GetTahsilatOzetAsync(start, end);
+                    var dipToplam = spTahDip.TahsilEdilen;
 
                     var hierarchy = combined
                         .GroupBy(x => x.tarih.Year)
