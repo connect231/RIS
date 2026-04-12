@@ -444,8 +444,8 @@
             </button>
         </div>
         <div class="flex items-baseline gap-2">
-            <p id="faturalarTutar" class="text-[1.1rem] font-semibold text-[#1e293b] leading-tight num" data-countup="@Model.FaturalarToplam.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)" data-prefix="₺">₺0</p>
-            <span id="faturalarPayda" class="text-[1.1rem] font-medium text-slate-400">/ ₺@fatHedef.ToString("N0")</span>
+            <p id="faturalarTutar" class="text-[1.4rem] font-bold text-[#1e293b] leading-tight num" data-countup="@Model.FaturalarToplam.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)" data-prefix="₺">₺0</p>
+            <span id="faturalarPayda" class="text-[13px] font-medium text-slate-400">/ ₺@fatHedef.ToString("N0")</span>
         </div>
         <div class="flex items-center justify-between mt-1.5">
             <span id="faturalarAdet" class="text-[12px] text-slate-500">@Model.FaturalarAdet adet</span>
@@ -492,8 +492,8 @@
 
         <!-- Ana tutar: PAY / PAYDA -->
         <div class="flex items-baseline gap-2">
-            <p id="tahsilatlarTutar" class="text-[1.1rem] font-semibold text-[#1e293b] leading-tight num" data-countup="@tahPay.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)" data-prefix="₺">₺0</p>
-            <span id="tahsilatlarPayda" class="text-[1.1rem] font-medium text-slate-400">/ ₺@tahPayda.ToString("N0")</span>
+            <p id="tahsilatlarTutar" class="text-[1.4rem] font-bold text-[#1e293b] leading-tight num" data-countup="@tahPay.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)" data-prefix="₺">₺0</p>
+            <span id="tahsilatlarPayda" class="text-[13px] font-medium text-slate-400">/ ₺@tahPayda.ToString("N0")</span>
         </div>
         <div class="flex items-center justify-between mt-1.5">
             <span id="tahsilatlarAdet" class="text-[12px] text-slate-500">@Model.TahsilatlarAdet adet</span>
@@ -549,8 +549,8 @@
             </button>
         </div>
         <div class="flex items-baseline gap-2">
-            <p id="sozlesmelerTutar" class="text-[1.1rem] font-semibold text-[#1e293b] leading-tight num" data-countup="@Model.SozArchivedToplam.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)" data-prefix="₺">₺0</p>
-            <span id="sozlesmelerPayda" class="text-[1.1rem] font-medium text-slate-400">/ ₺@Model.SozlesmelerToplam.ToString("N0")</span>
+            <p id="sozlesmelerTutar" class="text-[1.4rem] font-bold text-[#1e293b] leading-tight num" data-countup="@Model.SozArchivedToplam.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)" data-prefix="₺">₺0</p>
+            <span id="sozlesmelerPayda" class="text-[13px] font-medium text-slate-400">/ ₺@Model.SozlesmelerToplam.ToString("N0")</span>
         </div>
         <div class="flex items-center justify-between mt-2">
             <span id="sozlesmelerAdet" class="text-xs text-slate-400">@Model.SozArchivedAdet / @Model.SozlesmelerAdet adet</span>
