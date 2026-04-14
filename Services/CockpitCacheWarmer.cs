@@ -77,14 +77,46 @@ public class CockpitCacheWarmer : BackgroundService
                 var gecenBas = haftaBas.AddDays(-7);
                 var gecenSon = gecenBas.AddDays(4).AddHours(23).AddMinutes(59).AddSeconds(59);
 
-                await Task.WhenAll(
+                // Sabit SP'ler (üst kartlar + CEI)
+                var fixedTasks = new List<Task>
+                {
                     cockpitData.GetFaturaOzetAsync(ayBas, aySon),
                     cockpitData.GetFaturaOzetAsync(ytdBas, today),
                     cockpitData.GetTahsilatOzetAsync(gecenBas, gecenSon),
                     cockpitData.GetTahsilatOzetAsync(haftaBas, haftaSon),
                     cockpitData.GetTahsilatOzetAsync(ayBas, aySon),
                     cockpitData.GetTahsilatOzetAsync(ytdBas, today)
-                );
+                };
+
+                // Tüm pill-nav filtre dönemlerini de ısıt — PreloadAllFilters anında dönebilsin
+                var year = now.Year;
+                var lmMonth = now.Month == 1 ? 12 : now.Month - 1;
+                var lmYear = now.Month == 1 ? year - 1 : year;
+                var filterPeriods = new (DateTime s, DateTime e)[]
+                {
+                    (ayBas, aySon), // month
+                    (new DateTime(lmYear, lmMonth, 1), new DateTime(lmYear, lmMonth, DateTime.DaysInMonth(lmYear, lmMonth), 23,59,59)), // lastmonth
+                    (new DateTime(year,1,1), new DateTime(year,3,31,23,59,59)),   // q1
+                    (new DateTime(year,4,1), new DateTime(year,6,30,23,59,59)),   // q2
+                    (new DateTime(year,7,1), new DateTime(year,9,30,23,59,59)),   // q3
+                    (new DateTime(year,10,1), new DateTime(year,12,31,23,59,59)), // q4
+                    (ytdBas, today) // ytd
+                };
+                foreach (var (s, e) in filterPeriods)
+                {
+                    fixedTasks.Add(cockpitData.GetFaturaOzetAsync(s, e));
+                    fixedTasks.Add(cockpitData.GetTahsilatOzetAsync(s, e));
+                    fixedTasks.Add(cockpitData.GetSozlesmeOzetAsync(s, e));
+                    fixedTasks.Add(cockpitData.GetFaturalarAsync(s, e));
+
+                    // FırsatAnaliz prev dönem karşılaştırması için geçen dönem SP'lerini de ısıt
+                    var prevDur = e - s;
+                    var prevS = s.AddDays(-prevDur.TotalDays);
+                    var prevE = s.AddSeconds(-1);
+                    fixedTasks.Add(cockpitData.GetFaturaOzetAsync(prevS, prevE));
+                }
+
+                await Task.WhenAll(fixedTasks);
 
                 var elapsed = DateTime.UtcNow - startedAt;
                 _state.LastRefreshAt = DateTime.UtcNow;

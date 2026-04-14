@@ -15,13 +15,20 @@ namespace SOS.Models.ViewModels
         public decimal TahsilatlarToplam { get; set; }
         public int TahsilatlarAdet { get; set; }
 
-        // Sözleşmeler (aktif dönem: StartDate <= bugün <= FinishDate)
-        public decimal SozlesmelerToplam { get; set; }
+        // Sözleşmeler
+        public decimal SozlesmelerToplam { get; set; }  // PAYDA: tüm yeni sözleşme tutarı
         public int SozlesmelerAdet { get; set; }
-        public decimal SozArchivedToplam { get; set; }
+        public decimal SozFaturalandiToplam { get; set; } // PAY: faturalanmış sözleşme tutarı
+        public int SozFaturalandiAdet { get; set; }
+        public decimal SozArchivedToplam { get; set; }  // İmzalanan (Archived) tutar
         public int SozArchivedAdet { get; set; }
         public decimal SozGecikmisToplam { get; set; }
         public int SozGecikmiAdet { get; set; }
+        public decimal SozKismiFatToplam { get; set; }
+        public int SozKismiFatAdet { get; set; }
+        public decimal SozFesihToplam { get; set; }
+        public int SozFesihAdet { get; set; }
+        public List<string> SozFesihFirmalar { get; set; } = new();
 
         // Trend verileri (önceki dönem karşılaştırma)
         public decimal FaturalarTrend { get; set; }
@@ -108,5 +115,21 @@ namespace SOS.Models.ViewModels
         public decimal FixedQuarterTarget { get; set; }
         public int RemainingMonths { get; set; }
         public int CurrentQuarter { get; set; }
+
+        // Geçen hafta (CEI kartı — SSR'dan JS'e aktarılır)
+        public decimal GecenHaftaTah { get; set; }
+        public decimal GecenHaftaBakiye { get; set; }
+        public string GecenHaftaBaslangicStr { get; set; } = "";
+        public string GecenHaftaSonuStr { get; set; } = "";
+
+        // Ürün kırılımı (SSR'dan JS'e aktarılır — redundant AJAX önlenir)
+        public List<UrunKirilimItem> UrunKirilim { get; set; } = new();
+    }
+
+    public class UrunKirilimItem
+    {
+        public string Grup { get; set; } = "";
+        public decimal Toplam { get; set; }
+        public int Adet { get; set; }
     }
 }

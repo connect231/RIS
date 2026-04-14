@@ -162,17 +162,16 @@ namespace SOS.Services
                 await ExecuteSqlAsync(@"
 CREATE OR ALTER PROCEDURE SP_COCKPIT_FATURA
     @StartDate DATE,
-    @EndDate   DATE
+    @EndDate   DATE,
+    @Owner     NVARCHAR(200) = NULL
 AS
 BEGIN
     SET NOCOUNT ON;
 
-    -- 1) VIEW faturalari: Fatura_No bazinda dedupe
+    -- 1) VIEW faturalari: Fatura_No bazinda dedupe (NULL olanlar dedupe edilmez)
     ;WITH DistinctFatura AS (
-        SELECT *, ROW_NUMBER() OVER (
-            PARTITION BY ISNULL(Fatura_No, CAST(NEWID() AS NVARCHAR(50)))
-            ORDER BY (SELECT NULL)
-        ) AS rn
+        SELECT *, CASE WHEN Fatura_No IS NULL THEN 1
+            ELSE ROW_NUMBER() OVER (PARTITION BY Fatura_No ORDER BY (SELECT NULL)) END AS rn
         FROM VIEW_CP_EXCEL_FATURA
     ),
     Faturalar AS (
@@ -187,16 +186,17 @@ BEGIN
         FROM Faturalar f
         INNER JOIN TBL_VARUNA_SIPARIS v ON v.SerialNumber = f.Fatura_No
             AND v.OrderStatus = 'Closed' AND v.TotalNetAmount > 0
-        WHERE LTRIM(RTRIM(f.Durum)) IN (N'İADE',N'IADE',N'İPTAL',N'IPTAL',N'RET')
+        WHERE LTRIM(RTRIM(f.Durum)) IN (N'İADE',N'IADE',N'İPTAL',N'IPTAL',N'RET',N'İade Fatura',N'Iade Fatura')
     ),
 
-    -- 3) Varuna Closed (blacklist haric)
+    -- 3) Varuna Closed (blacklist haric, owner filtreli)
     VarunaClosed AS (
         SELECT SerialNumber, TotalNetAmount, InvoiceDate, AccountTitle, SAPOutReferenceCode, OrderId
         FROM TBL_VARUNA_SIPARIS
         WHERE OrderStatus = 'Closed' AND TotalNetAmount > 0
           AND SerialNumber IS NOT NULL
           AND SerialNumber NOT IN (SELECT Fatura_No FROM IadeRetBL)
+          AND (@Owner IS NULL OR ProposalOwnerId = @Owner)
     ),
 
     -- 4) Tahakkuk
@@ -220,7 +220,7 @@ BEGIN
         INNER JOIN VarunaClosed vc ON vc.SerialNumber = f.Fatura_No
         LEFT JOIN TH t1 ON t1.SapReferansNo = LTRIM(RTRIM(vc.SAPOutReferenceCode))
         LEFT JOIN TH t2 ON t2.FaturaNo = f.Fatura_No AND t1.TahakkukTarihi IS NULL
-        WHERE LTRIM(RTRIM(ISNULL(f.Durum,''))) NOT IN (N'İADE',N'IADE',N'İPTAL',N'IPTAL',N'RET')
+        WHERE LTRIM(RTRIM(ISNULL(f.Durum,''))) NOT IN (N'İADE',N'IADE',N'İPTAL',N'IPTAL',N'RET',N'İade Fatura',N'Iade Fatura')
           AND f.Fatura_No NOT IN (SELECT Fatura_No FROM IadeRetBL)
     ),
 
@@ -244,6 +244,7 @@ BEGIN
           AND (v.SerialNumber IS NULL OR v.SerialNumber NOT IN (SELECT Fatura_No FROM ViewFNSet))
           AND (v.SerialNumber IS NULL OR v.SerialNumber NOT IN (SELECT Fatura_No FROM IadeRetBL))
           AND COALESCE(t1.TahakkukTarihi, t2.TahakkukTarihi) IS NOT NULL
+          AND (@Owner IS NULL OR v.ProposalOwnerId = @Owner)
     )
 
     -- 7) UNION + tarih filtresi
@@ -260,6 +261,7 @@ END;
 ");
 
                 // ── SP_COCKPIT_TAHSILAT: Tahsilat kartı hesaplama SP ──
+                // Deduplicate YOK — VIEW'deki tüm satırlar sayılır (Excel'de duplicate olması normal)
                 await ExecuteSqlAsync(@"
 CREATE OR ALTER PROCEDURE SP_COCKPIT_TAHSILAT
     @StartDate DATE,
@@ -267,24 +269,6 @@ CREATE OR ALTER PROCEDURE SP_COCKPIT_TAHSILAT
 AS
 BEGIN
     SET NOCOUNT ON;
-
-    -- VIEW faturalari dedupe
-    ;WITH DistinctFatura AS (
-        SELECT *, ROW_NUMBER() OVER (
-            PARTITION BY ISNULL(Fatura_No, CAST(NEWID() AS NVARCHAR(50)))
-            ORDER BY (SELECT NULL)
-        ) AS rn
-        FROM VIEW_CP_EXCEL_FATURA
-    ),
-    -- Sadece VIEW, Iade/Ret haric, Hukuki takip haric (Varuna join yok)
-    Faturalar AS (
-        SELECT Fatura_No, Fatura_Tarihi, Fatura_Toplam, Durum,
-               Fatura_Vade_Tarihi, Tahsil_Edilen, Bekleyen_Bakiye, Tahsil_Tarihi
-        FROM DistinctFatura
-        WHERE rn = 1
-          AND ISNULL(LTRIM(RTRIM(Hukuki_Durum)), '') = ''
-          AND LTRIM(RTRIM(ISNULL(Durum,''))) NOT IN (N'İADE',N'IADE',N'İPTAL',N'IPTAL',N'RET')
-    )
 
     SELECT
         -- PAY: Tahsil_Tarihi donemde
@@ -295,7 +279,7 @@ BEGIN
         ISNULL(SUM(CASE WHEN Tahsil_Tarihi >= @StartDate AND Tahsil_Tarihi < DATEADD(DAY,1,@EndDate)
                         THEN 1 END), 0) AS TahsilAdet,
 
-        -- PAYDA bakiye: Fatura_Vade_Tarihi <= donem sonu VE bekleyen > 0
+        -- PAYDA bakiye: Fatura_Vade_Tarihi <= donem sonu VE bakiye > 0
         ISNULL(SUM(CASE WHEN Fatura_Vade_Tarihi <= @EndDate
                          AND ISNULL(Bekleyen_Bakiye, ISNULL(Fatura_Toplam,0) - ISNULL(Tahsil_Edilen,0)) > 0
                         THEN ISNULL(Bekleyen_Bakiye, ISNULL(Fatura_Toplam,0) - ISNULL(Tahsil_Edilen,0)) END), 0) AS BekleyenBakiyeToplam,
@@ -308,7 +292,9 @@ BEGIN
         ISNULL(SUM(CASE WHEN Fatura_Vade_Tarihi >= @StartDate AND Fatura_Vade_Tarihi < DATEADD(DAY,1,@EndDate)
                         THEN 1 END), 0) AS VadesiGelenAdet
 
-    FROM Faturalar;
+    FROM VIEW_CP_EXCEL_FATURA
+    WHERE ISNULL(LTRIM(RTRIM(Hukuki_Durum)), '') = ''
+      AND LTRIM(RTRIM(ISNULL(Durum,''))) NOT IN (N'İADE',N'IADE',N'İPTAL',N'IPTAL',N'RET',N'İade Fatura',N'Iade Fatura');
 END;
 ");
 
@@ -352,7 +338,14 @@ BEGIN
         y.YeniTutar,
         y.YeniTutarLocal,
         y.YeniBaslangic,
-        y.YeniBitis
+        y.YeniBitis,
+        y.YeniInvoiceStatusId,
+        CASE
+            WHEN y.YeniInvoiceStatusId = '588A659C-2766-4872-880B-3BCF772439BA' THEN N'Tamamlandı'
+            WHEN y.YeniInvoiceStatusId = '41A14F17-BD82-4927-A29E-592AB37F6BB0' THEN N'Kısmi Faturalandı'
+            WHEN y.YeniInvoiceStatusId = '53056965-D3EC-4C71-B968-6493A898A7CC' THEN N'Faturalanacak'
+            ELSE N'Belirsiz'
+        END AS FaturaStatu
     FROM EskiSozlesme e
     OUTER APPLY (
         SELECT TOP 1
@@ -362,12 +355,198 @@ BEGIN
             n.TotalAmount AS YeniTutar,
             n.TotalAmountLocal AS YeniTutarLocal,
             n.StartDate AS YeniBaslangic,
-            n.FinishDate AS YeniBitis
+            n.FinishDate AS YeniBitis,
+            CAST(n.InvoiceStatusId AS NVARCHAR(50)) AS YeniInvoiceStatusId
         FROM TBL_VARUNA_SOZLESME n
         WHERE n.RelatedContractId = e.Id
         ORDER BY n.StartDate ASC
     ) y
     ORDER BY e.FinishDate, e.AccountTitle;
+END;
+");
+
+                // ── SP_PIPELINE_FIRSAT: Fırsat pipeline karti (K1 = havuz, K2 = dönem) ──
+                // @Start/@End NULL gelirse tüm zamanlar; doluysa CloseDate bazlı filtre.
+                await ExecuteSqlAsync(@"
+CREATE OR ALTER PROCEDURE SP_PIPELINE_FIRSAT
+    @StartDate DATE = NULL,
+    @EndDate   DATE = NULL,
+    @Owner     NVARCHAR(100) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT
+        ISNULL(SUM(CASE WHEN OpportunityStageName NOT IN ('Won','Lost')
+                         AND (OpportunityStageName IS NULL OR OpportunityStageName NOT LIKE '%Closed%')
+                        THEN AmountAmount END), 0) AS TutarAcik,
+        ISNULL(SUM(CASE WHEN OpportunityStageName NOT IN ('Won','Lost')
+                         AND (OpportunityStageName IS NULL OR OpportunityStageName NOT LIKE '%Closed%')
+                        THEN 1 END), 0) AS AdetAcik,
+        ISNULL(SUM(CASE WHEN OpportunityStageName = 'Won' THEN AmountAmount END), 0) AS TutarWon,
+        ISNULL(SUM(CASE WHEN OpportunityStageName = 'Won' THEN 1 END), 0) AS AdetWon,
+        ISNULL(SUM(CASE WHEN OpportunityStageName = 'Lost' THEN AmountAmount END), 0) AS TutarLost,
+        ISNULL(SUM(CASE WHEN OpportunityStageName = 'Lost' THEN 1 END), 0) AS AdetLost
+    FROM TBL_VARUNA_OPPORTUNITIES
+    WHERE DeletedOn IS NULL
+      AND (Name IS NULL OR (Name NOT LIKE '%TEST%' AND Name NOT LIKE '%DENEME%'))
+      AND (@StartDate IS NULL OR CloseDate >= @StartDate)
+      AND (@EndDate   IS NULL OR CloseDate <= @EndDate)
+      AND (@Owner     IS NULL OR OwnerId = @Owner);
+END;
+");
+
+                // ── SP_PIPELINE_TEKLIF: Teklif pipeline karti (K3) ──
+                // CreatedOn dönem filtresi, Denied/Reject hariç aktif teklifler.
+                await ExecuteSqlAsync(@"
+CREATE OR ALTER PROCEDURE SP_PIPELINE_TEKLIF
+    @StartDate DATE,
+    @EndDate   DATE,
+    @Owner     NVARCHAR(100) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT
+        ISNULL(SUM(CASE WHEN Status NOT IN ('Denied','Reject')
+                        THEN TotalNetAmountLocalCurrency_Amount END), 0) AS TutarAktif,
+        ISNULL(SUM(CASE WHEN Status NOT IN ('Denied','Reject') THEN 1 END), 0) AS AdetAktif,
+        ISNULL(SUM(CASE WHEN Status IN ('Denied','Reject')
+                        THEN TotalNetAmountLocalCurrency_Amount END), 0) AS TutarRed,
+        ISNULL(SUM(CASE WHEN Status IN ('Denied','Reject') THEN 1 END), 0) AS AdetRed
+    FROM TBL_VARUNA_TEKLIF
+    WHERE DeletedOn IS NULL
+      AND (Account_Title IS NULL OR (Account_Title NOT LIKE '%TEST%' AND Account_Title NOT LIKE '%DENEME%'))
+      AND CreatedOn >= @StartDate AND CreatedOn <= @EndDate
+      AND (@Owner IS NULL OR ProposalOwnerId = @Owner);
+END;
+");
+
+                // ── SP_PIPELINE_SIPARIS: Sipariş pipeline karti (K4) ──
+                // CreateOrderDate dönem filtresi, Canceled hariç, açık vs kapanmış ayrımı.
+                await ExecuteSqlAsync(@"
+CREATE OR ALTER PROCEDURE SP_PIPELINE_SIPARIS
+    @StartDate DATE,
+    @EndDate   DATE,
+    @Owner     NVARCHAR(100) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+    SELECT
+        ISNULL(SUM(CASE WHEN OrderStatus <> 'Closed' THEN TotalNetAmount END), 0) AS TutarAcik,
+        ISNULL(SUM(CASE WHEN OrderStatus <> 'Closed' THEN 1 END), 0) AS AdetAcik,
+        ISNULL(SUM(CASE WHEN OrderStatus = 'Closed' THEN TotalNetAmount END), 0) AS TutarKapali,
+        ISNULL(SUM(CASE WHEN OrderStatus = 'Closed' THEN 1 END), 0) AS AdetKapali
+    FROM TBL_VARUNA_SIPARIS
+    WHERE (AccountTitle IS NULL OR (AccountTitle NOT LIKE '%TEST%' AND AccountTitle NOT LIKE '%DENEME%'))
+      AND OrderStatus <> 'Canceled'
+      AND CreateOrderDate >= @StartDate AND CreateOrderDate <= @EndDate;
+END;
+");
+
+                // ── SP_FIRSAT_PIPELINE_V2: Tek SP, 5 pipeline kartı (K1-K5) ──
+                await ExecuteSqlAsync(@"
+CREATE OR ALTER PROCEDURE SP_FIRSAT_PIPELINE_V2
+    @StartDate DATE = NULL,
+    @EndDate   DATE = NULL,
+    @Owner     NVARCHAR(100) = NULL
+AS
+BEGIN
+    SET NOCOUNT ON;
+
+    -- K1: Tüm fırsatlar havuzu (dönem filtresi YOK — tüm açık havuz)
+    --     Won + Lost hariç, kapalı siparişi olanlar hariç
+    DECLARE @TumFirsatAdet INT, @TumFirsatTutar DECIMAL(18,2);
+
+    ;WITH KapaliSiparisliOpp AS (
+        SELECT DISTINCT LOWER(CAST(t.OpportunityId AS NVARCHAR(100))) AS OppId
+        FROM TBL_VARUNA_TEKLIF t
+        INNER JOIN TBL_VARUNA_SIPARIS s ON CAST(t.Id AS NVARCHAR(100)) = s.QuoteId
+        WHERE t.DeletedOn IS NULL AND t.OpportunityId IS NOT NULL
+          AND s.OrderStatus = 'Closed' AND s.QuoteId IS NOT NULL
+    )
+    SELECT @TumFirsatAdet = COUNT(*),
+           @TumFirsatTutar = ISNULL(SUM(o.AmountAmount), 0)
+    FROM TBL_VARUNA_OPPORTUNITIES o
+    WHERE o.DeletedOn IS NULL
+      AND (o.Name IS NULL OR (o.Name NOT LIKE '%TEST%' AND o.Name NOT LIKE '%DENEME%'))
+      AND o.OpportunityStageName NOT IN ('Won', 'Lost')
+      AND (o.OpportunityStageName IS NULL OR o.OpportunityStageName NOT LIKE '%Closed%')
+      AND LOWER(ISNULL(o.Id, '')) NOT IN (SELECT OppId FROM KapaliSiparisliOpp)
+      AND (@Owner IS NULL OR o.OwnerId = @Owner);
+
+    -- K2: Dönem fırsatları (CloseDate dönemde, Won+Lost hariç, kapalı siparişli hariç)
+    DECLARE @FirsatAdet INT, @FirsatTutar DECIMAL(18,2);
+
+    ;WITH KapaliSiparisliOpp AS (
+        SELECT DISTINCT LOWER(CAST(t.OpportunityId AS NVARCHAR(100))) AS OppId
+        FROM TBL_VARUNA_TEKLIF t
+        INNER JOIN TBL_VARUNA_SIPARIS s ON CAST(t.Id AS NVARCHAR(100)) = s.QuoteId
+        WHERE t.DeletedOn IS NULL AND t.OpportunityId IS NOT NULL
+          AND s.OrderStatus = 'Closed' AND s.QuoteId IS NOT NULL
+    )
+    SELECT @FirsatAdet = COUNT(*),
+           @FirsatTutar = ISNULL(SUM(o.AmountAmount), 0)
+    FROM TBL_VARUNA_OPPORTUNITIES o
+    WHERE o.DeletedOn IS NULL
+      AND (o.Name IS NULL OR (o.Name NOT LIKE '%TEST%' AND o.Name NOT LIKE '%DENEME%'))
+      AND o.OpportunityStageName NOT IN ('Won', 'Lost')
+      AND (o.OpportunityStageName IS NULL OR o.OpportunityStageName NOT LIKE '%Closed%')
+      AND LOWER(ISNULL(o.Id, '')) NOT IN (SELECT OppId FROM KapaliSiparisliOpp)
+      AND (@StartDate IS NULL OR o.CloseDate >= @StartDate)
+      AND (@EndDate   IS NULL OR o.CloseDate <= @EndDate)
+      AND (@Owner     IS NULL OR o.OwnerId = @Owner);
+
+    -- K3: Dönem teklifleri (CreatedOn dönemde, Denied/Reject/Closed hariç)
+    DECLARE @TeklifAdet INT, @TeklifTutar DECIMAL(18,2);
+    SELECT @TeklifAdet = COUNT(*),
+           @TeklifTutar = ISNULL(SUM(TotalNetAmountLocalCurrency_Amount), 0)
+    FROM TBL_VARUNA_TEKLIF
+    WHERE DeletedOn IS NULL
+      AND (Account_Title IS NULL OR (Account_Title NOT LIKE '%TEST%' AND Account_Title NOT LIKE '%DENEME%'))
+      AND Status NOT IN ('Denied', 'Reject', 'Closed')
+      AND CreatedOn >= @StartDate AND CreatedOn <= @EndDate
+      AND (@Owner IS NULL OR ProposalOwnerId = @Owner);
+
+    -- K4: Dönem açık siparişleri (CreateOrderDate dönemde, Canceled hariç, Closed hariç)
+    DECLARE @AcikSiparisAdet INT, @AcikSiparisTutar DECIMAL(18,2);
+    SELECT @AcikSiparisAdet = COUNT(*),
+           @AcikSiparisTutar = ISNULL(SUM(TotalNetAmount), 0)
+    FROM TBL_VARUNA_SIPARIS
+    WHERE (AccountTitle IS NULL OR (AccountTitle NOT LIKE '%TEST%' AND AccountTitle NOT LIKE '%DENEME%'))
+      AND OrderStatus NOT IN ('Canceled', 'Closed')
+      AND CreateOrderDate >= @StartDate AND CreateOrderDate <= @EndDate;
+
+    -- K5: Dönem kapalı siparişleri (CreateOrderDate dönemde, Closed)
+    DECLARE @KapaliSiparisAdet INT, @KapaliSiparisTutar DECIMAL(18,2);
+    SELECT @KapaliSiparisAdet = COUNT(*),
+           @KapaliSiparisTutar = ISNULL(SUM(TotalNetAmount), 0)
+    FROM TBL_VARUNA_SIPARIS
+    WHERE (AccountTitle IS NULL OR (AccountTitle NOT LIKE '%TEST%' AND AccountTitle NOT LIKE '%DENEME%'))
+      AND OrderStatus = 'Closed'
+      AND CreateOrderDate >= @StartDate AND CreateOrderDate <= @EndDate;
+
+    -- DonemFirsatAdet: exclusive set kontrolü için
+    DECLARE @DonemFirsatAdet INT;
+    SELECT @DonemFirsatAdet = COUNT(*)
+    FROM TBL_VARUNA_OPPORTUNITIES
+    WHERE DeletedOn IS NULL
+      AND (Name IS NULL OR (Name NOT LIKE '%TEST%' AND Name NOT LIKE '%DENEME%'))
+      AND (@StartDate IS NULL OR CloseDate >= @StartDate)
+      AND (@EndDate   IS NULL OR CloseDate <= @EndDate)
+      AND (@Owner     IS NULL OR OwnerId = @Owner);
+
+    -- Tek satır sonuç
+    SELECT
+        @TumFirsatAdet      AS TumFirsatAdet,
+        @TumFirsatTutar     AS TumFirsatTutar,
+        @FirsatAdet         AS FirsatAdet,
+        @FirsatTutar        AS FirsatTutar,
+        @TeklifAdet         AS TeklifAdet,
+        @TeklifTutar        AS TeklifTutar,
+        @AcikSiparisAdet    AS AcikSiparisAdet,
+        @AcikSiparisTutar   AS AcikSiparisTutar,
+        @KapaliSiparisAdet  AS KapaliSiparisAdet,
+        @KapaliSiparisTutar AS KapaliSiparisTutar,
+        @DonemFirsatAdet    AS DonemFirsatAdet;
 END;
 ");
 

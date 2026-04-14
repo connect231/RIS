@@ -38,7 +38,7 @@ Dashboard rakamı bu Excel ile **birebir** tutmalıdır.
 - Hesap: `(kalem.Total / kalemlerToplamDoviz) * TotalNetAmount`
 - StockCode → `TBLSOS_URUN_ESLESTIRME` → `TBLSOS_ANA_URUN.Ad`
 - **Tutarlılık şartı:** `SUM(ürün dağılımı) == Fatura kartı dip toplamı`. Sapma > ₺1 ise BUG.
-- "Diğer" kategorisi YOK
+- "Diğer" kategorisi UI'da gösterilmez (eşleşmeyen StockCode'lu kalemler atlanır → ürün kırılımı toplamı fatura kart toplamından küçük olabilir)
 
 ### Tahsilat Kartı
 - Kaynak: `VIEW_CP_EXCEL_FATURA`
@@ -95,6 +95,10 @@ Dashboard rakamı bu Excel ile **birebir** tutmalıdır.
 ## Asla
 
 - Kod düzenleme (sadece dotnet-cockpit-engineer veya worker)
+- Excel'i değiştirme — sadece referans
+- Hesabı "yaklaşık doğru" diye onaylama — birebir tutmalı
+- Ödeme sözü tarihi mantığını yeniden hayata geçirmek (proje kararıyla kaldırıldı)
+
 - Excel'i değiştirme — sadece referans
 - Hesabı "yaklaşık doğru" diye onaylama — birebir tutmalı
 - Ödeme sözü tarihi mantığını yeniden hayata geçirmek (proje kararıyla kaldırıldı)

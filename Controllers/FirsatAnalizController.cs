@@ -33,6 +33,31 @@ namespace SOS.Controllers
 
     public class MusteriDto { public string? Name { get; set; } public string? Musteri { get; set; } }
 
+    // ── Pipeline SP DTO'ları ──
+    public class PipelineFirsatRow
+    {
+        public decimal TutarAcik { get; set; }
+        public int AdetAcik { get; set; }
+        public decimal TutarWon { get; set; }
+        public int AdetWon { get; set; }
+        public decimal TutarLost { get; set; }
+        public int AdetLost { get; set; }
+    }
+    public class PipelineTeklifRow
+    {
+        public decimal TutarAktif { get; set; }
+        public int AdetAktif { get; set; }
+        public decimal TutarRed { get; set; }
+        public int AdetRed { get; set; }
+    }
+    public class PipelineSiparisRow
+    {
+        public decimal TutarAcik { get; set; }
+        public int AdetAcik { get; set; }
+        public decimal TutarKapali { get; set; }
+        public int AdetKapali { get; set; }
+    }
+
     [Authorize]
     public class FirsatAnalizController : Controller
     {
@@ -62,7 +87,7 @@ namespace SOS.Controllers
         // İade/İptal/Ret durum filtreleri — Cockpit ile aynı mantık
         private static readonly HashSet<string> _negativeDurumSetFA = new(StringComparer.OrdinalIgnoreCase)
         {
-            "İADE", "IADE", "İPTAL", "IPTAL"
+            "İADE", "IADE", "İPTAL", "IPTAL", "İADE FATURA", "IADE FATURA"
         };
 
         private static bool IsRetDurumStatic(string? durum)
@@ -70,16 +95,21 @@ namespace SOS.Controllers
                && durum.AsSpan().Trim().Equals("RET".AsSpan(), StringComparison.OrdinalIgnoreCase);
 
         private static bool IsNegatifDurumStatic(string? durum)
-            => !string.IsNullOrWhiteSpace(durum)
-               && _negativeDurumSetFA.Contains(durum.Trim());
+        {
+            if (string.IsNullOrWhiteSpace(durum)) return false;
+            var d = durum.Trim();
+            if (_negativeDurumSetFA.Contains(d)) return true;
+            return d.Contains("ade", StringComparison.OrdinalIgnoreCase)
+                || d.Contains("ptal", StringComparison.OrdinalIgnoreCase);
+        }
 
         // Test/deneme kayıtları filtresi — EF IQueryable extension
         private static IQueryable<TBL_VARUNA_TEKLIF> ExcludeTest(IQueryable<TBL_VARUNA_TEKLIF> q)
             => q.Where(t => t.Account_Title == null || (!t.Account_Title.Contains("TEST") && !t.Account_Title.Contains("DENEME") && !t.Account_Title.Contains("test") && !t.Account_Title.Contains("deneme")));
         private static IQueryable<TBL_VARUNA_SIPARI> ExcludeTestSiparis(IQueryable<TBL_VARUNA_SIPARI> q)
             => q.Where(s => s.AccountTitle == null || (!s.AccountTitle.Contains("TEST") && !s.AccountTitle.Contains("DENEME") && !s.AccountTitle.Contains("test") && !s.AccountTitle.Contains("deneme")));
-        private static IQueryable<TBLSOS_VARUNA_FIRSAT_ODATA> ExcludeTestFirsat(IQueryable<TBLSOS_VARUNA_FIRSAT_ODATA> q)
-            => q.Where(o => o.Name == null || (!o.Name.Contains("TEST") && !o.Name.Contains("DENEME") && !o.Name.Contains("test") && !o.Name.Contains("deneme")));
+        private static IQueryable<TBL_VARUNA_OPPORTUNITIES> ExcludeTestFirsat(IQueryable<TBL_VARUNA_OPPORTUNITIES> q)
+            => q.Where(o => o.DeletedOn == null && (o.Name == null || (!o.Name.Contains("TEST") && !o.Name.Contains("DENEME") && !o.Name.Contains("test") && !o.Name.Contains("deneme"))));
 
         public FirsatAnalizController(
             IDbContextFactory<MskDbContext> contextFactory,
@@ -364,19 +394,34 @@ namespace SOS.Controllers
             return q;
         }
 
-        private IQueryable<TBL_VARUNA_SIPARI> GetFilteredSiparisler(MskDbContext db, DateTime start, DateTime end)
+        /// <summary>
+        /// Tahakkuk-aware sipariş filtreleme:
+        /// Closed → EfektifTarih (tahakkuk override) dönemde ise dahil
+        /// Open → CreateOrderDate dönemde ise dahil
+        /// </summary>
+        private async Task<List<TBL_VARUNA_SIPARI>> GetFilteredSiparislerAsync(MskDbContext db, DateTime start, DateTime end)
         {
-            return ExcludeTestSiparis(db.TBL_VARUNA_SIPARIs.AsNoTracking()
-                .Where(s => s.CreateOrderDate.HasValue
-                    && s.CreateOrderDate.Value >= start
-                    && s.CreateOrderDate.Value <= end));
+            var tahakkukMap = await _tahakkukService.GetTahakkukMapAsync();
+            var raw = await ExcludeTestSiparis(db.TBL_VARUNA_SIPARIs.AsNoTracking())
+                .Where(s => s.OrderStatus != "Canceled")
+                .ToListAsync();
+            return raw.Where(s =>
+                (s.OrderStatus == "Closed"
+                    && EfektifInvoice(s.SerialNumber, s.InvoiceDate, tahakkukMap) is DateTime ef
+                    && ef >= start && ef <= end)
+                || (s.OrderStatus != "Closed"
+                    && s.CreateOrderDate.HasValue
+                    && s.CreateOrderDate.Value >= start && s.CreateOrderDate.Value <= end)
+            ).ToList();
         }
 
         #endregion
 
         // ===================================================================
-        // GET /FirsatAnaliz/Index
+        // GET /FirsatAnaliz  veya  /FirsatAnaliz/Index
         // ===================================================================
+        [Route("FirsatAnaliz")]
+        [Route("FirsatAnaliz/Index")]
         public IActionResult Index(string? filter, string? startDate, string? endDate)
         {
             var (start, end, activeFilter, _) = ParseFilter(filter, startDate, endDate);
@@ -390,6 +435,7 @@ namespace SOS.Controllers
 
             return View(vm);
         }
+
 
         // ===================================================================
         // DEBUG: Tüm alanların doluluk oranı ve örnek değerler
@@ -533,17 +579,17 @@ namespace SOS.Controllers
             var acikTeklifAdet = aktifFirsatAdet; // same as pipeline count
             var acikTeklifToplam = pipelineToplam;
 
-            // Siparisler
-            var siparisler = GetFilteredSiparisler(db, start, end);
+            // Siparisler (tahakkuk-aware)
+            var siparisler = await GetFilteredSiparislerAsync(db, start, end);
             var acikSiparisler = siparisler.Where(s => s.OrderStatus != null
-                && !SiparisClosedStatuses.Contains(s.OrderStatus));
-            var acikSiparisAdet = await acikSiparisler.CountAsync();
-            var acikSiparisToplam = await acikSiparisler.SumAsync(s => s.TotalNetAmount ?? 0m);
+                && !SiparisClosedStatuses.Contains(s.OrderStatus)).ToList();
+            var acikSiparisAdet = acikSiparisler.Count;
+            var acikSiparisToplam = acikSiparisler.Sum(s => s.TotalNetAmount ?? 0m);
 
             var kapaliSiparisler = siparisler.Where(s => s.OrderStatus != null
-                && (s.OrderStatus == "Closed" || s.OrderStatus == "Completed"));
-            var kapaliSiparisAdet = await kapaliSiparisler.CountAsync();
-            var kapaliSiparisToplam = await kapaliSiparisler.SumAsync(s => s.TotalNetAmount ?? 0m);
+                && (s.OrderStatus == "Closed" || s.OrderStatus == "Completed")).ToList();
+            var kapaliSiparisAdet = kapaliSiparisler.Count;
+            var kapaliSiparisToplam = kapaliSiparisler.Sum(s => s.TotalNetAmount ?? 0m);
 
             // Kazanma oranlari
             var wonCount = await teklifler.Where(t => t.Status != null && WonStatuses.Contains(t.Status)).CountAsync();
@@ -680,10 +726,11 @@ namespace SOS.Controllers
                 }
                 case "siparisler":
                 {
-                    var siparisler = await GetFilteredSiparisler(db, start, end)
+                    var siparislerList = await GetFilteredSiparislerAsync(db, start, end);
+                    var siparisler = siparislerList
                         .GroupBy(s => s.OrderStatus ?? "Bilinmiyor")
                         .Select(g => new { Status = g.Key, Count = g.Count(), Total = g.Sum(s => s.TotalNetAmount ?? 0m) })
-                        .ToListAsync();
+                        .ToList();
 
                     var items = siparisler.Select(g => new StatusBreakdownDto(
                         StatusName: SiparisStatusToTurkish(g.Status),
@@ -1068,12 +1115,12 @@ namespace SOS.Controllers
                 }
                 case "siparisler":
                 {
-                    var q = GetFilteredSiparisler(db, start, end);
+                    var sipList = await GetFilteredSiparislerAsync(db, start, end);
                     if (!string.IsNullOrEmpty(status))
-                        q = q.Where(s => s.OrderStatus == status);
+                        sipList = sipList.Where(s => s.OrderStatus == status).ToList();
 
-                    var totalCount = await q.CountAsync();
-                    var rows = await q
+                    var totalCount = sipList.Count;
+                    var rows = sipList
                         .OrderByDescending(s => s.CreateOrderDate)
                         .Skip((page - 1) * pageSize)
                         .Take(pageSize)
@@ -1089,7 +1136,7 @@ namespace SOS.Controllers
                             s.CreatedBy ?? "-",
                             SiparisStatusToColor(s.OrderStatus)
                         ))
-                        .ToListAsync();
+                        .ToList();
 
                     return Json(new DetailResponseDto(rows, totalCount, page, pageSize));
                 }
@@ -1178,14 +1225,8 @@ namespace SOS.Controllers
                 })
                 .ToList();
 
-            // Siparis urunleri in range
-            var siparislerInRange = await ExcludeTestSiparis(db.TBL_VARUNA_SIPARIs.AsNoTracking())
-                .Where(s => s.CreateOrderDate.HasValue
-                    && s.CreateOrderDate.Value >= start
-                    && s.CreateOrderDate.Value <= end)
-                .Select(s => new { s.OrderId })
-                .ToListAsync();
-
+            // Siparis urunleri in range (tahakkuk-aware)
+            var siparislerInRange = await GetFilteredSiparislerAsync(db, start, end);
             var siparisOrderIds = siparislerInRange.Select(s => s.OrderId).Where(o => o != null).ToHashSet();
 
             var siparisUrunleri = await db.TBL_VARUNA_SIPARIS_URUNLERIs.AsNoTracking()
@@ -1407,12 +1448,20 @@ namespace SOS.Controllers
         [HttpGet]
         public async Task<IActionResult> GetOpportunitySummary(string? filter, string? startDate, string? endDate, string? owner)
         {
-            using var db = _contextFactory.CreateDbContext();
             var (start, end, _, _) = ParseFilter(filter, startDate, endDate);
+
+            // ── Cache kontrolü ──
+            var cacheKey = $"FirsatOppSummary_exclusive_{start:yyyyMMdd}_{end:yyyyMMdd}_{owner ?? "all"}";
+            if (_cache.TryGetValue(cacheKey, out object? cachedResult) && cachedResult != null)
+                return Json(cachedResult);
+
+
+
+            using var db = _contextFactory.CreateDbContext();
             var ownerMap = await GetOwnerMapAsync();
 
-            // TBLSOS_VARUNA_FIRSAT_ODATA — OData'dan sync edilmiş, Amount dolu
-            var query = ExcludeTestFirsat(db.TBLSOS_VARUNA_FIRSAT_ODATAs.AsNoTracking())
+            // TBL_VARUNA_OPPORTUNITIES — fırsat verileri
+            var query = ExcludeTestFirsat(db.TBL_VARUNA_OPPORTUNITIESs.AsNoTracking())
                 .Where(o => o.CloseDate.HasValue
                     && o.CloseDate.Value >= start && o.CloseDate.Value <= end);
 
@@ -1421,6 +1470,7 @@ namespace SOS.Controllers
 
             var data = await query.Select(o => new
             {
+                o.Id,
                 o.OwnerId,
                 o.OpportunityStageName,
                 DealType = o.DealType,
@@ -1428,7 +1478,7 @@ namespace SOS.Controllers
                 o.Probability,
                 o.CloseDate,
                 CreatedOn = (DateTime?)null,
-                AmountAmount = o.AmountValue,
+                o.AmountAmount,
                 o.AccountId,
                 o.Name
             }).ToListAsync();
@@ -1436,20 +1486,108 @@ namespace SOS.Controllers
             // Lost fırsatları ayır (kartlardan düş, analiz için ayrı tut)
             var donemLost = data.Where(d => d.OpportunityStageName == "Lost"
                 || (d.OpportunityStageName != null && d.OpportunityStageName.Contains("Closed"))).ToList();
+
+            // ── SATIŞ HUNİSİ: Fırsat → Teklif → Sipariş → Fatura zinciri ──
+
+            // ── Tahakkuk-aware fırsat filtresi ──
+            // Kapalı siparişli fırsatlar → efektif tarih dönem dışıysa havuzdan çıkar
+            var tahakkukMap = await _tahakkukService.GetTahakkukMapAsync();
+
+            // Yol 1: Teklif(QuoteId) → Sipariş zinciri
+            var kapaliZincir = await ExcludeTest(db.TBL_VARUNA_TEKLIFs.AsNoTracking())
+                .Where(t => t.DeletedOn == null && t.OpportunityId.HasValue)
+                .Join(ExcludeTestSiparis(db.TBL_VARUNA_SIPARIs.AsNoTracking())
+                    .Where(s => s.OrderStatus == "Closed" && s.QuoteId != null),
+                    t => t.Id.ToString(), s => s.QuoteId,
+                    (t, s) => new { OppId = t.OpportunityId!.Value.ToString().ToLower(), s.SerialNumber, s.InvoiceDate })
+                .ToListAsync();
+
+            // Yol 2: Won fırsatlar → Teklif(Account_Title) → Sipariş(AccountTitle) eşleşmesi
+            // Teklif tablosundan: OpportunityId → Account_Title
+            var wonOppIds = await ExcludeTestFirsat(db.TBL_VARUNA_OPPORTUNITIESs.AsNoTracking())
+                .Where(o => o.OpportunityStageName == "Won")
+                .Select(o => o.Id).ToListAsync();
+            var wonOppIdSet = wonOppIds.Where(id => id != null).Select(id => id!.ToLower()).ToHashSet();
+            // Teklif → Won fırsatın müşteri adı
+            var teklifMusteriMap = await ExcludeTest(db.TBL_VARUNA_TEKLIFs.AsNoTracking())
+                .Where(t => t.DeletedOn == null && t.OpportunityId.HasValue && t.Account_Title != null)
+                .Select(t => new { OppId = t.OpportunityId!.Value.ToString().ToLower(), t.Account_Title })
+                .ToListAsync();
+            var oppMusteriMap = teklifMusteriMap
+                .Where(t => wonOppIdSet.Contains(t.OppId))
+                .GroupBy(t => t.OppId)
+                .ToDictionary(g => g.Key, g => g.First().Account_Title!.Trim().ToLower());
+            // Sipariş AccountTitle → efektif tarih
+            var closedSipEfektif = await ExcludeTestSiparis(db.TBL_VARUNA_SIPARIs.AsNoTracking())
+                .Where(s => s.OrderStatus == "Closed" && s.SerialNumber != null && s.AccountTitle != null)
+                .Select(s => new { s.SerialNumber, s.InvoiceDate, AccountTitle = s.AccountTitle!.Trim().ToLower() })
+                .ToListAsync();
+            var musteriEfektifMap = closedSipEfektif
+                .GroupBy(s => s.AccountTitle)
+                .ToDictionary(g => g.Key, g => {
+                    // Tahakkuk override olan en güncel siparişin efektif tarihi
+                    foreach (var s in g.OrderByDescending(x => x.InvoiceDate))
+                    {
+                        var ef = EfektifInvoice(s.SerialNumber, s.InvoiceDate, tahakkukMap);
+                        if (ef.HasValue && s.InvoiceDate.HasValue && ef.Value != s.InvoiceDate.Value)
+                            return ef; // Tahakkuk override var — bu tarihi kullan
+                    }
+                    return g.OrderByDescending(x => x.InvoiceDate).First().InvoiceDate;
+                });
+
+            // OppId → Efektif tarih haritası
+            var kapaliOppEfektif = kapaliZincir
+                .GroupBy(x => x.OppId)
+                .ToDictionary(g => g.Key, g => {
+                    var first = g.First();
+                    return EfektifInvoice(first.SerialNumber, first.InvoiceDate, tahakkukMap);
+                });
+            // Won fırsatlar: teklifteki müşteri adı → siparişteki müşteri → efektif tarih
+            foreach (var kv in oppMusteriMap)
+            {
+                if (!kapaliOppEfektif.ContainsKey(kv.Key)
+                    && musteriEfektifMap.TryGetValue(kv.Value, out var efDate))
+                {
+                    kapaliOppEfektif[kv.Key] = efDate;
+                }
+            }
+
+            // Dönem DIŞINA kayan kapalı fırsatlar → bu dönemden çıkar
+            var kapaliSet = kapaliOppEfektif
+                .Where(kv => kv.Value.HasValue && (kv.Value.Value < start || kv.Value.Value > end))
+                .Select(kv => kv.Key).ToHashSet();
+            // Dönem İÇİNE kayan kapalı fırsatlar → bu döneme ekle (CloseDate dönem dışı ama efektif tarih dönem içi)
+            var eklenecekSet = kapaliOppEfektif
+                .Where(kv => kv.Value.HasValue && kv.Value.Value >= start && kv.Value.Value <= end)
+                .Select(kv => kv.Key).ToHashSet();
+
+            // Dönem fırsatları — tahakkukla dönem dışına kayanlar hariç
             var dataAktif = data.Where(d => d.OpportunityStageName != "Lost"
-                && (d.OpportunityStageName == null || !d.OpportunityStageName.Contains("Closed"))).ToList();
+                && (d.OpportunityStageName == null || !d.OpportunityStageName.Contains("Closed"))
+                && !kapaliSet.Contains((d.Id ?? "").ToLower()))
+                .ToList();
+
+            // Tahakkukla bu döneme kayan Won fırsatları ekle (CloseDate dönem dışı olanlar)
+            var dataIdSet = dataAktif.Select(d => (d.Id ?? "").ToLower()).ToHashSet();
+            var eklenecekFirsatlar = await ExcludeTestFirsat(db.TBL_VARUNA_OPPORTUNITIESs.AsNoTracking())
+                .Where(o => o.OpportunityStageName == "Won" && eklenecekSet.Contains(o.Id!.ToLower()))
+                .Select(o => new { o.Id, o.OwnerId, o.OpportunityStageName, DealType = o.DealType,
+                    DealTypeTR = (string?)null, o.Probability, o.CloseDate,
+                    CreatedOn = (DateTime?)null, o.AmountAmount, o.AccountId, o.Name })
+                .ToListAsync();
+            foreach (var ef in eklenecekFirsatlar)
+            {
+                if (!dataIdSet.Contains((ef.Id ?? "").ToLower()))
+                    dataAktif.Add(ef);
+            }
 
             var toplam = dataAktif.Count;
             var wonList = dataAktif.Where(d => d.OpportunityStageName == "Won").ToList();
             var lostList = donemLost;
             var activeList = dataAktif.Where(d => d.OpportunityStageName != null
                 && d.OpportunityStageName != "Won").ToList();
-
             var kazanmaOrani = (wonList.Count + lostList.Count) > 0
-                ? Math.Round((decimal)wonList.Count / (wonList.Count + lostList.Count) * 100, 1)
-                : 0m;
-
-            // ── Tutarlar: Lost hariç (dataAktif) ──
+                ? Math.Round((decimal)wonList.Count / (wonList.Count + lostList.Count) * 100, 1) : 0m;
             var toplamFirsatTutar = dataAktif.Sum(d => d.AmountAmount ?? 0m);
             var wonTutar = wonList.Sum(d => d.AmountAmount ?? 0m);
             var lostTutar = lostList.Sum(d => d.AmountAmount ?? 0m);
@@ -1457,50 +1595,90 @@ namespace SOS.Controllers
             var kazanmaOraniRevenue = (wonTutar + lostTutar) > 0
                 ? Math.Round(wonTutar / (wonTutar + lostTutar) * 100, 1) : 0m;
 
-            // ── SATIŞ HUNİSİ: Fırsat → Teklif → Sipariş → Fatura zinciri ──
+            // ── PARALEL SORGULAR: Bağımsız sorguları aynı anda çalıştır ──
+            using var db2 = _contextFactory.CreateDbContext();
+            using var db3 = _contextFactory.CreateDbContext();
+            using var db_exSip = _contextFactory.CreateDbContext();
+            using var db_exTek = _contextFactory.CreateDbContext();
+            using var db_cockpitFat = _contextFactory.CreateDbContext();
 
-            // Tüm fırsatlar (havuz — kapalı siparişi olanlar HARİÇ)
-            // Kapalı siparişi olan fırsat ID'lerini bul: fırsat→teklif→sipariş(Closed) zinciri
-            var kapaliSiparisliOppIds = await ExcludeTest(db.TBL_VARUNA_TEKLIFs.AsNoTracking())
-                .Where(t => t.DeletedOn == null && t.OpportunityId.HasValue)
-                .Join(ExcludeTestSiparis(db.TBL_VARUNA_SIPARIs.AsNoTracking())
-                    .Where(s => s.OrderStatus == "Closed" && s.QuoteId != null),
-                    t => t.Id.ToString(), s => s.QuoteId,
-                    (t, s) => t.OpportunityId!.Value.ToString().ToLower())
-                .Distinct().ToListAsync();
-            var kapaliSet = kapaliSiparisliOppIds.ToHashSet();
+            var tumFirsatQuery = ExcludeTestFirsat(db2.TBL_VARUNA_OPPORTUNITIESs.AsNoTracking())
+                .Select(o => new { o.Id, o.AmountAmount, o.OpportunityStageName, o.Probability, o.OwnerId });
+            if (!string.IsNullOrEmpty(owner))
+                tumFirsatQuery = tumFirsatQuery.Where(o => o.OwnerId == owner);
+            var tumFirsatTask = tumFirsatQuery.ToListAsync();
 
-            var tumFirsatlar = await ExcludeTestFirsat(db.TBLSOS_VARUNA_FIRSAT_ODATAs.AsNoTracking())
-                .Select(o => new { o.Id, o.AmountValue, o.OpportunityStageName })
-                .ToListAsync();
-            // Kapalı siparişi olanlar + Lost fırsatlar HARİÇ
-            var lostStages = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Lost" };
-            var acikFirsatlar = tumFirsatlar
-                .Where(o => !kapaliSet.Contains((o.Id ?? "").ToLower())
-                    && !lostStages.Contains(o.OpportunityStageName ?? ""))
-                .ToList();
-            var tumFirsatAdet = acikFirsatlar.Count;
-            var tumFirsatTutar = acikFirsatlar.Sum(o => o.AmountValue ?? 0m);
-
-            // Kaybedilen analizi (ayrı veri — UI'da gösterilecek)
-            var lostFirsatlar = tumFirsatlar.Where(o => lostStages.Contains(o.OpportunityStageName ?? "")).ToList();
-            var lostAdet = lostFirsatlar.Count;
-            var lostHavuzTutar = lostFirsatlar.Sum(o => o.AmountValue ?? 0m);
-
-            // Fırsatsız teklifler (havuz uyarısı — OpportunityId NULL)
-            var firsatsizTeklifAdet = await ExcludeTest(db.TBL_VARUNA_TEKLIFs.AsNoTracking())
-                .CountAsync(t => t.DeletedOn == null && t.OpportunityId == null);
-            var firsatsizTeklifTutar = await ExcludeTest(db.TBL_VARUNA_TEKLIFs.AsNoTracking())
+            var firsatsizTeklifTask = ExcludeTest(db3.TBL_VARUNA_TEKLIFs.AsNoTracking())
                 .Where(t => t.DeletedOn == null && t.OpportunityId == null)
-                .SumAsync(t => t.TotalNetAmountLocalCurrency_Amount ?? 0m);
+                .GroupBy(t => 1)
+                .Select(g => new { Adet = g.Count(), Tutar = g.Sum(t => t.TotalNetAmountLocalCurrency_Amount ?? 0m) })
+                .FirstOrDefaultAsync();
 
-            // Dönemdeki fırsatların ID'leri — Lost ve kapalı siparişli olanlar HARİÇ
-            var donemFirsatIds = await query
+            var donemFirsatIdsTask = query
                 .Where(o => o.OpportunityStageName != "Lost"
                     && (o.OpportunityStageName == null || !o.OpportunityStageName.Contains("Closed")))
                 .Select(o => o.Id).ToListAsync();
-            // Kapalı siparişli olanları da düş
-            donemFirsatIds = donemFirsatIds.Where(id => !kapaliSet.Contains((id ?? "").ToLower())).ToList();
+
+            // Exclusive pipeline: Open sipariş → fırsat bağlantısı (tüm zamanlar)
+            var openSiparisOppTask = ExcludeTest(db_exSip.TBL_VARUNA_TEKLIFs.AsNoTracking())
+                .Where(t => t.DeletedOn == null && t.OpportunityId.HasValue)
+                .Join(ExcludeTestSiparis(db_exSip.TBL_VARUNA_SIPARIs.AsNoTracking())
+                    .Where(s => s.OrderStatus == "Open" && s.QuoteId != null),
+                    t => t.Id.ToString(), s => s.QuoteId,
+                    (t, s) => t.OpportunityId!.Value.ToString().ToLower())
+                .Distinct()
+                .ToListAsync();
+
+            // Exclusive pipeline: Aktif teklif → fırsat bağlantısı (tüm zamanlar)
+            var aktifTeklifOppTask = ExcludeTest(db_exTek.TBL_VARUNA_TEKLIFs.AsNoTracking())
+                .Where(t => t.DeletedOn == null && t.OpportunityId.HasValue
+                    && (t.Status == null || (t.Status != "Reject" && t.Status != "Denied" && t.Status != "Closed")))
+                .Select(t => t.OpportunityId!.Value.ToString().ToLower())
+                .Distinct()
+                .ToListAsync();
+
+            // Exclusive pipeline K5: Cockpit fatura → fırsat bağlantısı
+            var cockpitFaturaTask = _cockpitData.GetFaturalarAsync(start, end, owner);
+            var cockpitFaturaOppTask = ExcludeTest(db_cockpitFat.TBL_VARUNA_TEKLIFs.AsNoTracking())
+                .Where(t => t.DeletedOn == null && t.OpportunityId.HasValue)
+                .Join(ExcludeTestSiparis(db_cockpitFat.TBL_VARUNA_SIPARIs.AsNoTracking())
+                    .Where(s => s.OrderStatus == "Closed" && s.SerialNumber != null),
+                    t => t.Id.ToString(), s => s.QuoteId,
+                    (t, s) => new { OppId = t.OpportunityId!.Value.ToString().ToLower(), s.SerialNumber })
+                .ToListAsync();
+
+            await Task.WhenAll(tumFirsatTask, firsatsizTeklifTask, donemFirsatIdsTask, openSiparisOppTask, aktifTeklifOppTask, cockpitFaturaTask, cockpitFaturaOppTask);
+
+            var tumFirsatlar = tumFirsatTask.Result;
+            var firsatsizData = firsatsizTeklifTask.Result;
+            var firsatsizTeklifAdet = firsatsizData?.Adet ?? 0;
+            var firsatsizTeklifTutar = firsatsizData?.Tutar ?? 0m;
+
+            // Açık havuz: Lost + Won + Closed hariç (gerçek açık fırsatlar)
+            var excludeStages = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Lost", "Won" };
+            var acikFirsatlar = tumFirsatlar
+                .Where(o => !kapaliSet.Contains((o.Id ?? "").ToLower())
+                    && !excludeStages.Contains(o.OpportunityStageName ?? "")
+                    && (o.OpportunityStageName == null || !o.OpportunityStageName.Contains("Closed")))
+                .ToList();
+            var tumFirsatAdet = acikFirsatlar.Count;
+            var tumFirsatTutar = acikFirsatlar.Sum(o => o.AmountAmount ?? 0m);
+
+            // Kaybedilen + Kazanılan analizi (ayrı veri — UI'da gösterilecek)
+            var lostFirsatlar = tumFirsatlar.Where(o => string.Equals(o.OpportunityStageName, "Lost", StringComparison.OrdinalIgnoreCase)).ToList();
+            var lostAdet = lostFirsatlar.Count;
+            var lostHavuzTutar = lostFirsatlar.Sum(o => o.AmountAmount ?? 0m);
+            var wonFirsatlar = tumFirsatlar.Where(o => string.Equals(o.OpportunityStageName, "Won", StringComparison.OrdinalIgnoreCase)).ToList();
+            var wonHavuzAdet = wonFirsatlar.Count;
+            var wonHavuzTutar = wonFirsatlar.Sum(o => o.AmountAmount ?? 0m);
+
+            // Dönemdeki fırsatların ID'leri — kapalı siparişli olanları düş + tahakkukla bu döneme kayanları ekle
+            var donemFirsatIds = donemFirsatIdsTask.Result
+                .Where(id => !kapaliSet.Contains((id ?? "").ToLower())).ToList();
+            // Tahakkukla bu döneme kayan Won fırsatları ekle
+            var donemIdSetCheck = donemFirsatIds.Select(id => (id ?? "").ToLower()).ToHashSet();
+            foreach (var ekId in eklenecekSet)
+                if (!donemIdSetCheck.Contains(ekId)) donemFirsatIds.Add(ekId);
             var donemFirsatGuidSet = donemFirsatIds
                 .Where(id => Guid.TryParse(id, out _))
                 .Select(id => Guid.Parse(id))
@@ -1521,23 +1699,25 @@ namespace SOS.Controllers
             var lostTeklifAdet = lostTeklifler.Count;
             var lostTeklifTutar = lostTeklifler.Sum(t => t.TotalNetAmountLocalCurrency_Amount ?? 0m);
 
-            // Ağırlıklı potansiyel: Teklif tutarı × Fırsat olasılığı
-            var firsatProbMap = await ExcludeTestFirsat(db.TBLSOS_VARUNA_FIRSAT_ODATAs.AsNoTracking())
-                .Where(o => donemFirsatGuidSet.Select(g => g.ToString()).Contains(o.Id))
-                .ToDictionaryAsync(o => o.Id, o => o.Probability ?? 0m);
+            // Ağırlıklı potansiyel: tumFirsatlar zaten memory'de — DB'ye gitmeden filtrele
+            var donemIdSet = donemFirsatIds.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var firsatProbMap = tumFirsatlar
+                .Where(o => o.Id != null && donemIdSet.Contains(o.Id))
+                .ToDictionary(o => o.Id!, o => o.Probability ?? 0m);
 
-            var agirlikliPotansiyel = donemTeklifler.Sum(t => {
+            // Ağırlıklı potansiyel: sadece AKTİF teklifler (Reject/Denied/Closed hariç)
+            var agirlikliPotansiyel = aktifTeklifler.Sum(t => {
                 var prob = t.OpportunityId.HasValue && firsatProbMap.TryGetValue(t.OpportunityId.Value.ToString(), out var p) ? p : 0m;
                 return (t.TotalNetAmountLocalCurrency_Amount ?? 0m) * prob / 100m;
             });
-            var ortOlasilik = donemTeklifler.Count > 0
-                ? donemTeklifler.Average(t => {
+            var ortOlasilik = aktifTeklifler.Count > 0
+                ? aktifTeklifler.Average(t => {
                     return t.OpportunityId.HasValue && firsatProbMap.TryGetValue(t.OpportunityId.Value.ToString(), out var p) ? p : 0m;
                 }) : 0m;
 
-            // Sipariş kartı: dönemdeki TÜM siparişler (zincir zorunlu değil — fırsatsız/teklifsiz olabilir)
-            // CreateOrderDate dönemde VEYA efektif fatura tarihi dönemde olan siparişler
-            var tahakkukMap = await _tahakkukService.GetTahakkukMapAsync();
+            // Sipariş kartı: tahakkuk tutarlı filtreleme
+            // Closed → EfektifTarih (tahakkuk override) dönemde ise dahil
+            // Open → CreateOrderDate dönemde ise dahil (henüz fatura yok)
             var donemSiparislerRaw = await ExcludeTestSiparis(db.TBL_VARUNA_SIPARIs.AsNoTracking())
                 .Where(s => s.OrderStatus != "Canceled")
                 .Select(s => new { s.SerialNumber, s.TotalNetAmount, s.OrderStatus, s.InvoiceDate, s.CreateOrderDate })
@@ -1550,15 +1730,81 @@ namespace SOS.Controllers
                 s.CreateOrderDate
             })
             .Where(s =>
-                // CreateOrderDate dönemde
-                (s.CreateOrderDate.HasValue && s.CreateOrderDate.Value >= start && s.CreateOrderDate.Value <= end)
-                // VEYA Closed sipariş ve efektif fatura tarihi dönemde (fatura kartıyla tutarlı)
-                || (s.OrderStatus == "Closed" && s.EfektifTarih.HasValue && s.EfektifTarih.Value >= start && s.EfektifTarih.Value <= end))
+                // Closed sipariş: sadece efektif fatura tarihi dönemde (tahakkuk override geçerli)
+                (s.OrderStatus == "Closed" && s.EfektifTarih.HasValue && s.EfektifTarih.Value >= start && s.EfektifTarih.Value <= end)
+                // Open sipariş: CreateOrderDate dönemde (henüz faturası yok)
+                || (s.OrderStatus == "Open" && s.CreateOrderDate.HasValue && s.CreateOrderDate.Value >= start && s.CreateOrderDate.Value <= end))
             .ToList();
             var acikSiparisAdet = donemSiparisler.Count(s => s.OrderStatus == "Open");
             var acikSiparisTutar = donemSiparisler.Where(s => s.OrderStatus == "Open").Sum(s => s.TotalNetAmount ?? 0m);
+            var faturalanmisAdet = donemSiparisler.Count(s => s.OrderStatus == "Closed");
+            var faturalanmisTutar = donemSiparisler.Where(s => s.OrderStatus == "Closed").Sum(s => s.TotalNetAmount ?? 0m);
             var toplamSiparisAdet = donemSiparisler.Count;
             var toplamSiparisTutar = donemSiparisler.Sum(s => s.TotalNetAmount ?? 0m);
+
+            // ── EXCLUSIVE PIPELINE SETLERI ──
+            // Her fırsat sadece EN İLERİ aşamasındaki kartta görünür
+            // K5 cockpit'ten, K2-K4 o.CloseDate bazlı
+            var openSiparisOppSet = openSiparisOppTask.Result.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var aktifTeklifOppSet = aktifTeklifOppTask.Result.ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            // K5 — FaturaSet: Cockpit faturalarına bağlı fırsatlar
+            // Cockpit FaturaNo → TBL_VARUNA_SIPARIS.SerialNumber → TBL_VARUNA_TEKLIF.OpportunityId
+            var cockpitFaturalar = cockpitFaturaTask.Result;
+            var cockpitFaturaNoSet = cockpitFaturalar.Select(f => f.FaturaNo).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var cockpitFaturaOppMap = cockpitFaturaOppTask.Result;
+            var cockpitFaturaOppIds = cockpitFaturaOppMap
+                .Where(x => x.SerialNumber != null && cockpitFaturaNoSet.Contains(x.SerialNumber))
+                .Select(x => x.OppId)
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var exFaturaIds = dataAktif
+                .Where(d => cockpitFaturaOppIds.Contains((d.Id ?? "").ToLower()))
+                .Select(d => (d.Id ?? "").ToLower())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            // K4 — SiparisSet: Open siparişi olan, FaturaSet hariç
+            var exSiparisIds = dataAktif
+                .Where(d => openSiparisOppSet.Contains((d.Id ?? "").ToLower())
+                    && !exFaturaIds.Contains((d.Id ?? "").ToLower()))
+                .Select(d => (d.Id ?? "").ToLower())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            // K3 — TeklifSet: Aktif teklifi olan, Fatura+Sipariş hariç
+            var exTeklifIds = dataAktif
+                .Where(d => aktifTeklifOppSet.Contains((d.Id ?? "").ToLower())
+                    && !exFaturaIds.Contains((d.Id ?? "").ToLower())
+                    && !exSiparisIds.Contains((d.Id ?? "").ToLower()))
+                .Select(d => (d.Id ?? "").ToLower())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            // K2 — FirsatSet: Hiçbir bağlantısı yok (teklif, sipariş, fatura yok)
+            var exFirsatIds = dataAktif
+                .Where(d => !exFaturaIds.Contains((d.Id ?? "").ToLower())
+                    && !exSiparisIds.Contains((d.Id ?? "").ToLower())
+                    && !exTeklifIds.Contains((d.Id ?? "").ToLower()))
+                .Select(d => (d.Id ?? "").ToLower())
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            // Exclusive tutarlar (K5 tutar cockpit'ten, K2-K4 fırsat tutarından)
+            var exFaturaTutar = cockpitFaturalar.Sum(f => f.NetTutar);
+            var exSiparisTutar = dataAktif.Where(d => exSiparisIds.Contains((d.Id ?? "").ToLower())).Sum(d => d.AmountAmount ?? 0m);
+            var exTeklifTutar = dataAktif.Where(d => exTeklifIds.Contains((d.Id ?? "").ToLower())).Sum(d => d.AmountAmount ?? 0m);
+            var exFirsatTutar = dataAktif.Where(d => exFirsatIds.Contains((d.Id ?? "").ToLower())).Sum(d => d.AmountAmount ?? 0m);
+
+            // ── FUNNEL: Cockpit fatura BASE + o.CloseDate aşamaları yukarı birikir ──
+            // K5 = cockpit fatura (sabit)
+            // K4 = K5 + exclusive sipariş
+            // K3 = K4 + exclusive teklif
+            // K2 = K3 + exclusive fırsat
+            // → K2 > K3 > K4 > K5 her zaman garanti
+            var fnlK5Adet = cockpitFaturalar.Count;
+            var fnlK5Tutar = cockpitFaturalar.Sum(f => f.NetTutar);
+            var fnlK4Adet = fnlK5Adet + exSiparisIds.Count;
+            var fnlK4Tutar = fnlK5Tutar + exSiparisTutar;
+            var fnlK3Adet = fnlK4Adet + exTeklifIds.Count;
+            var fnlK3Tutar = fnlK4Tutar + exTeklifTutar;
+            var fnlK2Adet = fnlK3Adet + exFirsatIds.Count;
+            var fnlK2Tutar = fnlK3Tutar + exFirsatTutar;
 
             // Aşama dağılımı
             var stageDagilim = data
@@ -1574,34 +1820,42 @@ namespace SOS.Controllers
                 .OrderByDescending(x => x.adet)
                 .ToList();
 
-            // Aylık trend (CloseDate bazlı)
-            // Aylık trend: TÜM yılın fırsatları (filtreden bağımsız, grafik için)
+            // ── PARALEL GRUP 2: Yıllık trend sorguları ──
             var yil = DateTime.Now.Year;
-            var tumYilFirsatlar = await ExcludeTestFirsat(db.TBLSOS_VARUNA_FIRSAT_ODATAs.AsNoTracking())
+            using var db4 = _contextFactory.CreateDbContext();
+            using var db5 = _contextFactory.CreateDbContext();
+
+            var tumYilFirsatTask = ExcludeTestFirsat(db4.TBL_VARUNA_OPPORTUNITIESs.AsNoTracking())
                 .Where(o => o.CloseDate.HasValue && o.CloseDate.Value.Year == yil
-                    && o.OpportunityStageName != "Lost") // Lost hariç
-                .Select(o => new { o.Id, o.CloseDate, o.OpportunityStageName, o.AmountValue })
+                    && o.OpportunityStageName != "Lost")
+                .Select(o => new { o.Id, o.CloseDate, o.OpportunityStageName, o.AmountAmount })
                 .ToListAsync();
+
+            var tumYilTeklifTask = ExcludeTest(db5.TBL_VARUNA_TEKLIFs.AsNoTracking())
+                .Where(t => t.DeletedOn == null && t.CreatedOn.HasValue && t.CreatedOn.Value.Year == yil)
+                .Select(t => new { t.CreatedOn, t.TotalNetAmountLocalCurrency_Amount })
+                .ToListAsync();
+            using var db6 = _contextFactory.CreateDbContext();
+            var tumYilSiparisTask = ExcludeTestSiparis(db6.TBL_VARUNA_SIPARIs.AsNoTracking())
+                .Where(s => s.CreateOrderDate.HasValue && s.CreateOrderDate.Value.Year == yil && s.OrderStatus != "Canceled")
+                .Select(s => new { s.CreateOrderDate, s.OrderStatus, s.TotalNetAmount })
+                .ToListAsync();
+
+            await Task.WhenAll(tumYilFirsatTask, tumYilTeklifTask, tumYilSiparisTask);
+
+            var tumYilFirsatlar = tumYilFirsatTask.Result;
             // Kapalı siparişi olanları da düş
             var tumYilAktif = tumYilFirsatlar.Where(o => !kapaliSet.Contains((o.Id ?? "").ToLower())).ToList();
             var aylikFirsatlar = tumYilAktif
                 .GroupBy(d => $"{d.CloseDate!.Value.Year}-{d.CloseDate.Value.Month:D2}")
-                .ToDictionary(g => g.Key, g => new { toplam = g.Count(), won = g.Count(d => d.OpportunityStageName == "Won"), lost = 0, tutar = g.Sum(d => d.AmountValue ?? 0m) });
+                .ToDictionary(g => g.Key, g => new { toplam = g.Count(), won = g.Count(d => d.OpportunityStageName == "Won"), lost = 0, tutar = g.Sum(d => d.AmountAmount ?? 0m) });
 
-            // Teklif: TÜM yılın teklifleri
-            var tumYilTeklifler = await ExcludeTest(db.TBL_VARUNA_TEKLIFs.AsNoTracking())
-                .Where(t => t.DeletedOn == null && t.CreatedOn.HasValue && t.CreatedOn.Value.Year == yil)
-                .Select(t => new { t.CreatedOn, t.TotalNetAmountLocalCurrency_Amount })
-                .ToListAsync();
+            var tumYilTeklifler = tumYilTeklifTask.Result;
             var aylikTeklifData = tumYilTeklifler
                 .GroupBy(t => $"{t.CreatedOn!.Value.Year}-{t.CreatedOn.Value.Month:D2}")
                 .ToDictionary(g => g.Key, g => new { adet = g.Count(), tutar = g.Sum(t => t.TotalNetAmountLocalCurrency_Amount ?? 0m) });
 
-            // Sipariş: TÜM yılın siparişleri
-            var tumYilSiparisler = await ExcludeTestSiparis(db.TBL_VARUNA_SIPARIs.AsNoTracking())
-                .Where(s => s.CreateOrderDate.HasValue && s.CreateOrderDate.Value.Year == yil && s.OrderStatus != "Canceled")
-                .Select(s => new { s.CreateOrderDate, s.OrderStatus, s.TotalNetAmount })
-                .ToListAsync();
+            var tumYilSiparisler = tumYilSiparisTask.Result;
             var aylikSiparisData = tumYilSiparisler
                 .GroupBy(s => $"{s.CreateOrderDate!.Value.Year}-{s.CreateOrderDate.Value.Month:D2}")
                 .ToDictionary(g => g.Key, g => new {
@@ -1627,70 +1881,299 @@ namespace SOS.Controllers
                 kapaliSiparisTutar = aylikSiparisData.TryGetValue(ay, out var s4) ? s4.kapaliTutar : 0m
             }).ToList();
 
-            // Geçen dönem fatura (karşılaştırma)
-            var prevDuration = end - start;
-            var prevStart = start.AddDays(-prevDuration.TotalDays);
-            var prevEnd = start.AddSeconds(-1);
+            // ── Pipeline + Fatura + Hedef paralel ──
+            var pipeTask2 = _cockpitData.GetPipelineAsync(start, end, owner);
+            var faturaOzetTask2 = _cockpitData.GetFaturaOzetAsync(start, end, owner);
+            var hedefTask2 = GetDonemHedefAsync(start, end);
+            await Task.WhenAll(pipeTask2, faturaOzetTask2, hedefTask2);
+            var pipe = pipeTask2.Result;
+            var faturaOzet = faturaOzetTask2.Result;
+            var hedefTutar = hedefTask2.Result;
 
-            // ── Satış Faturası: SP'den (Cockpit ile birebir aynı) ──
-            var spFaturaTask = _cockpitData.GetFaturaOzetAsync(start, end);
-            var spPrevFaturaTask = _cockpitData.GetFaturaOzetAsync(prevStart, prevEnd);
-            await Task.WhenAll(spFaturaTask, spPrevFaturaTask);
-
-            var spFatura = spFaturaTask.Result;
-            var spPrevFatura = spPrevFaturaTask.Result;
-
-            var gercekFaturaToplam = spFatura.Toplam;
-            var gercekFaturaAdet = spFatura.Adet;
-            var gecenDonemFatura = spPrevFatura.Toplam;
-
-            return Json(new
+            // Exclusive set kontrolü
+            var exTotal = exFaturaIds.Count + exSiparisIds.Count + exTeklifIds.Count + exFirsatIds.Count;
+            if (exTotal != dataAktif.Count)
             {
-                // Kart 1: Tüm fırsatlar (havuz — kapalı sipariş + Lost hariç)
-                tumFirsatAdet,
-                tumFirsatTutar,
+                var logger = HttpContext.RequestServices.GetService<ILogger<FirsatAnalizController>>();
+                logger?.LogWarning("Exclusive pipeline uyumsuzluk: {ExTotal} != {DonemToplam} (Fatura:{F} Sipariş:{S} Teklif:{T} Fırsat:{Fi})",
+                    exTotal, dataAktif.Count, exFaturaIds.Count, exSiparisIds.Count, exTeklifIds.Count, exFirsatIds.Count);
+            }
+
+            var result = new
+            {
+                // Kart 1: Tüm fırsatlar (SP'den)
+                tumFirsatAdet = pipe.TumFirsatAdet,
+                tumFirsatTutar = pipe.TumFirsatTutar,
                 firsatsizTeklifAdet,
                 firsatsizTeklifTutar,
-                gecenDonemFatura,
-                // Kaybedilen analizi
+                gecenDonemFatura = 0m,
+                // Kart 1 footer: Kaybedilen + Kazanılan analizi (mevcut sorgulardan)
                 lostAdet,
                 lostTutar = lostHavuzTutar,
+                wonHavuzAdet,
+                wonHavuzTutar,
                 donemLostAdet = donemLost.Count,
                 donemLostTutar = donemLost.Sum(d => d.AmountAmount ?? 0m),
-                // Kart 2: Dönem fırsat potansiyeli
-                toplam,
+                // Kart 2: Dönem fırsat (SP'den)
+                toplam = pipe.FirsatAdet,
                 aktif = activeList.Count,
                 won = wonList.Count,
                 lost = lostList.Count,
                 kazanmaOrani,
-                toplamTutar = toplamFirsatTutar,
+                toplamTutar = pipe.FirsatTutar,
                 wonTutar,
                 donemLostRevenue = lostTutar,
                 aktivTutar,
                 kazanmaOraniRevenue,
-                // Kart 3: Dönem teklif (fırsata bağlı, reddedilen hariç)
-                teklifToplam,
-                teklifTutar,
+                // Kart 3: Dönem teklif (SP'den)
+                teklifToplam = pipe.TeklifAdet,
+                teklifTutar = pipe.TeklifTutar,
                 lostTeklifAdet,
                 lostTeklifTutar,
-                // Potansiyel (teklif × fırsat olasılığı)
+                // Potansiyel (teklif × fırsat olasılığı — mevcut sorgulardan)
                 agirlikliPotansiyel,
                 ortOlasilik = Math.Round(ortOlasilik, 1),
-                // Kart 4: Dönem sipariş (teklife bağlı)
-                toplamSiparisAdet,
-                toplamSiparisTutar,
-                acikSiparisAdet,
-                acikSiparisTutar,
-                // Kart 5: Faturalanan (Cockpit mantığı — gerçek fatura)
-                kapaliSiparisAdet = gercekFaturaAdet,
-                kapaliSiparisTutar = gercekFaturaToplam,
+                // Kart 4: Dönem sipariş (SP'den)
+                toplamSiparisAdet = pipe.AcikSiparisAdet,
+                toplamSiparisTutar = pipe.AcikSiparisTutar,
+                acikSiparisAdet = pipe.AcikSiparisAdet,
+                acikSiparisTutar = pipe.AcikSiparisTutar,
+                faturalanmisAdet,
+                faturalanmisTutar,
+                // Kart 5: Faturalanan (Cockpit fatura — tahakkuk düşülmüş, Varuna dışı hariç)
+                kapaliSiparisAdet = faturaOzet.Adet,
+                kapaliSiparisTutar = faturaOzet.Toplam,
+                gecenDonemFaturaOzet = 0m,
                 // Hedef (DB'den)
-                hedefTutar = await GetDonemHedefAsync(start, end),
-                // Detaylar
+                hedefTutar,
+                // ── Exclusive pipeline ──
+                exFirsatAdet = exFirsatIds.Count,
+                exFirsatTutar,
+                exTeklifAdet = exTeklifIds.Count,
+                exTeklifTutar,
+                exSiparisAdet = exSiparisIds.Count,
+                exSiparisTutar,
+                exFaturaAdet = faturaOzet.Adet,
+                exFaturaTutar,
+                exFaturaSPTutar = faturaOzet.Toplam,
+                exFaturaSPAdet = faturaOzet.Adet,
+                exDonemToplam = dataAktif.Count,
+                teklifeGecen = exTeklifIds.Count + exSiparisIds.Count + exFaturaIds.Count,
+                sipariseGecen = exSiparisIds.Count + exFaturaIds.Count,
+                faturayaGecen = exFaturaIds.Count,
+                // ── Funnel (cumulative: büyükten küçüğe) ──
+                fnlK2Adet, fnlK2Tutar,
+                fnlK3Adet, fnlK3Tutar,
+                fnlK4Adet, fnlK4Tutar,
+                fnlK5Adet, fnlK5Tutar,
+                // Detaylar (mevcut sorgulardan)
                 stageDagilim,
                 dealTypeDagilim,
                 aylikTrend
-            });
+            };
+            _cache.Set(cacheKey, result, CacheTTL);
+            return Json(result);
+        }
+
+        // ───────────────────────────────────────────────────────────────
+        // DEBUG: K2 vs K3 fark analizi — geçici endpoint
+        // ───────────────────────────────────────────────────────────────
+        [HttpGet]
+        public async Task<IActionResult> DebugK2K3(string? filter, string? startDate, string? endDate)
+        {
+            var (start, end, _, _) = ParseFilter(filter, startDate, endDate);
+            using var db = _contextFactory.CreateDbContext();
+            var tahakkukMap = await _tahakkukService.GetTahakkukMapAsync();
+
+            // Kart 3 teklifleri: CreatedOn dönemde
+            var lostStatuses = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Reject", "Denied", "Closed" };
+            var k3Teklifler = await ExcludeTest(db.TBL_VARUNA_TEKLIFs.AsNoTracking())
+                .Where(t => t.DeletedOn == null
+                    && t.CreatedOn.HasValue && t.CreatedOn.Value >= start && t.CreatedOn.Value <= end)
+                .Select(t => new { t.Id, t.TotalNetAmountLocalCurrency_Amount, t.Status, t.OpportunityId, t.CreatedOn })
+                .ToListAsync();
+            var aktifK3 = k3Teklifler.Where(t => !lostStatuses.Contains(t.Status ?? "")).ToList();
+
+            // Fırsatsız
+            var firsatsiz = aktifK3.Where(t => !t.OpportunityId.HasValue).ToList();
+            // Fırsatlı
+            var firsatli = aktifK3.Where(t => t.OpportunityId.HasValue).ToList();
+
+            // Fırsat bilgilerini çek
+            var oppIds = firsatli.Select(t => t.OpportunityId!.Value.ToString()).Distinct().ToList();
+            var oppIdSet = oppIds.ToHashSet();
+            var firsatlar = await ExcludeTestFirsat(db.TBL_VARUNA_OPPORTUNITIESs.AsNoTracking())
+                .Where(o => oppIdSet.Contains(o.Id))
+                .Select(o => new { o.Id, o.CloseDate, o.OpportunityStageName })
+                .ToListAsync();
+            var firsatMap = firsatlar.ToDictionary(o => o.Id ?? "", o => o);
+
+            // Kapali siparis zinciri: Won firsatlar icin efektif tarih
+            var kapaliZincir = await ExcludeTest(db.TBL_VARUNA_TEKLIFs.AsNoTracking())
+                .Where(t => t.DeletedOn == null && t.OpportunityId.HasValue)
+                .Join(ExcludeTestSiparis(db.TBL_VARUNA_SIPARIs.AsNoTracking())
+                    .Where(s => s.OrderStatus == "Closed" && s.QuoteId != null),
+                    t => t.Id.ToString(), s => s.QuoteId,
+                    (t, s) => new { OppId = t.OpportunityId!.Value.ToString().ToLower(), s.SerialNumber, s.InvoiceDate })
+                .ToListAsync();
+            var oppEfektifMap = kapaliZincir.GroupBy(x => x.OppId)
+                .ToDictionary(g => g.Key, g => EfektifInvoice(g.First().SerialNumber, g.First().InvoiceDate, tahakkukMap));
+
+            // Kategorize et
+            var kategori = firsatli.Select(t => {
+                var oppId = t.OpportunityId!.Value.ToString();
+                var opp = firsatMap.GetValueOrDefault(oppId);
+                var stage = opp?.OpportunityStageName ?? "?";
+                var closeDate = opp?.CloseDate;
+                var closeDateInRange = closeDate.HasValue && closeDate.Value >= start && closeDate.Value <= end;
+                var efektif = oppEfektifMap.GetValueOrDefault(oppId.ToLower());
+                var efektifInRange = efektif.HasValue && efektif.Value >= start && efektif.Value <= end;
+                var isWon = stage == "Won";
+                var isLost = stage == "Lost" || (stage != null && stage.Contains("Closed"));
+                return new {
+                    TeklifId = t.Id,
+                    Tutar = t.TotalNetAmountLocalCurrency_Amount ?? 0m,
+                    OppId = oppId,
+                    Stage = stage,
+                    CloseDate = closeDate,
+                    CloseDateInRange = closeDateInRange,
+                    EfektifTarih = efektif,
+                    EfektifInRange = efektifInRange,
+                    IsWon = isWon,
+                    IsLost = isLost
+                };
+            }).ToList();
+
+            var result = new {
+                donem = $"{start:dd.MM.yyyy} - {end:dd.MM.yyyy}",
+                k3_toplam_adet = aktifK3.Count,
+                k3_toplam_tutar = aktifK3.Sum(t => t.TotalNetAmountLocalCurrency_Amount ?? 0m),
+                firsatsiz_adet = firsatsiz.Count,
+                firsatsiz_tutar = firsatsiz.Sum(t => t.TotalNetAmountLocalCurrency_Amount ?? 0m),
+                firsatli_adet = firsatli.Count,
+                firsatli_tutar = firsatli.Sum(t => t.TotalNetAmountLocalCurrency_Amount ?? 0m),
+                // CloseDate dönemde
+                closeDate_icinde_adet = kategori.Count(k => k.CloseDateInRange),
+                closeDate_icinde_tutar = kategori.Where(k => k.CloseDateInRange).Sum(k => k.Tutar),
+                closeDate_disinda_adet = kategori.Count(k => !k.CloseDateInRange),
+                closeDate_disinda_tutar = kategori.Where(k => !k.CloseDateInRange).Sum(k => k.Tutar),
+                // Won firsatlar
+                won_adet = kategori.Count(k => k.IsWon),
+                won_tutar = kategori.Where(k => k.IsWon).Sum(k => k.Tutar),
+                won_closeDate_icinde = kategori.Count(k => k.IsWon && k.CloseDateInRange),
+                won_closeDate_disinda = kategori.Count(k => k.IsWon && !k.CloseDateInRange),
+                won_efektif_icinde = kategori.Count(k => k.IsWon && k.EfektifInRange),
+                won_efektif_icinde_tutar = kategori.Where(k => k.IsWon && k.EfektifInRange).Sum(k => k.Tutar),
+                won_efektif_disinda = kategori.Count(k => k.IsWon && !k.EfektifInRange),
+                won_efektif_disinda_tutar = kategori.Where(k => k.IsWon && !k.EfektifInRange).Sum(k => k.Tutar),
+                // Lost firsatlar
+                lost_adet = kategori.Count(k => k.IsLost),
+                lost_tutar = kategori.Where(k => k.IsLost).Sum(k => k.Tutar),
+                // Aktif (ne Won ne Lost) + CloseDate disinda
+                aktif_closeDisinda_adet = kategori.Count(k => !k.IsWon && !k.IsLost && !k.CloseDateInRange),
+                aktif_closeDisinda_tutar = kategori.Where(k => !k.IsWon && !k.IsLost && !k.CloseDateInRange).Sum(k => k.Tutar),
+                // Detay: CloseDate dönem dışında olanların stage dağılımı
+                stage_dagilim = kategori.Where(k => !k.CloseDateInRange)
+                    .GroupBy(k => k.Stage)
+                    .Select(g => new { stage = g.Key, adet = g.Count(), tutar = g.Sum(x => x.Tutar) })
+                    .OrderByDescending(x => x.tutar).ToList()
+            };
+            return Json(result);
+        }
+
+        // ───────────────────────────────────────────────────────────────
+        // GET /FirsatAnaliz/GetPipelineOzet — SP tabanlı pipeline (K1..K4 + fatura)
+        // 4 SP'yi paralel çalıştırır, tek özet döner.
+        // K1 (havuz): SP_PIPELINE_FIRSAT @StartDate=NULL, @EndDate=NULL
+        // K2 (dönem fırsat): SP_PIPELINE_FIRSAT + tarih
+        // K3 (dönem teklif): SP_PIPELINE_TEKLIF
+        // K4 (dönem sipariş): SP_PIPELINE_SIPARIS
+        // K5 (fatura): SP_COCKPIT_FATURA via ICockpitDataService
+        // ───────────────────────────────────────────────────────────────
+        [HttpGet]
+        public async Task<IActionResult> GetPipelineOzet(string? filter, string? startDate, string? endDate, string? owner)
+        {
+            var (start, end, _, _) = ParseFilter(filter, startDate, endDate);
+            var cacheKey = $"PipelineOzet_{start:yyyyMMdd}_{end:yyyyMMdd}_{owner ?? "all"}";
+            if (_cache.TryGetValue(cacheKey, out object? cached) && cached != null)
+                return Json(cached);
+
+            using var db1 = _contextFactory.CreateDbContext();
+            using var db2 = _contextFactory.CreateDbContext();
+            using var db3 = _contextFactory.CreateDbContext();
+            using var db4 = _contextFactory.CreateDbContext();
+
+            // Paralel 4 SP + fatura özeti
+            object ownerParam = (object?)owner ?? DBNull.Value;
+            var k1Task = db1.Database.SqlQueryRaw<PipelineFirsatRow>(
+                "EXEC SP_PIPELINE_FIRSAT @p0, @p1, @p2",
+                DBNull.Value, DBNull.Value, ownerParam).FirstOrDefaultAsync();
+            var k2Task = db2.Database.SqlQueryRaw<PipelineFirsatRow>(
+                "EXEC SP_PIPELINE_FIRSAT @p0, @p1, @p2",
+                start, end, ownerParam).FirstOrDefaultAsync();
+            var k3Task = db3.Database.SqlQueryRaw<PipelineTeklifRow>(
+                "EXEC SP_PIPELINE_TEKLIF @p0, @p1, @p2",
+                start, end, ownerParam).FirstOrDefaultAsync();
+            var k4Task = db4.Database.SqlQueryRaw<PipelineSiparisRow>(
+                "EXEC SP_PIPELINE_SIPARIS @p0, @p1, @p2",
+                start, end, ownerParam).FirstOrDefaultAsync();
+            var k5Task = _cockpitData.GetFaturaOzetAsync(start, end, owner);
+
+            await Task.WhenAll(k1Task, k2Task, k3Task, k4Task, k5Task);
+
+            var k1 = k1Task.Result ?? new PipelineFirsatRow();
+            var k2 = k2Task.Result ?? new PipelineFirsatRow();
+            var k3 = k3Task.Result ?? new PipelineTeklifRow();
+            var k4 = k4Task.Result ?? new PipelineSiparisRow();
+            var k5 = k5Task.Result;
+
+            var result = new
+            {
+                donem = new { start, end },
+                k1 = new { tutar = k1.TutarAcik, adet = k1.AdetAcik,
+                           wonAdet = k1.AdetWon, wonTutar = k1.TutarWon,
+                           lostAdet = k1.AdetLost, lostTutar = k1.TutarLost },
+                k2 = new { tutar = k2.TutarAcik, adet = k2.AdetAcik,
+                           wonAdet = k2.AdetWon, wonTutar = k2.TutarWon,
+                           lostAdet = k2.AdetLost, lostTutar = k2.TutarLost },
+                k3 = new { tutar = k3.TutarAktif, adet = k3.AdetAktif,
+                           redAdet = k3.AdetRed, redTutar = k3.TutarRed },
+                k4 = new { tutar = k4.TutarAcik, adet = k4.AdetAcik,
+                           kapaliAdet = k4.AdetKapali, kapaliTutar = k4.TutarKapali },
+                k5 = new { tutar = k5?.Toplam ?? 0m, adet = k5?.Adet ?? 0 }
+            };
+
+            _cache.Set(cacheKey, result, CacheTTL);
+            return Json(result);
+        }
+
+        // ───────────────────────────────────────────────────────────────
+        // GET /FirsatAnaliz/GetFaturaKarti — SP fatura (ağır sorgu, ayrı endpoint)
+        // ───────────────────────────────────────────────────────────────
+        [HttpGet]
+        public async Task<IActionResult> GetFaturaKarti(string? filter, string? startDate, string? endDate, string? owner)
+        {
+            var (start, end, _, _) = ParseFilter(filter, startDate, endDate);
+            var cacheKey = $"FirsatFaturaKarti_{start:yyyyMMdd}_{end:yyyyMMdd}_{owner ?? "all"}";
+            if (_cache.TryGetValue(cacheKey, out object? cached) && cached != null)
+                return Json(cached);
+
+            var prevDuration = end - start;
+            var prevStart = start.AddDays(-prevDuration.TotalDays);
+            var prevEnd = start.AddSeconds(-1);
+
+            var spFaturaTask = _cockpitData.GetFaturaOzetAsync(start, end, owner);
+            var spPrevFaturaTask = _cockpitData.GetFaturaOzetAsync(prevStart, prevEnd, owner);
+            await Task.WhenAll(spFaturaTask, spPrevFaturaTask);
+
+            var result = new
+            {
+                kapaliSiparisAdet = spFaturaTask.Result.Adet,
+                kapaliSiparisTutar = spFaturaTask.Result.Toplam,
+                gecenDonemFatura = spPrevFaturaTask.Result.Toplam
+            };
+            _cache.Set(cacheKey, result, CacheTTL);
+            return Json(result);
         }
 
         // ───────────────────────────────────────────────────────────────
@@ -1794,6 +2277,9 @@ namespace SOS.Controllers
             {
                 var emptyResult = new
                 {
+                    ortFirsatKapanis = 0.0,
+                    medyanFirsatKapanis = 0.0,
+                    firsatKapanisAdet = 0,
                     ortFirsatTeklif = 0.0,
                     ortTeklifSiparis = 0.0,
                     ortSiparisFatura = 0.0,
@@ -1809,7 +2295,26 @@ namespace SOS.Controllers
                 return Json(emptyResult);
             }
 
-            // 5) Metrikler
+            // 5a) Fırsat kapanış süresi: CreatedOn → CloseDate (Won fırsatlar, dönemde)
+            var wonFirsatKapanisSuresi = await ExcludeTestFirsat(db.TBL_VARUNA_OPPORTUNITIESs.AsNoTracking())
+                .Where(o => o.OpportunityStageName == "Won"
+                    && o.CreatedOn.HasValue && o.CloseDate.HasValue
+                    && o.CloseDate.Value >= start && o.CloseDate.Value <= end)
+                .Select(o => new { o.CreatedOn, o.CloseDate })
+                .ToListAsync();
+            var kapanisGunleri = wonFirsatKapanisSuresi
+                .Select(o => (o.CloseDate!.Value - o.CreatedOn!.Value).TotalDays)
+                .Where(d => d >= 0)
+                .OrderBy(d => d).ToList();
+            var ortFirsatKapanis = kapanisGunleri.Count > 0 ? Math.Round(kapanisGunleri.Average(), 1) : 0.0;
+            var medyanFirsatKapanis = kapanisGunleri.Count > 0
+                ? (kapanisGunleri.Count % 2 == 0
+                    ? Math.Round((kapanisGunleri[kapanisGunleri.Count / 2 - 1] + kapanisGunleri[kapanisGunleri.Count / 2]) / 2.0, 1)
+                    : Math.Round(kapanisGunleri[kapanisGunleri.Count / 2], 1))
+                : 0.0;
+            var firsatKapanisAdet = kapanisGunleri.Count;
+
+            // 5b) Detay aşama metrikleri
             var firsatlilar = joined.Where(x => x.HasFirsat && x.FirsatTeklifGun >= 0).ToList();
             var ortFirsatTeklif = firsatlilar.Count > 0
                 ? Math.Round(firsatlilar.Average(x => x.FirsatTeklifGun), 1) : 0.0;
@@ -1841,6 +2346,9 @@ namespace SOS.Controllers
 
             var result = new
             {
+                ortFirsatKapanis,
+                medyanFirsatKapanis,
+                firsatKapanisAdet,
                 ortFirsatTeklif,
                 ortTeklifSiparis,
                 ortSiparisFatura,
@@ -1869,11 +2377,11 @@ namespace SOS.Controllers
             var ownerMap = await GetOwnerMapAsync();
 
             // Dönem fırsatları
-            var firsatlar = await ExcludeTestFirsat(db.TBLSOS_VARUNA_FIRSAT_ODATAs.AsNoTracking())
+            var firsatlar = await ExcludeTestFirsat(db.TBL_VARUNA_OPPORTUNITIESs.AsNoTracking())
                 .Where(o => o.CloseDate.HasValue
                     && o.CloseDate.Value >= start && o.CloseDate.Value <= end
                     && o.OwnerId != null)
-                .Select(o => new { o.Id, o.OwnerId, o.OpportunityStageName, AmountAmount = o.AmountValue })
+                .Select(o => new { o.Id, o.OwnerId, o.OpportunityStageName, o.AmountAmount })
                 .ToListAsync();
 
             // Fırsat Id → Teklif ProposalOwnerId lookup (ilk teklif sahibi)
@@ -1940,7 +2448,7 @@ namespace SOS.Controllers
             using var db = _contextFactory.CreateDbContext();
             var ownerMap = await GetOwnerMapAsync();
 
-            var owners = await ExcludeTestFirsat(db.TBLSOS_VARUNA_FIRSAT_ODATAs.AsNoTracking())
+            var owners = await ExcludeTestFirsat(db.TBL_VARUNA_OPPORTUNITIESs.AsNoTracking())
                 .Where(o => o.OwnerId != null)
                 .GroupBy(o => o.OwnerId!)
                 .Select(g => new { ownerId = g.Key, adet = g.Count() })
@@ -1964,12 +2472,18 @@ namespace SOS.Controllers
         public async Task<IActionResult> GetOpportunityDetail(string? filter, string? startDate, string? endDate,
             string? owner, string? stage, string? customer, string? product, string? ownerName, int page = 1, int pageSize = 20)
         {
-            using var db = _contextFactory.CreateDbContext();
             var (start, end, _, _) = ParseFilter(filter, startDate, endDate);
+
+            // ── Cache kontrolü ──
+            var detailCacheKey = $"FirsatDetail_{start:yyyyMMdd}_{end:yyyyMMdd}_{stage ?? ""}_{owner ?? ""}_{customer ?? ""}_{product ?? ""}_{ownerName ?? ""}_{page}";
+            if (_cache.TryGetValue(detailCacheKey, out object? cachedDetail) && cachedDetail != null)
+                return Json(cachedDetail);
+
+            using var db = _contextFactory.CreateDbContext();
             var ownerMap = await GetOwnerMapAsync();
 
-            // TBLSOS_VARUNA_FIRSAT_ODATA — CloseDate bazlı filtreleme
-            var query = ExcludeTestFirsat(db.TBLSOS_VARUNA_FIRSAT_ODATAs.AsNoTracking())
+            // TBL_VARUNA_OPPORTUNITIES — CloseDate bazlı filtreleme
+            var query = ExcludeTestFirsat(db.TBL_VARUNA_OPPORTUNITIESs.AsNoTracking())
                 .Where(o => o.CloseDate.HasValue
                     && o.CloseDate.Value >= start && o.CloseDate.Value <= end);
 
@@ -2044,7 +2558,7 @@ namespace SOS.Controllers
                     DealTypeTR = o.DealType,
                     o.Probability,
                     o.CloseDate,
-                    o.AmountValue,
+                    o.AmountAmount,
                     ownerId = o.OwnerId,
                     o.Source
                 })
@@ -2057,7 +2571,7 @@ namespace SOS.Controllers
             if (oppNames.Count > 0)
             {
                 // Fırsat Id'lerini al
-                var oppIdPairs = await ExcludeTestFirsat(db.TBLSOS_VARUNA_FIRSAT_ODATAs.AsNoTracking())
+                var oppIdPairs = await ExcludeTestFirsat(db.TBL_VARUNA_OPPORTUNITIESs.AsNoTracking())
                     .Where(o => oppNames.Contains(o.Name))
                     .Select(o => new { o.Name, o.Id })
                     .ToListAsync();
@@ -2080,7 +2594,7 @@ namespace SOS.Controllers
             // Teklif sahibi lookup: fırsat Id → ProposalOwnerId (teklif varsa öncelikli)
             var itemOppIds = items.Select(i => i.ownerId).Where(id => id != null).Distinct().ToList();
             var allItemIds = items.Select(i => i.Name).Where(n => n != null).Distinct().ToList();
-            var detayFirsatIds = await ExcludeTestFirsat(db.TBLSOS_VARUNA_FIRSAT_ODATAs.AsNoTracking())
+            var detayFirsatIds = await ExcludeTestFirsat(db.TBL_VARUNA_OPPORTUNITIESs.AsNoTracking())
                 .Where(o => allItemIds.Contains(o.Name))
                 .Select(o => new { o.Name, o.Id }).ToListAsync();
             var detayTeklifOwners = await ExcludeTest(db.TBL_VARUNA_TEKLIFs.AsNoTracking())
@@ -2098,7 +2612,7 @@ namespace SOS.Controllers
                 asama = i.OpportunityStageName,
                 anlasmaTipi = i.DealTypeTR,
                 olasilik = i.Probability,
-                tutar = i.AmountValue,
+                tutar = i.AmountAmount,
                 kapanisTarihi = i.CloseDate?.ToString("dd.MM.yyyy"),
                 satisTemsilcisi = i.Name != null && nameToFirsatId.TryGetValue(i.Name, out var fid) && detayOppToOwner.TryGetValue(fid, out var po)
                     ? ResolveOwnerName(po, ownerMap)
@@ -2107,7 +2621,9 @@ namespace SOS.Controllers
                 musteri = i.Name != null && nameMusteriMap.TryGetValue(i.Name, out var m) ? m : ""
             }).ToList();
 
-            return Json(new { total, page, pageSize, items = result });
+            var detailResult = new { total, page, pageSize, items = result };
+            _cache.Set(detailCacheKey, detailResult, CacheTTL);
+            return Json(detailResult);
         }
 
         // ───────────────────────────────────────────────────────────────
@@ -2119,13 +2635,19 @@ namespace SOS.Controllers
         public async Task<IActionResult> GetFunnelBreakdown(string? filter, string? startDate, string? endDate, int funnel = 2,
             string? customer = null, string? product = null, string? ownerName = null)
         {
-            using var db = _contextFactory.CreateDbContext();
             var (start, end, _, _) = ParseFilter(filter, startDate, endDate);
+
+            // ── Cache kontrolü ──
+            var cacheKey = $"FirsatFunnel_{start:yyyyMMdd}_{end:yyyyMMdd}_{funnel}_{customer ?? ""}_{product ?? ""}_{ownerName ?? ""}";
+            if (_cache.TryGetValue(cacheKey, out object? cachedFunnel) && cachedFunnel != null)
+                return Json(cachedFunnel);
+
+            using var db = _contextFactory.CreateDbContext();
             var ownerMap = await GetOwnerMapAsync();
             var eslestirmeMap = await GetUrunEslestirmeMapAsync();
 
             // Dönem fırsatlarını al (CloseDate bazlı)
-            var firsatQuery = ExcludeTestFirsat(db.TBLSOS_VARUNA_FIRSAT_ODATAs.AsNoTracking())
+            var firsatQuery = ExcludeTestFirsat(db.TBL_VARUNA_OPPORTUNITIESs.AsNoTracking())
                 .Where(o => o.CloseDate.HasValue && o.CloseDate.Value >= start && o.CloseDate.Value <= end);
 
             // Müşteri filtresi
@@ -2150,11 +2672,14 @@ namespace SOS.Controllers
             }
 
             // Satış temsilcisi filtresi
+            // ownerPidSet: funnel 4/5'te sipariş filtresinde de kullanılacak
+            HashSet<string>? ownerPidSet = null;
             if (!string.IsNullOrEmpty(ownerName))
             {
                 var pids = await db.TBLSOS_CRM_PERSON_ODATAs.AsNoTracking()
                     .Where(p => p.PersonNameSurname == ownerName).Select(p => p.Id).ToListAsync();
                 var pidSet = pids.ToHashSet();
+                ownerPidSet = pidSet;
                 var tOppIds = await ExcludeTest(db.TBL_VARUNA_TEKLIFs.AsNoTracking())
                     .Where(t => t.DeletedOn == null && t.OpportunityId.HasValue && t.ProposalOwnerId.HasValue
                         && pidSet.Contains(t.ProposalOwnerId.Value.ToString().ToLower()))
@@ -2169,12 +2694,64 @@ namespace SOS.Controllers
                     || (pidSet.Contains(o.OwnerId!) && !teklifliSet.Contains(o.Id)));
             }
 
-            var donemFirsatIds = await firsatQuery.Select(o => o.Id).ToListAsync();
+            // Tahakkuk bazlı kapaliSet: dönem dışına kayan kapalı siparişli fırsatları çıkar
+            var tahakkukMapFunnel = await _tahakkukService.GetTahakkukMapAsync();
+            var kapaliZincirFunnel = await ExcludeTest(db.TBL_VARUNA_TEKLIFs.AsNoTracking())
+                .Where(t => t.DeletedOn == null && t.OpportunityId.HasValue)
+                .Join(ExcludeTestSiparis(db.TBL_VARUNA_SIPARIs.AsNoTracking())
+                    .Where(s => s.OrderStatus == "Closed" && s.QuoteId != null),
+                    t => t.Id.ToString(), s => s.QuoteId,
+                    (t, s) => new { OppId = t.OpportunityId!.Value.ToString().ToLower(), s.SerialNumber, s.InvoiceDate })
+                .ToListAsync();
+            // Won fırsatlar → teklif müşteri → sipariş müşteri → efektif tarih
+            var wonIdsF = await ExcludeTestFirsat(db.TBL_VARUNA_OPPORTUNITIESs.AsNoTracking())
+                .Where(o => o.OpportunityStageName == "Won")
+                .Select(o => o.Id!.ToLower()).ToListAsync();
+            var wonSetF = wonIdsF.ToHashSet();
+            var teklifMusteriF = await ExcludeTest(db.TBL_VARUNA_TEKLIFs.AsNoTracking())
+                .Where(t => t.DeletedOn == null && t.OpportunityId.HasValue && t.Account_Title != null)
+                .Select(t => new { OppId = t.OpportunityId!.Value.ToString().ToLower(), t.Account_Title })
+                .ToListAsync();
+            var oppMusteriF = teklifMusteriF.Where(t => wonSetF.Contains(t.OppId))
+                .GroupBy(t => t.OppId).ToDictionary(g => g.Key, g => g.First().Account_Title!.Trim().ToLower());
+            var closedSipF = await ExcludeTestSiparis(db.TBL_VARUNA_SIPARIs.AsNoTracking())
+                .Where(s => s.OrderStatus == "Closed" && s.SerialNumber != null && s.AccountTitle != null)
+                .Select(s => new { s.SerialNumber, s.InvoiceDate, AccountTitle = s.AccountTitle!.Trim().ToLower() })
+                .ToListAsync();
+            var musteriEfektifF = closedSipF.GroupBy(s => s.AccountTitle)
+                .ToDictionary(g => g.Key, g => {
+                    foreach (var s in g.OrderByDescending(x => x.InvoiceDate))
+                    {
+                        var ef = EfektifInvoice(s.SerialNumber, s.InvoiceDate, tahakkukMapFunnel);
+                        if (ef.HasValue && s.InvoiceDate.HasValue && ef.Value != s.InvoiceDate.Value) return ef;
+                    }
+                    return g.OrderByDescending(x => x.InvoiceDate).First().InvoiceDate;
+                });
+            var kapaliOppEfektifF = kapaliZincirFunnel.GroupBy(x => x.OppId)
+                .ToDictionary(g => g.Key, g => EfektifInvoice(g.First().SerialNumber, g.First().InvoiceDate, tahakkukMapFunnel));
+            foreach (var kv in oppMusteriF)
+                if (!kapaliOppEfektifF.ContainsKey(kv.Key) && musteriEfektifF.TryGetValue(kv.Value, out var ef))
+                    kapaliOppEfektifF[kv.Key] = ef;
+            var kapaliSetFunnel = kapaliOppEfektifF
+                .Where(kv => kv.Value.HasValue && (kv.Value.Value < start || kv.Value.Value > end))
+                .Select(kv => kv.Key).ToHashSet();
+
+            // Tahakkukla bu döneme kayan fırsatlar
+            var eklenecekSetFunnel = kapaliOppEfektifF
+                .Where(kv => kv.Value.HasValue && kv.Value.Value >= start && kv.Value.Value <= end)
+                .Select(kv => kv.Key).ToHashSet();
+            var donemFirsatIdsRaw = await firsatQuery.Select(o => o.Id).ToListAsync();
+            var donemFirsatIds = donemFirsatIdsRaw.Where(id => !kapaliSetFunnel.Contains((id ?? "").ToLower())).ToList();
+            // Ekle
+            var donemCheckF = donemFirsatIds.Select(id => (id ?? "").ToLower()).ToHashSet();
+            foreach (var ekId in eklenecekSetFunnel)
+                if (!donemCheckF.Contains(ekId)) donemFirsatIds.Add(ekId);
             var donemGuidSet = donemFirsatIds.Where(id => Guid.TryParse(id, out _)).Select(id => Guid.Parse(id)).ToHashSet();
 
-            // Dönem teklifleri (fırsata bağlı)
+            // Dönem teklifleri (fırsata bağlı + CreatedOn dönemde — Kart 3 referansıyla tutarlı)
             var donemTeklifler = await ExcludeTest(db.TBL_VARUNA_TEKLIFs.AsNoTracking())
-                .Where(t => t.DeletedOn == null && t.OpportunityId.HasValue && donemGuidSet.Contains(t.OpportunityId.Value))
+                .Where(t => t.DeletedOn == null && t.OpportunityId.HasValue && donemGuidSet.Contains(t.OpportunityId.Value)
+                    && t.CreatedOn.HasValue && t.CreatedOn.Value >= start && t.CreatedOn.Value <= end)
                 .Select(t => new { t.Id, t.ProposalOwnerId, t.TotalNetAmountLocalCurrency_Amount, t.Status })
                 .ToListAsync();
             var donemTeklifIdSet = donemTeklifler.Select(t => t.Id.ToString()).ToHashSet();
@@ -2202,26 +2779,71 @@ namespace SOS.Controllers
                 .Select(u => new { u.CrmOrderId, u.StockCode, u.ProductName, Total = u.Total ?? 0m })
                 .ToListAsync();
 
+            // Shared base for funnel 4 (customer breakdown paylaşır)
+            List<TBL_VARUNA_SIPARI>? funnel45Base = null;
+            // Shared: funnel 5 customer breakdown (SP bazlı, önceden hesaplanır)
+            object? funnel5CustomerBreakdown = null;
+            // Shared: funnel ≤ 2'de base fırsat seti (ownerBreakdown + customerBreakdown paylaşır)
+            HashSet<string>? efektifFirsatIdSet = null;
+            Dictionary<string, decimal>? sharedFirsatAmountMap = null;
+
             // Owner dağılımı: funnel'a göre
             object ownerBreakdown;
             object productBreakdown;
 
             if (funnel <= 2)
             {
-                // Owner: OData tablosundan (donemFirsatIds ile filtrelenmiş)
-                var firsatIdSet = donemFirsatIds.ToHashSet();
-                var firsatOdata = funnel == 1 && string.IsNullOrEmpty(customer) && string.IsNullOrEmpty(product) && string.IsNullOrEmpty(ownerName)
-                    ? ExcludeTestFirsat(db.TBLSOS_VARUNA_FIRSAT_ODATAs.AsNoTracking())
-                    : ExcludeTestFirsat(db.TBLSOS_VARUNA_FIRSAT_ODATAs.AsNoTracking())
-                        .Where(o => firsatIdSet.Contains(o.Id));
+                // ── Referansla tutarlı base set oluştur ──
+                // Kart 1 (tumFirsatTutar): Won+Lost+Closed hariç açık havuz (tüm zamanlar)
+                // Kart 2 (aktivTutar): dönemde CloseDate olan, Won+Lost hariç aktif fırsatlar
+                var excludeStages = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Lost", "Won" };
 
-                var firsatOwnerData = await firsatOdata
+                IQueryable<TBL_VARUNA_OPPORTUNITIES> baseQuery;
+                if (funnel == 1)
+                {
+                    // Tüm fırsatlar açık havuzu — dönem kısıtı yok, Won+Lost+Closed hariç
+                    baseQuery = ExcludeTestFirsat(db.TBL_VARUNA_OPPORTUNITIESs.AsNoTracking())
+                        .Where(o => !excludeStages.Contains(o.OpportunityStageName ?? "")
+                            && (o.OpportunityStageName == null || !o.OpportunityStageName.Contains("Closed")));
+                }
+                else
+                {
+                    // Dönem aktif fırsatları — donemFirsatIds'den Won+Lost çıkar
+                    var aktifIds = donemFirsatIds.ToHashSet();
+                    baseQuery = ExcludeTestFirsat(db.TBL_VARUNA_OPPORTUNITIESs.AsNoTracking())
+                        .Where(o => aktifIds.Contains(o.Id)
+                            && !excludeStages.Contains(o.OpportunityStageName ?? "")
+                            && (o.OpportunityStageName == null || !o.OpportunityStageName.Contains("Closed")));
+                }
+
+                // kapaliSet filtresi (tahakkuk-aware)
+                baseQuery = baseQuery.Where(o => !kapaliSetFunnel.Contains((o.Id ?? "").ToLower()));
+
+                // Alt-katman filtreleri (customer/product/ownerName firsatQuery'de zaten uygulandı)
+                if (!string.IsNullOrEmpty(customer))
+                {
+                    var custOppIds2 = await ExcludeTest(db.TBL_VARUNA_TEKLIFs.AsNoTracking())
+                        .Where(t => t.DeletedOn == null && t.Account_Title == customer && t.OpportunityId.HasValue)
+                        .Select(t => t.OpportunityId!.Value.ToString()).Distinct().ToListAsync();
+                    var custIdSet2 = custOppIds2.ToHashSet();
+                    baseQuery = baseQuery.Where(o => custIdSet2.Contains(o.Id));
+                }
+                if (!string.IsNullOrEmpty(product))
+                {
+                    var prodOppIds2 = await db.Database.SqlQueryRaw<string>(
+                        @"SELECT o.Id FROM TBL_VARUNA_OPPORTUNITIES o
+                          JOIN TBL_VARUNA_PRODUCTGRUPS pg ON o.ProductGroupId = CAST(pg.Id AS NVARCHAR(64))
+                          WHERE pg.Name = {0} AND o.DeletedOn IS NULL", product).ToListAsync();
+                    var prodIdSet2 = prodOppIds2.ToHashSet();
+                    baseQuery = baseQuery.Where(o => prodIdSet2.Contains(o.Id));
+                }
+
+                var firsatOwnerData = await baseQuery
                     .Where(o => o.OwnerId != null)
-                    .Select(o => new { o.Id, o.OwnerId, o.AmountValue })
+                    .Select(o => new { o.Id, o.OwnerId, o.AmountAmount, o.OpportunityStageName, o.ProductGroupId })
                     .ToListAsync();
 
-                // Efektif sahip: teklif sahibi varsa o, yoksa fırsat sahibi (GetOwnerPerformance ile aynı mantık)
-                var brkFirsatIds = firsatOwnerData.Select(f => f.Id).Where(id => id != null).ToList();
+                // Efektif sahip: teklif sahibi varsa o, yoksa fırsat sahibi
                 var brkTeklifOwners = await ExcludeTest(db.TBL_VARUNA_TEKLIFs.AsNoTracking())
                     .Where(t => t.DeletedOn == null && t.OpportunityId.HasValue && t.ProposalOwnerId.HasValue)
                     .Select(t => new { OppId = t.OpportunityId!.Value.ToString().ToLower(), t.ProposalOwnerId })
@@ -2230,30 +2852,47 @@ namespace SOS.Controllers
                     .GroupBy(t => t.OppId)
                     .ToDictionary(g => g.Key, g => g.First().ProposalOwnerId!.Value.ToString().ToLower());
 
-                ownerBreakdown = firsatOwnerData
+                // Her fırsata EfektifOwner ata
+                var firsatWithOwner = firsatOwnerData
                     .Select(d => new {
+                        d.Id,
                         EfektifOwner = brkOppToOwner.TryGetValue((d.Id ?? "").ToLower(), out var po) ? po : d.OwnerId!,
-                        d.AmountValue
-                    })
+                        d.AmountAmount,
+                        d.ProductGroupId
+                    }).ToList();
+
+                // ownerName seçiliyse: EfektifOwner bazında daralt
+                if (ownerPidSet != null)
+                {
+                    firsatWithOwner = firsatWithOwner.Where(d => ownerPidSet.Contains(d.EfektifOwner)).ToList();
+                    efektifFirsatIdSet = firsatWithOwner.Select(d => d.Id).Where(id => id != null).ToHashSet()!;
+                }
+
+                // ── Tek base set, üç farklı gruplama ──
+                ownerBreakdown = firsatWithOwner
                     .GroupBy(d => d.EfektifOwner)
-                    .Select(g => new { adSoyad = ResolveOwnerName(g.Key, ownerMap), tutar = g.Sum(d => d.AmountValue ?? 0m), adet = g.Count() })
+                    .Select(g => new { adSoyad = ResolveOwnerName(g.Key, ownerMap), tutar = g.Sum(d => d.AmountAmount ?? 0m), adet = g.Count() })
                     .OrderByDescending(x => x.tutar).Take(10).ToList();
 
-                // Ürün: Raw SQL ile filtrelenmiş fırsat ID'leri kullanarak
-                var firsatAmountMap = firsatOwnerData.ToDictionary(f => f.Id ?? "", f => f.AmountValue ?? 0m);
-                // Ürün: tüm fırsatları çek, sonra firsatIdSet ile filtrele
+                // Ürün: ProductGroupId'si olan fırsatlardan
+                var firsatIdsForProduct = firsatWithOwner
+                    .Where(d => d.ProductGroupId != null)
+                    .Select(d => d.Id ?? "").ToHashSet();
                 var allUrunData = await db.Database.SqlQueryRaw<FirsatUrunIdDto>(
-                    @"SELECT fo.Id as FirsatId, pg.Name as UrunGrubu, ISNULL(fo.AmountValue,0) as Tutar
+                    @"SELECT o.Id as FirsatId, pg.Name as UrunGrubu, ISNULL(o.AmountAmount,0) as Tutar
                       FROM TBL_VARUNA_OPPORTUNITIES o
                       JOIN TBL_VARUNA_PRODUCTGRUPS pg ON o.ProductGroupId = CAST(pg.Id AS NVARCHAR(64))
-                      LEFT JOIN TBLSOS_VARUNA_FIRSAT_ODATA fo ON o.Id = fo.Id
-                      WHERE o.DeletedOn IS NULL AND o.ProductGroupId IS NOT NULL
-                        AND fo.CloseDate >= {0} AND fo.CloseDate <= {1}", start, end).ToListAsync();
+                      WHERE o.DeletedOn IS NULL AND o.ProductGroupId IS NOT NULL").ToListAsync();
                 productBreakdown = allUrunData
-                    .Where(x => firsatIdSet.Contains(x.FirsatId ?? ""))
+                    .Where(x => firsatIdsForProduct.Contains(x.FirsatId ?? ""))
                     .GroupBy(x => x.UrunGrubu ?? "Diğer")
                     .Select(g => new { urun = g.Key, tutar = g.Sum(x => x.Tutar), adet = g.Count() })
                     .OrderByDescending(x => x.tutar).ToList();
+
+                // Paylaş: customerBreakdown aynı base'i kullanacak
+                sharedFirsatAmountMap = firsatWithOwner.ToDictionary(f => (f.Id ?? "").ToLower(), f => f.AmountAmount ?? 0m);
+                if (efektifFirsatIdSet == null)
+                    efektifFirsatIdSet = firsatWithOwner.Select(d => d.Id).Where(id => id != null).ToHashSet()!;
             }
             else if (funnel == 3)
             {
@@ -2268,77 +2907,178 @@ namespace SOS.Controllers
                     .Select(g => new { adSoyad = ResolveOwnerName(g.Key, ownerMap), tutar = g.Sum(t => t.TotalNetAmountLocalCurrency_Amount ?? 0m), adet = g.Count() })
                     .OrderByDescending(x => x.tutar).Take(10).ToList();
 
-                // Ürün: gönderilmiş teklif ürünlerinden
+                // Ürün: teklif başlık tutarını kalemlere oransal TL dağıtımı
                 var sentTeklifIds = sentTeklifler.Select(t => t.Id).ToHashSet();
+                var sentTeklifTutarMap = sentTeklifler.ToDictionary(t => t.Id, t => t.TotalNetAmountLocalCurrency_Amount ?? 0m);
                 var teklifUrunleri = await db.TBL_VARUNA_TEKLIF_URUNLERIs.AsNoTracking()
                     .Where(u => u.DeletedOn == null && u.QuoteId.HasValue && sentTeklifIds.Contains(u.QuoteId.Value))
-                    .Select(u => new { u.StockCode, Total = u.NetLineTotalAmountLocal_Amount ?? 0m })
+                    .Select(u => new { u.QuoteId, u.StockCode, Total = u.NetLineTotalAmountLocal_Amount ?? 0m })
                     .ToListAsync();
+                // Teklif başına kalem döviz toplamı
+                var teklifKalemToplam = teklifUrunleri.GroupBy(u => u.QuoteId!.Value)
+                    .ToDictionary(g => g.Key, g => g.Sum(u => u.Total));
 
                 productBreakdown = teklifUrunleri
-                    .Select(u => new { urun = ResolveProductGroup(u.StockCode, eslestirmeMap), u.Total })
+                    .Select(u => new {
+                        urun = ResolveProductGroup(u.StockCode, eslestirmeMap),
+                        tlTutar = teklifKalemToplam.TryGetValue(u.QuoteId!.Value, out var dt) && dt > 0
+                            ? (u.Total / dt) * sentTeklifTutarMap.GetValueOrDefault(u.QuoteId.Value, 0m)
+                            : 0m
+                    })
                     .GroupBy(x => x.urun)
-                    .Select(g => new { urun = g.Key, tutar = g.Sum(x => x.Total), adet = g.Count() })
+                    .Select(g => new { urun = g.Key, tutar = g.Sum(x => x.tlTutar), adet = g.Count() })
+                    .OrderByDescending(x => x.tutar).ToList();
+            }
+            else if (funnel == 4)
+            {
+                // Sipariş bazlı — sadece Open siparişler (Kart 4 referansıyla tutarlı)
+                var baseSiparisler = (await GetFilteredSiparislerAsync(db, start, end))
+                    .Where(s => s.OrderStatus == "Open").ToList();
+
+                // Alt-katman filtreleri
+                if (ownerPidSet != null)
+                    baseSiparisler = baseSiparisler
+                        .Where(s => s.ProposalOwnerId != null && ownerPidSet.Contains(s.ProposalOwnerId.ToLower()))
+                        .ToList();
+                if (!string.IsNullOrEmpty(customer))
+                    baseSiparisler = baseSiparisler
+                        .Where(s => s.AccountTitle == customer).ToList();
+
+                // Ürün: oransal TL dağıtımı (kalem döviz → sipariş TL oranı)
+                var baseOrderIds = baseSiparisler.Select(s => s.OrderId).Where(o => o != null).Distinct().ToList();
+                var sipTotalMap = baseSiparisler.Where(s => s.OrderId != null)
+                    .ToDictionary(s => s.OrderId!, s => s.TotalNetAmount ?? 0m);
+                var rawUrunleri = await db.TBL_VARUNA_SIPARIS_URUNLERIs.AsNoTracking()
+                    .Where(u => u.CrmOrderId != null && baseOrderIds.Contains(u.CrmOrderId))
+                    .Select(u => new { u.CrmOrderId, u.StockCode, Total = u.Total ?? 0m })
+                    .ToListAsync();
+                // Sipariş başına döviz toplamı
+                var orderDovizToplam = rawUrunleri.GroupBy(u => u.CrmOrderId!)
+                    .ToDictionary(g => g.Key, g => g.Sum(u => u.Total));
+                // Her kaleme oransal TL dağıt
+                var urunTlList = rawUrunleri.Select(u => new {
+                    urun = ResolveProductGroup(u.StockCode, eslestirmeMap),
+                    tlTutar = orderDovizToplam.TryGetValue(u.CrmOrderId!, out var dt) && dt > 0
+                        ? (u.Total / dt) * sipTotalMap.GetValueOrDefault(u.CrmOrderId!, 0m)
+                        : 0m
+                }).ToList();
+
+                // Ürün filtresi
+                if (!string.IsNullOrEmpty(product))
+                {
+                    var matchingOrderIds = rawUrunleri
+                        .Where(u => ResolveProductGroup(u.StockCode, eslestirmeMap) == product)
+                        .Select(u => u.CrmOrderId).ToHashSet();
+                    baseSiparisler = baseSiparisler.Where(s => matchingOrderIds.Contains(s.OrderId)).ToList();
+                    urunTlList = urunTlList.Where(u => u.urun == product).ToList();
+                }
+
+                funnel45Base = baseSiparisler;
+
+                ownerBreakdown = baseSiparisler
+                    .Where(s => !string.IsNullOrEmpty(s.ProposalOwnerId))
+                    .GroupBy(s => s.ProposalOwnerId!)
+                    .Select(g => new { adSoyad = ResolveOwnerName(g.Key, ownerMap), tutar = g.Sum(s => s.TotalNetAmount ?? 0m), adet = g.Count() })
+                    .OrderByDescending(x => x.tutar).Take(10).ToList();
+
+                productBreakdown = urunTlList
+                    .GroupBy(x => x.urun)
+                    .Select(g => new { urun = g.Key, tutar = g.Sum(x => x.tlTutar), adet = g.Count() })
                     .OrderByDescending(x => x.tutar).ToList();
             }
             else
             {
-                // Sipariş bazlı — dönemden ÖNCE faturlananları hariç tut
-                var filteredSiparisler = funnel == 5
-                    // Satış faturası: sadece InvoiceDate dönem içinde
-                    ? donemSiparisler.Where(s => s.OrderStatus == "Closed"
-                        && s.InvoiceDate.HasValue
-                        && s.InvoiceDate.Value >= start && s.InvoiceDate.Value <= end).ToList()
-                    // Sipariş kartı: dönemden ÖNCE faturlananları düş
-                    : donemSiparisler.Where(s =>
-                        !s.InvoiceDate.HasValue || s.InvoiceDate.Value >= start).ToList();
+                // Funnel 5 (Fatura) — SP verisi base (Kart 5 referansıyla tutarlı)
+                var spFaturalar = await _cockpitData.GetFaturalarAsync(start, end);
+                var spFaturaNoSet = spFaturalar.Select(f => f.FaturaNo).ToHashSet();
+                var spTutarMap = spFaturalar.ToDictionary(f => f.FaturaNo, f => f.NetTutar);
 
-                // Owner: sipariş bazında (AccountTitle'dan veya teklifteki owner'dan)
-                var siparisTeklifOwner = donemTeklifler.ToDictionary(t => t.Id.ToString(), t => t.ProposalOwnerId?.ToString());
-                var siparisOwnerMap = new Dictionary<string, string>();
-                foreach (var s in donemSiparisler)
-                {
-                    // Sipariş'in teklifi üzerinden owner
-                    // QuoteId → teklifId → ProposalOwnerId
-                }
+                // SP fatura → sipariş eşleşmesi (SerialNumber = FaturaNo)
+                var spSiparisler = await ExcludeTestSiparis(db.TBL_VARUNA_SIPARIs.AsNoTracking())
+                    .Where(s => s.SerialNumber != null && spFaturaNoSet.Contains(s.SerialNumber))
+                    .Select(s => new { s.OrderId, s.SerialNumber, s.AccountTitle, s.ProposalOwnerId })
+                    .ToListAsync();
 
-                ownerBreakdown = filteredSiparisler
-                    .Where(s => s.AccountTitle != null)
-                    .GroupBy(s => s.AccountTitle!)
-                    .Select(g => new { adSoyad = g.Key, tutar = g.Sum(s => s.TotalNetAmount ?? 0m), adet = g.Count() })
+                // Alt-katman filtreleri
+                if (ownerPidSet != null)
+                    spSiparisler = spSiparisler
+                        .Where(s => s.ProposalOwnerId != null && ownerPidSet.Contains(s.ProposalOwnerId.ToLower()))
+                        .ToList();
+                if (!string.IsNullOrEmpty(customer))
+                    spSiparisler = spSiparisler.Where(s => s.AccountTitle == customer).ToList();
+
+                // Owner: SP fatura tutarı ile
+                ownerBreakdown = spSiparisler
+                    .Where(s => !string.IsNullOrEmpty(s.ProposalOwnerId) && s.SerialNumber != null)
+                    .GroupBy(s => s.ProposalOwnerId!)
+                    .Select(g => new {
+                        adSoyad = ResolveOwnerName(g.Key, ownerMap),
+                        tutar = g.Sum(s => spTutarMap.GetValueOrDefault(s.SerialNumber!, 0m)),
+                        adet = g.Count()
+                    })
                     .OrderByDescending(x => x.tutar).Take(10).ToList();
 
-                // Ürün: sipariş ürünlerinden StockCode → AnaUrun
-                var filteredOrderIds = filteredSiparisler.Select(s => s.OrderId).Where(o => o != null).ToHashSet();
-                productBreakdown = siparisUrunleri
-                    .Where(u => filteredOrderIds.Contains(u.CrmOrderId))
-                    .Select(u => new { urun = ResolveProductGroup(u.StockCode, eslestirmeMap), u.Total })
+                // Ürün: oransal TL dağıtımı (SP tutarı base)
+                var spOrderIds = spSiparisler.Select(s => s.OrderId).Where(o => o != null).Distinct().ToList();
+                var spSipTutarMap = spSiparisler.Where(s => s.SerialNumber != null)
+                    .ToDictionary(s => s.OrderId ?? "", s => spTutarMap.GetValueOrDefault(s.SerialNumber!, 0m));
+                var spRawUrunleri = await db.TBL_VARUNA_SIPARIS_URUNLERIs.AsNoTracking()
+                    .Where(u => u.CrmOrderId != null && spOrderIds.Contains(u.CrmOrderId))
+                    .Select(u => new { u.CrmOrderId, u.StockCode, Total = u.Total ?? 0m })
+                    .ToListAsync();
+                var spOrderDovizToplam = spRawUrunleri.GroupBy(u => u.CrmOrderId!)
+                    .ToDictionary(g => g.Key, g => g.Sum(u => u.Total));
+                var spUrunTlList = spRawUrunleri.Select(u => new {
+                    urun = ResolveProductGroup(u.StockCode, eslestirmeMap),
+                    tlTutar = spOrderDovizToplam.TryGetValue(u.CrmOrderId!, out var dt) && dt > 0
+                        ? (u.Total / dt) * spSipTutarMap.GetValueOrDefault(u.CrmOrderId!, 0m)
+                        : 0m
+                }).ToList();
+
+                if (!string.IsNullOrEmpty(product))
+                {
+                    spSiparisler = spSiparisler.Where(s => {
+                        var oids = spRawUrunleri.Where(u => ResolveProductGroup(u.StockCode, eslestirmeMap) == product)
+                            .Select(u => u.CrmOrderId).ToHashSet();
+                        return oids.Contains(s.OrderId);
+                    }).ToList();
+                    spUrunTlList = spUrunTlList.Where(u => u.urun == product).ToList();
+                }
+
+                productBreakdown = spUrunTlList
                     .GroupBy(x => x.urun)
-                    .Select(g => new { urun = g.Key, tutar = g.Sum(x => x.Total), adet = g.Count() })
+                    .Select(g => new { urun = g.Key, tutar = g.Sum(x => x.tlTutar), adet = g.Count() })
                     .OrderByDescending(x => x.tutar).ToList();
+
+                // Customer: SP fatura tutarı ile
+                funnel45Base = null; // Funnel 5 kendi customerBreakdown'ını üretecek
+                var spCustBreakdown = spSiparisler
+                    .Where(s => s.AccountTitle != null && s.SerialNumber != null)
+                    .GroupBy(s => s.AccountTitle!)
+                    .Select(g => new {
+                        musteri = g.Key,
+                        tutar = g.Sum(s => spTutarMap.GetValueOrDefault(s.SerialNumber!, 0m)),
+                        adet = g.Count()
+                    })
+                    .OrderByDescending(x => x.tutar).Take(10).ToList();
+                funnel5CustomerBreakdown = spCustBreakdown;
             }
 
             // Müşteri verisi — funnel'a göre
             object customerBreakdown;
             if (funnel <= 2)
             {
-                // Fırsat bazlı müşteri — eski tablodan AccountTitle (doğrudan fırsat → teklif → Account_Title)
-                // Müşteri: filtrelenmiş fırsat ID'leri ile
-                var firsatGuidSet2 = donemFirsatIds.Where(id => Guid.TryParse(id, out _)).Select(id => Guid.Parse(id)).ToHashSet();
-                var firsatIdSetC = donemFirsatIds.ToHashSet();
-                var custOwnerData = await ExcludeTestFirsat(db.TBLSOS_VARUNA_FIRSAT_ODATAs.AsNoTracking())
-                    .Where(o => firsatIdSetC.Contains(o.Id))
-                    .Select(o => new { o.Id, o.AmountValue }).ToListAsync();
-                var custAmountMap = custOwnerData.ToDictionary(f => (f.Id ?? "").ToLower(), f => f.AmountValue ?? 0m);
+                // Aynı base'den müşteri gruplama (sharedFirsatAmountMap + efektifFirsatIdSet)
+                var custGuidSet = efektifFirsatIdSet!.Where(id => Guid.TryParse(id, out _)).Select(id => Guid.Parse(id)).ToHashSet();
                 var musteriData = await ExcludeTest(db.TBL_VARUNA_TEKLIFs.AsNoTracking())
                     .Where(t => t.DeletedOn == null && t.Account_Title != null && t.OpportunityId.HasValue
-                        && firsatGuidSet2.Contains(t.OpportunityId.Value))
+                        && custGuidSet.Contains(t.OpportunityId.Value))
                     .Select(t => new { t.Account_Title, OppId = t.OpportunityId!.Value.ToString().ToLower() })
                     .ToListAsync();
                 customerBreakdown = musteriData
                     .GroupBy(t => t.OppId).Select(g => g.First())
                     .GroupBy(t => t.Account_Title!)
-                    .Select(g => new { musteri = g.Key, tutar = g.Sum(x => custAmountMap.GetValueOrDefault(x.OppId, 0m)), adet = g.Count() })
+                    .Select(g => new { musteri = g.Key, tutar = g.Sum(x => sharedFirsatAmountMap!.GetValueOrDefault(x.OppId, 0m)), adet = g.Count() })
                     .OrderByDescending(x => x.tutar).Take(10).ToList();
             }
             else if (funnel == 3)
@@ -2355,20 +3095,24 @@ namespace SOS.Controllers
                     .Select(g => new { musteri = g.Key, tutar = g.Sum(x => x.TotalNetAmountLocalCurrency_Amount ?? 0m), adet = g.Count() })
                     .OrderByDescending(x => x.tutar).Take(10).ToList();
             }
-            else
+            else if (funnel == 4)
             {
-                var fSiparisler = funnel == 5
-                    ? donemSiparisler.Where(s => s.OrderStatus == "Closed"
-                        && s.InvoiceDate.HasValue && s.InvoiceDate.Value >= start && s.InvoiceDate.Value <= end).ToList()
-                    : donemSiparisler;
-                customerBreakdown = fSiparisler
+                // Sipariş bazlı müşteri — aynı filtrelenmiş base (tutarlılık)
+                customerBreakdown = (funnel45Base ?? new List<TBL_VARUNA_SIPARI>())
                     .Where(s => s.AccountTitle != null)
                     .GroupBy(s => s.AccountTitle!)
                     .Select(g => new { musteri = g.Key, tutar = g.Sum(s => s.TotalNetAmount ?? 0m), adet = g.Count() })
                     .OrderByDescending(x => x.tutar).Take(10).ToList();
             }
+            else
+            {
+                // Funnel 5: SP bazlı müşteri (önceden hesaplandı)
+                customerBreakdown = funnel5CustomerBreakdown ?? new List<object>();
+            }
 
-            return Json(new { ownerBreakdown, productBreakdown, customerBreakdown, funnel });
+            var funnelResult = new { ownerBreakdown, productBreakdown, customerBreakdown, funnel };
+            _cache.Set(cacheKey, funnelResult, CacheTTL);
+            return Json(funnelResult);
         }
     }
 }

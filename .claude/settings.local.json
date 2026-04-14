@@ -8,7 +8,13 @@
       "Glob(*)",
       "Grep(*)",
       "Skill(*)",
-      "Bash(curl -s http://localhost:5165/Home/Index -L)"
+      "Bash(curl -s http://localhost:5165/Home/Index -L)",
+      "WebFetch(domain:localhost)",
+      "mcp__Claude_Preview__preview_start"
     ]
-  }
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "figma"
+  ]
 }

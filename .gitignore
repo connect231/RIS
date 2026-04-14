@@ -6,6 +6,9 @@ obj/
 *.cache
 .vs/
 
+# MCP config (API key iceriyor)
+.mcp.json
+
 # Secrets — asla commit ETME (user-secrets üzerinden yönetilir)
 appsettings.Development.json
 appsettings.Production.json

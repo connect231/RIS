@@ -25,6 +25,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    <link rel="stylesheet" href="~/css/tailwind.css">
     <script src="https://cdn.tailwindcss.com"></script>
 
     <style>
@@ -262,6 +263,10 @@
                 <i class="bi bi-graph-up-arrow"></i>
                 <span class="nav-link-text">Fırsat Analizi</span>
             </a>
+            <a href="@Url.Action("Index", "Tahakkuk")" class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Tahakkuk" ? "active" : "")" title="Tahakkuk Yönetimi">
+                <i class="bi bi-calendar-check"></i>
+                <span class="nav-link-text">Tahakkuk</span>
+            </a>
             <a href="@Url.Action("Index", "Parametre")" class="nav-link @(ViewContext.RouteData.Values["controller"]?.ToString() == "Parametre" ? "active" : "")" title="Parametreler">
                 <i class="bi bi-sliders"></i>
                 <span class="nav-link-text">Parametreler</span>
@@ -303,61 +308,71 @@
         });
 
         // ═══ COUNT-UP: requestAnimationFrame ile 60fps sayı animasyonu ═══
+        // Eski değerden yeni değere geçiş (0'dan değil)
         window.countUp = function(el, target, duration, prefix, suffix) {
+            if (!el) return;
             prefix = prefix || '';
             suffix = suffix || '';
             duration = duration || 1200;
-            var start = 0;
-            var startTime = null;
             var formatter = new Intl.NumberFormat('tr-TR', { maximumFractionDigits: 0 });
 
-            function ease(t) {
-                // Apple ease-out-expo
-                return t === 1 ? 1 : 1 - Math.pow(2, -10 * t);
-            }
+            // Mevcut değeri oku — 0'dan başlama, eski değerden devam et
+            var raw = (el.textContent || '').replace(/[^0-9]/g, '');
+            var from = parseInt(raw, 10) || 0;
+            if (from === target) return;
+
+            var startTime = null;
+            function ease(t) { return t === 1 ? 1 : 1 - Math.pow(2, -10 * t); }
+
+            // Önceki animasyonu iptal et
+            if (el._countUpId) cancelAnimationFrame(el._countUpId);
 
             function step(timestamp) {
                 if (!startTime) startTime = timestamp;
                 var progress = Math.min((timestamp - startTime) / duration, 1);
-                var current = Math.floor(ease(progress) * target);
+                var current = Math.floor(from + ease(progress) * (target - from));
                 el.textContent = prefix + formatter.format(current) + suffix;
                 if (progress < 1) {
-                    requestAnimationFrame(step);
+                    el._countUpId = requestAnimationFrame(step);
                 } else {
                     el.textContent = prefix + formatter.format(target) + suffix;
+                    el._countUpId = null;
                 }
             }
 
-            requestAnimationFrame(step);
+            el._countUpId = requestAnimationFrame(step);
         };
 
         // ═══ SMOOTH VALUE UPDATE: Eski değerden yeniye geçiş ═══
         window.smoothUpdate = function(el, newText, animate) {
-            if (el.textContent === newText) return;
+            if (!el || el.textContent === newText) return;
             if (animate !== false) {
                 el.style.transition = 'none';
-                el.style.opacity = '0.3';
-                el.style.transform = 'translateY(4px) scale(0.98)';
+                el.style.opacity = '0.4';
+                el.style.transform = 'translateY(2px)';
                 requestAnimationFrame(function(){
-                    el.style.transition = 'opacity 0.4s cubic-bezier(0.16,1,0.3,1), transform 0.4s cubic-bezier(0.16,1,0.3,1)';
+                    el.style.transition = 'opacity 0.2s cubic-bezier(0.16,1,0.3,1), transform 0.2s cubic-bezier(0.16,1,0.3,1)';
                     el.textContent = newText;
                     el.style.opacity = '1';
-                    el.style.transform = 'translateY(0) scale(1)';
+                    el.style.transform = 'translateY(0)';
                 });
             } else {
                 el.textContent = newText;
             }
         };
 
-        // ═══ SMOOTH HTML UPDATE: innerHTML için fade geçiş ═══
+        // ═══ SMOOTH HTML UPDATE: innerHTML için GPU fade geçiş (setTimeout yok) ═══
         window.smoothHtmlUpdate = function(el, newHtml) {
             if (!el) return;
-            el.style.transition = 'opacity 0.25s ease';
+            el.style.transition = 'none';
             el.style.opacity = '0';
-            setTimeout(function(){
+            el.style.transform = 'translateY(2px)';
+            requestAnimationFrame(function(){
                 el.innerHTML = newHtml;
+                el.style.transition = 'opacity 0.3s cubic-bezier(0.16,1,0.3,1), transform 0.3s cubic-bezier(0.16,1,0.3,1)';
                 el.style.opacity = '1';
-            }, 250);
+                el.style.transform = 'translateY(0)';
+            });
         };
 
     })();

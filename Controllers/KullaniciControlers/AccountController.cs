@@ -236,9 +236,19 @@ public class AccountController : Controller
         }
 
         // DEV MODE: Otomatik giriş — melih.bulut kullanıcısıyla sign-in yap
-        var adminUser = _userManager.Users.FirstOrDefault(u => u.UserName != null && u.UserName.Contains("melih"))
-            ?? _userManager.Users.FirstOrDefault(u => u.Email != null && u.Email.Contains("melih"))
-            ?? _userManager.Users.FirstOrDefault();
+        var adminUser = await _userManager.FindByNameAsync("melih.bulut")
+            ?? await _userManager.FindByEmailAsync("melih.bulut@univera.com.tr");
+        if (adminUser == null)
+        {
+            var newUser = new AppUser
+            {
+                UserName = "melih.bulut",
+                Email = "melih.bulut.dev@univera.com.tr",
+                EmailConfirmed = true
+            };
+            var createResult = await _userManager.CreateAsync(newUser, "Dev.2026!");
+            adminUser = createResult.Succeeded ? newUser : _userManager.Users.FirstOrDefault();
+        }
         if (adminUser != null)
         {
             var claims = new List<Claim>();
