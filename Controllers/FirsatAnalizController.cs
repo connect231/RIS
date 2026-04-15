@@ -167,25 +167,21 @@ namespace SOS.Controllers
                 case "q1":
                     start = new DateTime(year, 1, 1);
                     end2 = new DateTime(year, 3, 31, 23, 59, 59);
-                    if (end2 > today) end2 = today;
                     months = 3;
                     break;
                 case "q2":
                     start = new DateTime(year, 4, 1);
                     end2 = new DateTime(year, 6, 30, 23, 59, 59);
-                    if (end2 > today) end2 = today;
                     months = 3;
                     break;
                 case "q3":
                     start = new DateTime(year, 7, 1);
                     end2 = new DateTime(year, 9, 30, 23, 59, 59);
-                    if (end2 > today) end2 = today;
                     months = 3;
                     break;
                 case "q4":
                     start = new DateTime(year, 10, 1);
                     end2 = new DateTime(year, 12, 31, 23, 59, 59);
-                    if (end2 > today) end2 = today;
                     months = 3;
                     break;
                 case "lastmonth":
@@ -2432,6 +2428,10 @@ namespace SOS.Controllers
                         wonTutar
                     };
                 })
+                .Where(x => !x.adSoyad.Contains("GMAIL", StringComparison.OrdinalIgnoreCase)
+                    && !x.adSoyad.Contains("TEST", StringComparison.OrdinalIgnoreCase)
+                    && !x.adSoyad.Contains("DENEME", StringComparison.OrdinalIgnoreCase)
+                    && !x.adSoyad.StartsWith("Bilinmiyor", StringComparison.OrdinalIgnoreCase))
                 .OrderByDescending(x => x.wonTutar)
                 .ThenByDescending(x => x.toplam)
                 .ToList();
@@ -2626,6 +2626,85 @@ namespace SOS.Controllers
             return Json(detailResult);
         }
 
+        // ── Exclusive Pipeline Sets ──
+        private record ExclusivePipelineSets(
+            HashSet<string> ExFirsatIds,
+            HashSet<string> ExTeklifIds,
+            HashSet<string> ExSiparisIds,
+            HashSet<string> ExFaturaIds
+        );
+
+        /// <summary>
+        /// Exclusive pipeline: her fırsat EN İLERİ aşamasına göre tek bir sete atanır.
+        /// K5 (Fatura) > K4 (Sipariş) > K3 (Teklif) > K2 (Fırsat)
+        /// </summary>
+        private async Task<ExclusivePipelineSets> GetExclusiveSetsAsync(
+            DateTime start, DateTime end, string? owner,
+            HashSet<string> donemFirsatIdSetLower)
+        {
+            using var dbExSip = _contextFactory.CreateDbContext();
+            using var dbExTek = _contextFactory.CreateDbContext();
+            using var dbCockpitFat = _contextFactory.CreateDbContext();
+
+            // Open sipariş → fırsat bağlantısı (tüm zamanlar)
+            var openSiparisOppTask = ExcludeTest(dbExSip.TBL_VARUNA_TEKLIFs.AsNoTracking())
+                .Where(t => t.DeletedOn == null && t.OpportunityId.HasValue)
+                .Join(ExcludeTestSiparis(dbExSip.TBL_VARUNA_SIPARIs.AsNoTracking())
+                    .Where(s => s.OrderStatus == "Open" && s.QuoteId != null),
+                    t => t.Id.ToString(), s => s.QuoteId,
+                    (t, s) => t.OpportunityId!.Value.ToString().ToLower())
+                .Distinct().ToListAsync();
+
+            // Aktif teklif → fırsat bağlantısı (tüm zamanlar)
+            var aktifTeklifOppTask = ExcludeTest(dbExTek.TBL_VARUNA_TEKLIFs.AsNoTracking())
+                .Where(t => t.DeletedOn == null && t.OpportunityId.HasValue
+                    && (t.Status == null || (t.Status != "Reject" && t.Status != "Denied" && t.Status != "Closed")))
+                .Select(t => t.OpportunityId!.Value.ToString().ToLower())
+                .Distinct().ToListAsync();
+
+            // Cockpit fatura + fırsat bağlantısı
+            var cockpitFaturaTask = _cockpitData.GetFaturalarAsync(start, end, owner);
+            var cockpitFaturaOppTask = ExcludeTest(dbCockpitFat.TBL_VARUNA_TEKLIFs.AsNoTracking())
+                .Where(t => t.DeletedOn == null && t.OpportunityId.HasValue)
+                .Join(ExcludeTestSiparis(dbCockpitFat.TBL_VARUNA_SIPARIs.AsNoTracking())
+                    .Where(s => s.OrderStatus == "Closed" && s.SerialNumber != null),
+                    t => t.Id.ToString(), s => s.QuoteId,
+                    (t, s) => new { OppId = t.OpportunityId!.Value.ToString().ToLower(), s.SerialNumber })
+                .ToListAsync();
+
+            await Task.WhenAll(openSiparisOppTask, aktifTeklifOppTask, cockpitFaturaTask, cockpitFaturaOppTask);
+
+            var openSiparisOppSet = openSiparisOppTask.Result.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var aktifTeklifOppSet = aktifTeklifOppTask.Result.ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var cockpitFaturalar = cockpitFaturaTask.Result;
+            var cockpitFaturaNoSet = cockpitFaturalar.Select(f => f.FaturaNo).ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var cockpitFaturaOppIds = cockpitFaturaOppTask.Result
+                .Where(x => x.SerialNumber != null && cockpitFaturaNoSet.Contains(x.SerialNumber))
+                .Select(x => x.OppId).ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            // K5 — FaturaSet: Cockpit faturalarına bağlı fırsatlar
+            var exFaturaIds = donemFirsatIdSetLower
+                .Where(id => cockpitFaturaOppIds.Contains(id))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            // K4 — SiparisSet: Open siparişi olan, FaturaSet hariç
+            var exSiparisIds = donemFirsatIdSetLower
+                .Where(id => openSiparisOppSet.Contains(id) && !exFaturaIds.Contains(id))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            // K3 — TeklifSet: Aktif teklifi olan, Fatura+Sipariş hariç
+            var exTeklifIds = donemFirsatIdSetLower
+                .Where(id => aktifTeklifOppSet.Contains(id) && !exFaturaIds.Contains(id) && !exSiparisIds.Contains(id))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            // K2 — FirsatSet: Hiçbir bağlantısı yok (teklif, sipariş, fatura yok)
+            var exFirsatIds = donemFirsatIdSetLower
+                .Where(id => !exFaturaIds.Contains(id) && !exSiparisIds.Contains(id) && !exTeklifIds.Contains(id))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+
+            return new ExclusivePipelineSets(exFirsatIds, exTeklifIds, exSiparisIds, exFaturaIds);
+        }
+
         // ───────────────────────────────────────────────────────────────
         // GET /FirsatAnaliz/GetFunnelBreakdown?filter=month&funnel=4
         // Huni kartına tıklandığında: ürün + owner dağılımı
@@ -2740,7 +2819,10 @@ namespace SOS.Controllers
             var eklenecekSetFunnel = kapaliOppEfektifF
                 .Where(kv => kv.Value.HasValue && kv.Value.Value >= start && kv.Value.Value <= end)
                 .Select(kv => kv.Key).ToHashSet();
-            var donemFirsatIdsRaw = await firsatQuery.Select(o => o.Id).ToListAsync();
+            var donemFirsatIdsRaw = await firsatQuery
+                .Where(o => o.OpportunityStageName != "Lost"
+                    && (o.OpportunityStageName == null || !o.OpportunityStageName.Contains("Closed")))
+                .Select(o => o.Id).ToListAsync();
             var donemFirsatIds = donemFirsatIdsRaw.Where(id => !kapaliSetFunnel.Contains((id ?? "").ToLower())).ToList();
             // Ekle
             var donemCheckF = donemFirsatIds.Select(id => (id ?? "").ToLower()).ToHashSet();
@@ -2748,11 +2830,18 @@ namespace SOS.Controllers
                 if (!donemCheckF.Contains(ekId)) donemFirsatIds.Add(ekId);
             var donemGuidSet = donemFirsatIds.Where(id => Guid.TryParse(id, out _)).Select(id => Guid.Parse(id)).ToHashSet();
 
+            // ── Exclusive pipeline setleri ──
+            var donemFirsatIdSetLower = donemFirsatIds
+                .Select(id => (id ?? "").ToLower())
+                .Where(id => !string.IsNullOrEmpty(id))
+                .ToHashSet(StringComparer.OrdinalIgnoreCase);
+            var exclusiveSets = await GetExclusiveSetsAsync(start, end, null, donemFirsatIdSetLower);
+
             // Dönem teklifleri (fırsata bağlı + CreatedOn dönemde — Kart 3 referansıyla tutarlı)
             var donemTeklifler = await ExcludeTest(db.TBL_VARUNA_TEKLIFs.AsNoTracking())
                 .Where(t => t.DeletedOn == null && t.OpportunityId.HasValue && donemGuidSet.Contains(t.OpportunityId.Value)
                     && t.CreatedOn.HasValue && t.CreatedOn.Value >= start && t.CreatedOn.Value <= end)
-                .Select(t => new { t.Id, t.ProposalOwnerId, t.TotalNetAmountLocalCurrency_Amount, t.Status })
+                .Select(t => new { t.Id, t.ProposalOwnerId, t.TotalNetAmountLocalCurrency_Amount, t.Status, t.OpportunityId })
                 .ToListAsync();
             var donemTeklifIdSet = donemTeklifler.Select(t => t.Id.ToString()).ToHashSet();
 
@@ -2791,11 +2880,11 @@ namespace SOS.Controllers
             object ownerBreakdown;
             object productBreakdown;
 
-            if (funnel <= 2)
+            if (funnel <= 4)
             {
                 // ── Referansla tutarlı base set oluştur ──
-                // Kart 1 (tumFirsatTutar): Won+Lost+Closed hariç açık havuz (tüm zamanlar)
-                // Kart 2 (aktivTutar): dönemde CloseDate olan, Won+Lost hariç aktif fırsatlar
+                // Funnel 1: Tüm fırsatlar (açık havuz)
+                // Funnel 2-4: Exclusive pipeline setleri (fırsat bazlı breakdown)
                 var excludeStages = new HashSet<string>(StringComparer.OrdinalIgnoreCase) { "Lost", "Won" };
 
                 IQueryable<TBL_VARUNA_OPPORTUNITIES> baseQuery;
@@ -2808,16 +2897,17 @@ namespace SOS.Controllers
                 }
                 else
                 {
-                    // Dönem aktif fırsatları — donemFirsatIds'den Won+Lost çıkar
-                    var aktifIds = donemFirsatIds.ToHashSet();
+                    // Funnel 2/3/4: Her biri kendi exclusive setini kullanır
+                    var aktifIds = funnel == 2 ? exclusiveSets.ExFirsatIds
+                                 : funnel == 3 ? exclusiveSets.ExTeklifIds
+                                 : exclusiveSets.ExSiparisIds;
                     baseQuery = ExcludeTestFirsat(db.TBL_VARUNA_OPPORTUNITIESs.AsNoTracking())
-                        .Where(o => aktifIds.Contains(o.Id)
-                            && !excludeStages.Contains(o.OpportunityStageName ?? "")
-                            && (o.OpportunityStageName == null || !o.OpportunityStageName.Contains("Closed")));
+                        .Where(o => aktifIds.Contains(o.Id));
                 }
 
-                // kapaliSet filtresi (tahakkuk-aware)
-                baseQuery = baseQuery.Where(o => !kapaliSetFunnel.Contains((o.Id ?? "").ToLower()));
+                // kapaliSet filtresi (tahakkuk-aware) — sadece funnel=1'de gerekli, 2-4 exclusive set zaten filtrelenmiş
+                if (funnel == 1)
+                    baseQuery = baseQuery.Where(o => !kapaliSetFunnel.Contains((o.Id ?? "").ToLower()));
 
                 // Alt-katman filtreleri (customer/product/ownerName firsatQuery'de zaten uygulandı)
                 if (!string.IsNullOrEmpty(customer))
@@ -2893,98 +2983,6 @@ namespace SOS.Controllers
                 sharedFirsatAmountMap = firsatWithOwner.ToDictionary(f => (f.Id ?? "").ToLower(), f => f.AmountAmount ?? 0m);
                 if (efektifFirsatIdSet == null)
                     efektifFirsatIdSet = firsatWithOwner.Select(d => d.Id).Where(id => id != null).ToHashSet()!;
-            }
-            else if (funnel == 3)
-            {
-                // Teklif bazlı — sadece gönderilmiş teklifler (Draft ve InReview hariç)
-                var sentTeklifler = donemTeklifler
-                    .Where(t => t.Status != null && t.Status != "Draft" && t.Status != "InReview")
-                    .ToList();
-
-                ownerBreakdown = sentTeklifler
-                    .Where(t => t.ProposalOwnerId.HasValue)
-                    .GroupBy(t => t.ProposalOwnerId!.Value.ToString())
-                    .Select(g => new { adSoyad = ResolveOwnerName(g.Key, ownerMap), tutar = g.Sum(t => t.TotalNetAmountLocalCurrency_Amount ?? 0m), adet = g.Count() })
-                    .OrderByDescending(x => x.tutar).Take(10).ToList();
-
-                // Ürün: teklif başlık tutarını kalemlere oransal TL dağıtımı
-                var sentTeklifIds = sentTeklifler.Select(t => t.Id).ToHashSet();
-                var sentTeklifTutarMap = sentTeklifler.ToDictionary(t => t.Id, t => t.TotalNetAmountLocalCurrency_Amount ?? 0m);
-                var teklifUrunleri = await db.TBL_VARUNA_TEKLIF_URUNLERIs.AsNoTracking()
-                    .Where(u => u.DeletedOn == null && u.QuoteId.HasValue && sentTeklifIds.Contains(u.QuoteId.Value))
-                    .Select(u => new { u.QuoteId, u.StockCode, Total = u.NetLineTotalAmountLocal_Amount ?? 0m })
-                    .ToListAsync();
-                // Teklif başına kalem döviz toplamı
-                var teklifKalemToplam = teklifUrunleri.GroupBy(u => u.QuoteId!.Value)
-                    .ToDictionary(g => g.Key, g => g.Sum(u => u.Total));
-
-                productBreakdown = teklifUrunleri
-                    .Select(u => new {
-                        urun = ResolveProductGroup(u.StockCode, eslestirmeMap),
-                        tlTutar = teklifKalemToplam.TryGetValue(u.QuoteId!.Value, out var dt) && dt > 0
-                            ? (u.Total / dt) * sentTeklifTutarMap.GetValueOrDefault(u.QuoteId.Value, 0m)
-                            : 0m
-                    })
-                    .GroupBy(x => x.urun)
-                    .Select(g => new { urun = g.Key, tutar = g.Sum(x => x.tlTutar), adet = g.Count() })
-                    .OrderByDescending(x => x.tutar).ToList();
-            }
-            else if (funnel == 4)
-            {
-                // Sipariş bazlı — sadece Open siparişler (Kart 4 referansıyla tutarlı)
-                var baseSiparisler = (await GetFilteredSiparislerAsync(db, start, end))
-                    .Where(s => s.OrderStatus == "Open").ToList();
-
-                // Alt-katman filtreleri
-                if (ownerPidSet != null)
-                    baseSiparisler = baseSiparisler
-                        .Where(s => s.ProposalOwnerId != null && ownerPidSet.Contains(s.ProposalOwnerId.ToLower()))
-                        .ToList();
-                if (!string.IsNullOrEmpty(customer))
-                    baseSiparisler = baseSiparisler
-                        .Where(s => s.AccountTitle == customer).ToList();
-
-                // Ürün: oransal TL dağıtımı (kalem döviz → sipariş TL oranı)
-                var baseOrderIds = baseSiparisler.Select(s => s.OrderId).Where(o => o != null).Distinct().ToList();
-                var sipTotalMap = baseSiparisler.Where(s => s.OrderId != null)
-                    .ToDictionary(s => s.OrderId!, s => s.TotalNetAmount ?? 0m);
-                var rawUrunleri = await db.TBL_VARUNA_SIPARIS_URUNLERIs.AsNoTracking()
-                    .Where(u => u.CrmOrderId != null && baseOrderIds.Contains(u.CrmOrderId))
-                    .Select(u => new { u.CrmOrderId, u.StockCode, Total = u.Total ?? 0m })
-                    .ToListAsync();
-                // Sipariş başına döviz toplamı
-                var orderDovizToplam = rawUrunleri.GroupBy(u => u.CrmOrderId!)
-                    .ToDictionary(g => g.Key, g => g.Sum(u => u.Total));
-                // Her kaleme oransal TL dağıt
-                var urunTlList = rawUrunleri.Select(u => new {
-                    urun = ResolveProductGroup(u.StockCode, eslestirmeMap),
-                    tlTutar = orderDovizToplam.TryGetValue(u.CrmOrderId!, out var dt) && dt > 0
-                        ? (u.Total / dt) * sipTotalMap.GetValueOrDefault(u.CrmOrderId!, 0m)
-                        : 0m
-                }).ToList();
-
-                // Ürün filtresi
-                if (!string.IsNullOrEmpty(product))
-                {
-                    var matchingOrderIds = rawUrunleri
-                        .Where(u => ResolveProductGroup(u.StockCode, eslestirmeMap) == product)
-                        .Select(u => u.CrmOrderId).ToHashSet();
-                    baseSiparisler = baseSiparisler.Where(s => matchingOrderIds.Contains(s.OrderId)).ToList();
-                    urunTlList = urunTlList.Where(u => u.urun == product).ToList();
-                }
-
-                funnel45Base = baseSiparisler;
-
-                ownerBreakdown = baseSiparisler
-                    .Where(s => !string.IsNullOrEmpty(s.ProposalOwnerId))
-                    .GroupBy(s => s.ProposalOwnerId!)
-                    .Select(g => new { adSoyad = ResolveOwnerName(g.Key, ownerMap), tutar = g.Sum(s => s.TotalNetAmount ?? 0m), adet = g.Count() })
-                    .OrderByDescending(x => x.tutar).Take(10).ToList();
-
-                productBreakdown = urunTlList
-                    .GroupBy(x => x.urun)
-                    .Select(g => new { urun = g.Key, tutar = g.Sum(x => x.tlTutar), adet = g.Count() })
-                    .OrderByDescending(x => x.tutar).ToList();
             }
             else
             {
@@ -3066,7 +3064,7 @@ namespace SOS.Controllers
 
             // Müşteri verisi — funnel'a göre
             object customerBreakdown;
-            if (funnel <= 2)
+            if (funnel <= 4)
             {
                 // Aynı base'den müşteri gruplama (sharedFirsatAmountMap + efektifFirsatIdSet)
                 var custGuidSet = efektifFirsatIdSet!.Where(id => Guid.TryParse(id, out _)).Select(id => Guid.Parse(id)).ToHashSet();
@@ -3079,29 +3077,6 @@ namespace SOS.Controllers
                     .GroupBy(t => t.OppId).Select(g => g.First())
                     .GroupBy(t => t.Account_Title!)
                     .Select(g => new { musteri = g.Key, tutar = g.Sum(x => sharedFirsatAmountMap!.GetValueOrDefault(x.OppId, 0m)), adet = g.Count() })
-                    .OrderByDescending(x => x.tutar).Take(10).ToList();
-            }
-            else if (funnel == 3)
-            {
-                // Teklif bazlı müşteri — gönderilmiş teklifler
-                customerBreakdown = donemTeklifler
-                    .Where(t => t.Status != null && t.Status != "Draft" && t.Status != "InReview")
-                    .Join(await ExcludeTest(db.TBL_VARUNA_TEKLIFs.AsNoTracking())
-                        .Where(t => t.DeletedOn == null && t.Account_Title != null)
-                        .Select(t => new { t.Id, t.Account_Title })
-                        .ToListAsync(),
-                        dt => dt.Id, ft => ft.Id, (dt, ft) => new { ft.Account_Title, dt.TotalNetAmountLocalCurrency_Amount })
-                    .GroupBy(x => x.Account_Title!)
-                    .Select(g => new { musteri = g.Key, tutar = g.Sum(x => x.TotalNetAmountLocalCurrency_Amount ?? 0m), adet = g.Count() })
-                    .OrderByDescending(x => x.tutar).Take(10).ToList();
-            }
-            else if (funnel == 4)
-            {
-                // Sipariş bazlı müşteri — aynı filtrelenmiş base (tutarlılık)
-                customerBreakdown = (funnel45Base ?? new List<TBL_VARUNA_SIPARI>())
-                    .Where(s => s.AccountTitle != null)
-                    .GroupBy(s => s.AccountTitle!)
-                    .Select(g => new { musteri = g.Key, tutar = g.Sum(s => s.TotalNetAmount ?? 0m), adet = g.Count() })
                     .OrderByDescending(x => x.tutar).Take(10).ToList();
             }
             else
