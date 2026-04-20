@@ -19,9 +19,32 @@ if (builder.Environment.IsDevelopment())
 // Add services to the container.
 builder.Services.AddTransient<IEmailService, SmtpEmailService>();
 var mvcBuilder = builder.Services.AddControllersWithViews();
-#if DEBUG
-mvcBuilder.AddRazorRuntimeCompilation();
-#endif
+mvcBuilder.AddRazorRuntimeCompilation(options =>
+{
+    // .NET 10: ref assembly'lerini packs dizininden ekle
+    var dotnetRoot = System.Environment.GetEnvironmentVariable("DOTNET_ROOT")
+        ?? System.IO.Path.Combine(System.Environment.GetFolderPath(System.Environment.SpecialFolder.ProgramFiles), "dotnet");
+    var tfm = $"net{System.Environment.Version.Major}.0";
+    foreach (var packName in new[] { "Microsoft.NETCore.App.Ref", "Microsoft.AspNetCore.App.Ref" })
+    {
+        var packBase = System.IO.Path.Combine(dotnetRoot, "packs", packName);
+        if (!System.IO.Directory.Exists(packBase)) continue;
+        var latest = System.IO.Directory.GetDirectories(packBase)
+            .Select(d => new { Path = d, Ver = System.IO.Path.GetFileName(d) })
+            .Where(x => System.Version.TryParse(x.Ver, out _))
+            .OrderByDescending(x => new System.Version(x.Ver))
+            .FirstOrDefault();
+        if (latest == null) continue;
+        var refDir = System.IO.Path.Combine(latest.Path, "ref", tfm);
+        if (!System.IO.Directory.Exists(refDir)) continue;
+        foreach (var dll in System.IO.Directory.GetFiles(refDir, "*.dll"))
+            options.AdditionalReferencePaths.Add(dll);
+    }
+    // Projenin kendi assembly'sini ve bağımlılıklarını ekle
+    var appDir = AppContext.BaseDirectory;
+    foreach (var dll in System.IO.Directory.GetFiles(appDir, "*.dll"))
+        options.AdditionalReferencePaths.Add(dll);
+});
 builder.Services.AddScoped<ICompanyResolutionService, CompanyResolutionService>();
 builder.Services.AddScoped<IDatabaseMigrationService, DatabaseMigrationService>();
 builder.Services.AddHttpContextAccessor();

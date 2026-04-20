@@ -48,3 +48,22 @@ build_*.txt
 zabbix_keys_dump.txt
 run_log.txt
 diagnostic_script_placeholder.txt
+
+# Publish output
+publish/
+
+# Backup files
+*.bak
+*.bak_*
+
+# Temp files
+cookies.txt
+check_tables.csx
+CheckTables/
+*.csv
+repomix-output.xml
+repomix.config.json
+
+# Claude
+.claude/
+Docs/Adsız 3.txt

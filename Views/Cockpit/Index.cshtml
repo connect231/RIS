@@ -556,11 +556,11 @@
 
     <!-- SÖZLEŞMELER (CRM) -->
     @{
-        var sozYuzde = Model.SozlesmelerToplam > 0 ? Math.Round(Model.SozFaturalandiToplam / Model.SozlesmelerToplam * 100, 1) : 0;
+        var sozYuzde = Model.SozlesmelerToplam > 0 ? Math.Round(Model.SozArchivedToplam / Model.SozlesmelerToplam * 100, 1) : 0;
         var sozPctClamped = Math.Min(sozYuzde, 100);
         var sozBarClr = sozYuzde >= 80 ? "#10b981" : sozYuzde >= 50 ? "#f59e0b" : "#ef4444";
         var sozPctCls = sozYuzde >= 80 ? "text-green-600" : sozYuzde >= 50 ? "text-amber-600" : "text-red-500";
-        var sozKalan = Model.SozlesmelerToplam - Model.SozFaturalandiToplam;
+        var sozKalan = Model.SozlesmelerToplam - Model.SozArchivedToplam;
     }
     <div class="card-secondary spotlight-card accent-red p-5">
         <div class="flex items-start justify-between mb-3">
@@ -576,11 +576,11 @@
             </button>
         </div>
         <div class="flex items-baseline gap-2">
-            <p id="sozlesmelerTutar" class="text-[1.4rem] font-semibold text-slate-500 leading-tight num" data-countup="@Model.SozFaturalandiToplam.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)" data-prefix="₺">₺0</p>
+            <p id="sozlesmelerTutar" class="text-[1.4rem] font-semibold text-slate-500 leading-tight num" data-countup="@Model.SozArchivedToplam.ToString("F0", System.Globalization.CultureInfo.InvariantCulture)" data-prefix="₺">₺0</p>
             <span id="sozlesmelerPayda" class="text-[1.4rem] font-bold text-[#1e293b]">/ ₺@Model.SozlesmelerToplam.ToString("N0")</span>
         </div>
         <div class="flex items-center justify-between mt-2">
-            <span id="sozlesmelerAdet" class="text-xs text-slate-400">@Model.SozFaturalandiAdet / @Model.SozlesmelerAdet adet</span>
+            <span id="sozlesmelerAdet" class="text-xs text-slate-400">@Model.SozArchivedAdet / @Model.SozlesmelerAdet adet</span>
             <span id="sozYuzde" class="text-lg font-extrabold @sozPctCls">%@sozYuzde.ToString("N1")</span>
         </div>
         <div class="h-2 rounded-full overflow-hidden mt-1.5 mb-2" style="background:rgba(0,0,0,0.06);">
@@ -1284,12 +1284,11 @@ window.__initialData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(new {
             snap('vadesiGecmisAdet', d.vadesiGecmisAdet + ' fatura');
             snap('vadesiGecmisLabel', d.filtreBaslangic + ' öncesi açık bakiye');
 
-            // Sözleşme kartı — sayaç animasyonu
-            countUp(document.getElementById('sozlesmelerTutar'), d.sozFaturalandiToplam || d.sozArchivedToplam, 600, '₺');
+            // Sözleşme kartı — PAY: Archived (imzalanan)
+            countUp(document.getElementById('sozlesmelerTutar'), d.sozArchivedToplam || 0, 600, '₺');
             snap('sozlesmelerPayda', '/ ₺' + fmtN.format(d.sozlesmelerToplam));
-            snap('sozlesmelerAdet', (d.sozFaturalandiAdet || d.sozArchivedAdet) + ' / ' + d.sozlesmelerAdet + ' adet');
-            var sozFatVal = d.sozFaturalandiToplam || d.sozArchivedToplam;
-            var sozPct = d.sozlesmelerToplam > 0 ? Math.round(sozFatVal / d.sozlesmelerToplam * 1000) / 10 : 0;
+            snap('sozlesmelerAdet', (d.sozArchivedAdet || 0) + ' / ' + d.sozlesmelerAdet + ' adet');
+            var sozPct = d.sozlesmelerToplam > 0 ? Math.round((d.sozArchivedToplam || 0) / d.sozlesmelerToplam * 1000) / 10 : 0;
             // 1) Faturalandı + Kısmi oran
             var fatAdetSoz = (d.sozFaturalandiAdet || 0) + (d.sozKismiFatAdet || 0);
             var fatToplamSoz = (d.sozFaturalandiToplam || 0) + (d.sozKismiFatToplam || 0);
@@ -1314,7 +1313,7 @@ window.__initialData = @Html.Raw(System.Text.Json.JsonSerializer.Serialize(new {
             if (sozPctEl) { sozPctEl.className = 'text-lg font-extrabold ' + (sozPct >= 80 ? 'text-green-600' : sozPct >= 50 ? 'text-amber-600' : 'text-red-500'); sozPctEl.textContent = '%' + sozPct.toFixed(1); }
             var sozBar = document.getElementById('sozProgressBar');
             if (sozBar) { sozBar.style.width = sozClamp + '%'; sozBar.style.background = sozClr; }
-            snapHtml('sozKalan', 'Kalan: <span class="font-bold text-blue-700">₺' + fmtN.format(d.sozlesmelerToplam - sozFatVal) + '</span>');
+            snapHtml('sozKalan', 'Kalan: <span class="font-bold text-blue-700">₺' + fmtN.format(d.sozlesmelerToplam - (d.sozArchivedToplam || 0)) + '</span>');
 
             // Trend
             snapHtml('faturalarTrend', trendHtml(d.faturalarTrend, d.prevFaturalarToplam));

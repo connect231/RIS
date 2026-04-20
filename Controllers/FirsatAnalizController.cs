@@ -544,6 +544,10 @@ namespace SOS.Controllers
         {
             var (start, end, _, _) = ParseFilter(filter, startDate, endDate);
 
+            var cacheKey = $"FirsatKpi_{start:yyyyMMdd}_{end:yyyyMMdd}_{person ?? "all"}_{product ?? "all"}";
+            if (_cache.TryGetValue(cacheKey, out object? cachedKpi) && cachedKpi != null)
+                return Json(cachedKpi);
+
             using var db = _contextFactory.CreateDbContext();
             var teklifler = GetFilteredTeklifler(db, start, end, person, product);
 
@@ -608,7 +612,7 @@ namespace SOS.Controllers
                 ? Math.Round(pipelineToplam / aktifFirsatAdet, 2)
                 : 0m;
 
-            return Json(new FirsatKpiDto(
+            var result = new FirsatKpiDto(
                 PipelineToplam: pipelineToplam,
                 AktifFirsatAdet: aktifFirsatAdet,
                 AktifFirsatTrend: aktifFirsatTrend,
@@ -621,7 +625,9 @@ namespace SOS.Controllers
                 KazanmaOraniCount: kazanmaOraniCount,
                 KazanmaOraniRevenue: kazanmaOraniRevenue,
                 OrtAnlasma: ortAnlasma
-            ));
+            );
+            _cache.Set(cacheKey, result, CacheTTL);
+            return Json(result);
         }
 
         // ===================================================================
@@ -631,6 +637,10 @@ namespace SOS.Controllers
         public async Task<IActionResult> GetFunnelData(string? filter, string? startDate, string? endDate, string? person, string? product)
         {
             var (start, end, _, _) = ParseFilter(filter, startDate, endDate);
+
+            var cacheKey = $"FirsatFunnel_{start:yyyyMMdd}_{end:yyyyMMdd}_{person ?? "all"}_{product ?? "all"}";
+            if (_cache.TryGetValue(cacheKey, out object? cachedFunnel) && cachedFunnel != null)
+                return Json(cachedFunnel);
 
             using var db = _contextFactory.CreateDbContext();
             var teklifler = GetFilteredTeklifler(db, start, end, person, product);
@@ -681,6 +691,7 @@ namespace SOS.Controllers
                     wonCount > 0 ? Math.Round((decimal)siparisCount / wonCount * 100, 1) : 0m, "#10b981")
             };
 
+            _cache.Set(cacheKey, stages, CacheTTL);
             return Json(stages);
         }
 
@@ -691,6 +702,10 @@ namespace SOS.Controllers
         public async Task<IActionResult> GetStatusBreakdown(string type, string? filter, string? startDate, string? endDate, string? person, string? product)
         {
             var (start, end, _, _) = ParseFilter(filter, startDate, endDate);
+
+            var cacheKey = $"FirsatStatus_{type}_{start:yyyyMMdd}_{end:yyyyMMdd}_{person ?? "all"}_{product ?? "all"}";
+            if (_cache.TryGetValue(cacheKey, out object? cachedStatus) && cachedStatus != null)
+                return Json(cachedStatus);
 
             using var db = _contextFactory.CreateDbContext();
 
@@ -718,6 +733,7 @@ namespace SOS.Controllers
                         GrandCount: items.Sum(i => i.Count),
                         Items: items
                     );
+                    _cache.Set(cacheKey, group, CacheTTL);
                     return Json(group);
                 }
                 case "siparisler":
@@ -736,13 +752,14 @@ namespace SOS.Controllers
                         Icon: "fas fa-shopping-cart"
                     )).OrderByDescending(i => i.TotalValue).ToList();
 
-                    var group = new StatusBreakdownGroupDto(
+                    var group2 = new StatusBreakdownGroupDto(
                         GroupTitle: "Siparis Durumlari",
                         GrandTotal: items.Sum(i => i.TotalValue),
                         GrandCount: items.Sum(i => i.Count),
                         Items: items
                     );
-                    return Json(group);
+                    _cache.Set(cacheKey, group2, CacheTTL);
+                    return Json(group2);
                 }
                 default:
                     return BadRequest(new { error = "Gecersiz tip. Kullanilabilir: firsatlar, teklifler, siparisler" });
@@ -1174,6 +1191,10 @@ namespace SOS.Controllers
         {
             var (start, end, _, _) = ParseFilter(filter, startDate, endDate);
 
+            var cacheKey = $"FirsatProduct_{start:yyyyMMdd}_{end:yyyyMMdd}_{person ?? "all"}";
+            if (_cache.TryGetValue(cacheKey, out object? cachedProduct) && cachedProduct != null)
+                return Json(cachedProduct);
+
             // Use TBLSOS_ANA_URUN + TBLSOS_URUN_ESLESTIRME
             var eslestirmeMap = await GetUrunEslestirmeMapAsync();
 
@@ -1265,6 +1286,7 @@ namespace SOS.Controllers
                 .OrderByDescending(x => x.teklifTutar)
                 .ToList();
 
+            _cache.Set(cacheKey, productPerformance, CacheTTL);
             return Json(productPerformance);
         }
 
@@ -2368,8 +2390,43 @@ namespace SOS.Controllers
         [HttpGet]
         public async Task<IActionResult> GetOwnerPerformance(string? filter, string? startDate, string? endDate)
         {
-            using var db = _contextFactory.CreateDbContext();
             var (start, end, _, _) = ParseFilter(filter, startDate, endDate);
+
+            var cacheKey = $"FirsatOwnerPerf_{start:yyyyMMdd}_{end:yyyyMMdd}";
+            if (_cache.TryGetValue(cacheKey, out object? cachedOwner) && cachedOwner != null)
+                return Json(cachedOwner);
+
+            var (salesReps, _) = await BuildOwnerPerformanceDataAsync(start, end);
+
+            _cache.Set(cacheKey, salesReps, CacheTTL);
+            return Json(salesReps);
+        }
+
+        // ───────────────────────────────────────────────────────────────
+        // GET /FirsatAnaliz/GetFirsatSahipleri — Account Rep olmayan fırsat sahipleri
+        // ───────────────────────────────────────────────────────────────
+        [HttpGet]
+        public async Task<IActionResult> GetFirsatSahipleri(string? filter, string? startDate, string? endDate)
+        {
+            var (start, end, _, _) = ParseFilter(filter, startDate, endDate);
+
+            var cacheKey = $"FirsatSahipleri_{start:yyyyMMdd}_{end:yyyyMMdd}";
+            if (_cache.TryGetValue(cacheKey, out object? cachedFs) && cachedFs != null)
+                return Json(cachedFs);
+
+            var (_, firsatSahipleri) = await BuildOwnerPerformanceDataAsync(start, end);
+
+            _cache.Set(cacheKey, firsatSahipleri, CacheTTL);
+            return Json(firsatSahipleri);
+        }
+
+        /// <summary>
+        /// Ortak veri: satış temsilcileri (account rep) ve fırsat sahipleri (account rep olmayan) ayrıştırılır.
+        /// </summary>
+        private async Task<(object salesReps, object firsatSahipleri)> BuildOwnerPerformanceDataAsync(DateTime start, DateTime end)
+        {
+            using var db = _contextFactory.CreateDbContext();
+            var personMap = await GetAccountRepPersonMapAsync(db);
             var ownerMap = await GetOwnerMapAsync();
 
             // Dönem fırsatları
@@ -2380,8 +2437,7 @@ namespace SOS.Controllers
                 .Select(o => new { o.Id, o.OwnerId, o.OpportunityStageName, o.AmountAmount })
                 .ToListAsync();
 
-            // Fırsat Id → Teklif ProposalOwnerId lookup (ilk teklif sahibi)
-            var firsatIds = firsatlar.Select(f => f.Id).Where(id => id != null).ToList();
+            // Fırsat Id → Teklif ProposalOwnerId lookup
             var teklifOwnerMap = await ExcludeTest(db.TBL_VARUNA_TEKLIFs.AsNoTracking())
                 .Where(t => t.DeletedOn == null && t.OpportunityId.HasValue && t.ProposalOwnerId.HasValue)
                 .Select(t => new { OppId = t.OpportunityId!.Value.ToString().ToLower(), t.ProposalOwnerId })
@@ -2390,7 +2446,6 @@ namespace SOS.Controllers
                 .GroupBy(t => t.OppId)
                 .ToDictionary(g => g.Key, g => g.First().ProposalOwnerId!.Value.ToString().ToLower());
 
-            // Her fırsat için efektif satış temsilcisi: teklif sahibi varsa o, yoksa fırsat sahibi
             var data = firsatlar.Select(f =>
             {
                 var firsatId = f.Id?.ToLower() ?? "";
@@ -2400,7 +2455,7 @@ namespace SOS.Controllers
                 return new { OwnerId = efektifOwner, f.OpportunityStageName, f.AmountAmount };
             }).ToList();
 
-            var performance = data
+            var allGrouped = data
                 .GroupBy(d => d.OwnerId)
                 .Select(g =>
                 {
@@ -2415,28 +2470,112 @@ namespace SOS.Controllers
                     var toplamTutar = g.Sum(d => d.AmountAmount ?? 0m);
                     var wonTutar = g.Where(d => d.OpportunityStageName == "Won").Sum(d => d.AmountAmount ?? 0m);
 
+                    var isAccountRep = personMap.ContainsKey(g.Key);
+                    var adSoyad = isAccountRep
+                        ? personMap[g.Key]
+                        : (ownerMap.TryGetValue(g.Key, out var n) ? n : g.Key[..Math.Min(8, g.Key.Length)] + "…");
+
                     return new
                     {
                         ownerId = g.Key,
-                        adSoyad = ResolveOwnerName(g.Key, ownerMap),
+                        adSoyad,
                         toplam = total,
                         aktif = active,
                         won,
                         lost,
                         kazanmaOrani = winRate,
                         toplamTutar,
-                        wonTutar
+                        wonTutar,
+                        isAccountRep
                     };
                 })
                 .Where(x => !x.adSoyad.Contains("GMAIL", StringComparison.OrdinalIgnoreCase)
                     && !x.adSoyad.Contains("TEST", StringComparison.OrdinalIgnoreCase)
                     && !x.adSoyad.Contains("DENEME", StringComparison.OrdinalIgnoreCase)
                     && !x.adSoyad.StartsWith("Bilinmiyor", StringComparison.OrdinalIgnoreCase))
-                .OrderByDescending(x => x.wonTutar)
-                .ThenByDescending(x => x.toplam)
                 .ToList();
 
-            return Json(performance);
+            var salesReps = allGrouped.Where(x => x.isAccountRep)
+                .OrderByDescending(x => x.wonTutar).ThenByDescending(x => x.toplam).ToList();
+            var firsatSahipleri = allGrouped.Where(x => !x.isAccountRep)
+                .OrderByDescending(x => x.toplamTutar).ThenByDescending(x => x.toplam).ToList();
+
+            return (salesReps, firsatSahipleri);
+        }
+
+        /// <summary>
+        /// TBL_VARUNA_ACCOUNT_REPRESENTATIVES.AccountOwnerId → TBL_VARUNA_PERSON.PersonNameSurname map'i
+        /// </summary>
+        private async Task<Dictionary<string, string>> GetAccountRepPersonMapAsync(MskDbContext db)
+        {
+            var mapCacheKey = "account_rep_person_map";
+            if (_cache.TryGetValue(mapCacheKey, out Dictionary<string, string>? cached) && cached != null)
+                return cached;
+
+            // AccountOwnerId'leri al
+            var reps = await db.TBL_VARUNA_ACCOUNT_REPRESENTATIVESs.AsNoTracking()
+                .Where(r => r.AccountOwnerId.HasValue && r.State == "Active")
+                .Select(r => r.AccountOwnerId!.Value)
+                .Distinct()
+                .ToListAsync();
+
+            var repIdStrings = reps.Select(r => r.ToString().ToLower()).ToHashSet();
+
+            // TBL_VARUNA_PERSON'dan isim çözümle
+            var persons = await db.TBL_VARUNA_PERSONs.AsNoTracking()
+                .Where(p => p.PersonNameSurname != null && p.DeletedOn == null)
+                .Select(p => new { p.Id, p.PersonNameSurname })
+                .ToListAsync();
+
+            var map = persons
+                .Where(p => repIdStrings.Contains(p.Id.ToLower()))
+                .GroupBy(p => p.Id.ToLower())
+                .ToDictionary(g => g.Key, g => g.First().PersonNameSurname!);
+
+            _cache.Set(mapCacheKey, map, CacheTTL);
+            return map;
+        }
+
+        /// <summary>
+        /// TBL_VARUNA_PERSON: Id → PersonNameSurname (tüm aktif kişiler)
+        /// </summary>
+        private async Task<Dictionary<string, string>> GetPersonMapAsync(MskDbContext db)
+        {
+            var cacheKey = "person_map_all";
+            if (_cache.TryGetValue(cacheKey, out Dictionary<string, string>? cached) && cached != null)
+                return cached;
+
+            var map = await db.TBL_VARUNA_PERSONs.AsNoTracking()
+                .Where(p => p.PersonNameSurname != null && p.DeletedOn == null)
+                .Select(p => new { p.Id, p.PersonNameSurname })
+                .ToListAsync();
+
+            var dict = map.GroupBy(p => p.Id.ToLower())
+                .ToDictionary(g => g.Key, g => g.First().PersonNameSurname!);
+
+            _cache.Set(cacheKey, dict, CacheTTL);
+            return dict;
+        }
+
+        /// <summary>
+        /// AccountId → AccountOwnerId (lowercase string) map
+        /// </summary>
+        private async Task<Dictionary<string, string>> GetAccountToRepMapAsync(MskDbContext db)
+        {
+            var cacheKey = "account_to_rep_map";
+            if (_cache.TryGetValue(cacheKey, out Dictionary<string, string>? cached) && cached != null)
+                return cached;
+
+            var reps = await db.TBL_VARUNA_ACCOUNT_REPRESENTATIVESs.AsNoTracking()
+                .Where(r => r.AccountOwnerId.HasValue && r.AccountId.HasValue && r.State == "Active")
+                .Select(r => new { AccountId = r.AccountId!.Value.ToString().ToLower(), RepId = r.AccountOwnerId!.Value.ToString().ToLower() })
+                .ToListAsync();
+
+            var dict = reps.GroupBy(r => r.AccountId)
+                .ToDictionary(g => g.Key, g => g.First().RepId);
+
+            _cache.Set(cacheKey, dict, CacheTTL);
+            return dict;
         }
 
         // ───────────────────────────────────────────────────────────────
@@ -2445,6 +2584,10 @@ namespace SOS.Controllers
         [HttpGet]
         public async Task<IActionResult> GetOwnerFilterOptions()
         {
+            var cacheKey = "FirsatOwnerFilterOptions";
+            if (_cache.TryGetValue(cacheKey, out object? cachedOptions) && cachedOptions != null)
+                return Json(cachedOptions);
+
             using var db = _contextFactory.CreateDbContext();
             var ownerMap = await GetOwnerMapAsync();
 
@@ -2462,6 +2605,7 @@ namespace SOS.Controllers
                 o.adet
             }).ToList();
 
+            _cache.Set(cacheKey, result, CacheTTL);
             return Json(result);
         }
 
@@ -2878,6 +3022,7 @@ namespace SOS.Controllers
 
             // Owner dağılımı: funnel'a göre
             object ownerBreakdown;
+            object firsatSahipleriBreakdown = new List<object>();
             object productBreakdown;
 
             if (funnel <= 4)
@@ -2929,8 +3074,7 @@ namespace SOS.Controllers
                 }
 
                 var firsatOwnerData = await baseQuery
-                    .Where(o => o.OwnerId != null)
-                    .Select(o => new { o.Id, o.OwnerId, o.AmountAmount, o.OpportunityStageName, o.ProductGroupId })
+                    .Select(o => new { o.Id, OwnerId = o.OwnerId ?? "unknown", o.AccountId, o.AmountAmount, o.OpportunityStageName, o.ProductGroupId })
                     .ToListAsync();
 
                 // Efektif sahip: teklif sahibi varsa o, yoksa fırsat sahibi
@@ -2946,6 +3090,8 @@ namespace SOS.Controllers
                 var firsatWithOwner = firsatOwnerData
                     .Select(d => new {
                         d.Id,
+                        d.OwnerId,
+                        d.AccountId,
                         EfektifOwner = brkOppToOwner.TryGetValue((d.Id ?? "").ToLower(), out var po) ? po : d.OwnerId!,
                         d.AmountAmount,
                         d.ProductGroupId
@@ -2959,10 +3105,54 @@ namespace SOS.Controllers
                 }
 
                 // ── Tek base set, üç farklı gruplama ──
-                ownerBreakdown = firsatWithOwner
-                    .GroupBy(d => d.EfektifOwner)
-                    .Select(g => new { adSoyad = ResolveOwnerName(g.Key, ownerMap), tutar = g.Sum(d => d.AmountAmount ?? 0m), adet = g.Count() })
-                    .OrderByDescending(x => x.tutar).Take(10).ToList();
+
+                // Person map: Id → PersonNameSurname (TBL_VARUNA_PERSON)
+                var personMapAll = await GetPersonMapAsync(db);
+
+                // AccountId → AccountOwnerId map (TBL_VARUNA_ACCOUNT_REPRESENTATIVES)
+                var accountToRepMap = await GetAccountToRepMapAsync(db);
+
+                // ── Satış Temsilcisi Bazlı: AccountId → AccountRep, yoksa OwnerId fallback ──
+                var salesData = firsatWithOwner
+                    .Select(d => {
+                        // Önce account rep'i bul
+                        var repId = (d.AccountId != null && accountToRepMap.TryGetValue(d.AccountId.ToLower(), out var rid)) ? rid : null;
+                        string repName;
+                        if (repId != null && personMapAll.TryGetValue(repId, out var rn))
+                            repName = rn;
+                        else
+                        {
+                            // Fallback: fırsat sahibini (OwnerId) satış temsilcisi olarak göster
+                            repName = personMapAll.TryGetValue(d.OwnerId.ToLower(), out var on) ? on : ResolveOwnerName(d.OwnerId, ownerMap);
+                        }
+                        return new { RepName = repName, d.AmountAmount };
+                    })
+                    .GroupBy(d => d.RepName)
+                    .Select(g => new { adSoyad = g.Key, tutar = g.Sum(d => d.AmountAmount ?? 0m), adet = g.Count() })
+                    .OrderByDescending(x => x.tutar)
+                    .ToList();
+                var salesTop = salesData.Take(10).ToList();
+                var salesDigerTutar = salesData.Skip(10).Sum(x => x.tutar);
+                var salesDigerAdet = salesData.Skip(10).Sum(x => x.adet);
+                if (salesDigerTutar > 0 || salesDigerAdet > 0)
+                    salesTop.Add(new { adSoyad = "Diğer", tutar = salesDigerTutar, adet = salesDigerAdet });
+                ownerBreakdown = salesTop;
+
+                // ── Fırsat Sahipleri: OwnerId → TBL_VARUNA_PERSON ismi ──
+                var fsData = firsatOwnerData
+                    .GroupBy(d => d.OwnerId!)
+                    .Select(g => {
+                        var name = personMapAll.TryGetValue(g.Key.ToLower(), out var n) ? n : ResolveOwnerName(g.Key, ownerMap);
+                        return new { adSoyad = name, tutar = g.Sum(d => d.AmountAmount ?? 0m), adet = g.Count() };
+                    })
+                    .OrderByDescending(x => x.tutar)
+                    .ToList();
+                var fsTop = fsData.Take(10).ToList();
+                var fsDigerTutar = fsData.Skip(10).Sum(x => x.tutar);
+                var fsDigerAdet = fsData.Skip(10).Sum(x => x.adet);
+                if (fsDigerTutar > 0 || fsDigerAdet > 0)
+                    fsTop.Add(new { adSoyad = "Diğer", tutar = fsDigerTutar, adet = fsDigerAdet });
+                firsatSahipleriBreakdown = fsTop;
 
                 // Ürün: ProductGroupId'si olan fırsatlardan
                 var firsatIdsForProduct = firsatWithOwner
@@ -3006,15 +3196,36 @@ namespace SOS.Controllers
                     spSiparisler = spSiparisler.Where(s => s.AccountTitle == customer).ToList();
 
                 // Owner: SP fatura tutarı ile
-                ownerBreakdown = spSiparisler
+                var accRepMap2 = await GetAccountRepPersonMapAsync(db);
+                var allSpOwnerGroups = spSiparisler
                     .Where(s => !string.IsNullOrEmpty(s.ProposalOwnerId) && s.SerialNumber != null)
                     .GroupBy(s => s.ProposalOwnerId!)
                     .Select(g => new {
-                        adSoyad = ResolveOwnerName(g.Key, ownerMap),
+                        adSoyad = accRepMap2.TryGetValue(g.Key.ToLower(), out var n) ? n : ResolveOwnerName(g.Key, ownerMap),
                         tutar = g.Sum(s => spTutarMap.GetValueOrDefault(s.SerialNumber!, 0m)),
-                        adet = g.Count()
+                        adet = g.Count(),
+                        isAccountRep = accRepMap2.ContainsKey(g.Key.ToLower())
                     })
-                    .OrderByDescending(x => x.tutar).Take(10).ToList();
+                    .Where(x => !x.adSoyad.Contains("GMAIL", StringComparison.OrdinalIgnoreCase)
+                        && !x.adSoyad.Contains("TEST", StringComparison.OrdinalIgnoreCase)
+                        && !x.adSoyad.Contains("DENEME", StringComparison.OrdinalIgnoreCase)
+                        && !x.adSoyad.StartsWith("Bilinmiyor", StringComparison.OrdinalIgnoreCase))
+                    .ToList();
+                var spSalesRepsSorted = allSpOwnerGroups.Where(x => x.isAccountRep)
+                    .OrderByDescending(x => x.tutar).ToList();
+                var spSalesTop = spSalesRepsSorted.Take(10).ToList();
+                var spSalesRest = spSalesRepsSorted.Skip(10).ToList();
+                if (spSalesRest.Any())
+                    spSalesTop.Add(new { adSoyad = "Diğer", tutar = spSalesRest.Sum(x => x.tutar), adet = spSalesRest.Sum(x => x.adet), isAccountRep = true });
+                ownerBreakdown = spSalesTop;
+
+                var spFsSorted = allSpOwnerGroups.Where(x => !x.isAccountRep)
+                    .OrderByDescending(x => x.tutar).ToList();
+                var spFsTop = spFsSorted.Take(10).ToList();
+                var spFsRest = spFsSorted.Skip(10).ToList();
+                if (spFsRest.Any())
+                    spFsTop.Add(new { adSoyad = "Diğer", tutar = spFsRest.Sum(x => x.tutar), adet = spFsRest.Sum(x => x.adet), isAccountRep = false });
+                firsatSahipleriBreakdown = spFsTop;
 
                 // Ürün: oransal TL dağıtımı (SP tutarı base)
                 var spOrderIds = spSiparisler.Select(s => s.OrderId).Where(o => o != null).Distinct().ToList();
@@ -3085,7 +3296,7 @@ namespace SOS.Controllers
                 customerBreakdown = funnel5CustomerBreakdown ?? new List<object>();
             }
 
-            var funnelResult = new { ownerBreakdown, productBreakdown, customerBreakdown, funnel };
+            var funnelResult = new { ownerBreakdown, firsatSahipleriBreakdown, productBreakdown, customerBreakdown, funnel };
             _cache.Set(cacheKey, funnelResult, CacheTTL);
             return Json(funnelResult);
         }

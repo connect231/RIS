@@ -550,10 +550,10 @@
         </div>
     </div>
 
-    <!-- ═══ THREE COLUMN: Ürün + Temsilci + Müşteri ═══ -->
-    <div class="grid grid-cols-3 gap-5 mb-6">
+    <!-- ═══ FOUR COLUMN: Ürün + Temsilci + Fırsat Sahipleri + Müşteri ═══ -->
+    <div class="grid grid-cols-4 gap-5 mb-6">
 
-        <!-- LEFT: Ürün Bazlı -->
+        <!-- 1: Ürün Bazlı -->
         <div>
             <div class="fa-card p-5 h-full">
                 <div class="flex items-center gap-2 mb-4">
@@ -568,7 +568,7 @@
             </div>
         </div>
 
-        <!-- CENTER: Satış Temsilcisi Bazlı -->
+        <!-- 2: Satış Temsilcisi Bazlı -->
         <div>
             <div class="fa-card p-5 h-full">
                 <div class="flex items-center gap-2 mb-4">
@@ -583,7 +583,22 @@
             </div>
         </div>
 
-        <!-- RIGHT: Müşteri Bazlı -->
+        <!-- 3: Fırsat Sahipleri -->
+        <div>
+            <div class="fa-card p-5 h-full">
+                <div class="flex items-center gap-2 mb-4">
+                    <div class="w-7 h-7 rounded-lg bg-amber-50 flex items-center justify-center">
+                        <i class="bi bi-person-badge text-amber-600" style="font-size:13px;"></i>
+                    </div>
+                    <h2 class="text-[13px] font-bold text-[#0f172a] tracking-tight">Fırsat Sahipleri</h2>
+                </div>
+                <div id="firsatSahipleriList" class="space-y-1 content-panel">
+                    <div class="sh w-full mb-2"></div><div class="sh w-4/5 mb-2"></div><div class="sh w-11/12"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 4: Müşteri Bazlı -->
         <div>
             <div class="fa-card p-5 h-full">
                 <div class="flex items-center gap-2 mb-4">
@@ -903,7 +918,8 @@
             loadFunnelBreakdown(activeFunnel > 0 ? activeFunnel : 2),
             loadOppDetail(1),
             loadOwnerOptions(),
-            loadSalesCycle()
+            loadSalesCycle(),
+            loadFirsatSahipleri()
         ]);
     }
 
@@ -973,6 +989,27 @@
                 });
                 ownerEl.innerHTML = h;
             } else ownerEl.innerHTML = '<p class="text-[11px] text-[#94a3b8] text-center py-6">Veri Bulunamadı</p>';
+
+            // Fırsat Sahipleri dağılımı
+            var fsEl = document.getElementById('firsatSahipleriList');
+            if (data.firsatSahipleriBreakdown && data.firsatSahipleriBreakdown.length) {
+                var fh = '';
+                data.firsatSahipleriBreakdown.forEach(function(o, i) {
+                    var clr = avatarColors[(i + 3) % avatarColors.length];
+                    fh += '<div class="flex items-center gap-3 py-2.5 px-2 rounded-lg hover:bg-[#f8fafc] transition-colors">';
+                    fh += '<span class="text-[11px] font-bold text-[#94a3b8] w-5 text-center">#' + (i + 1) + '</span>';
+                    fh += '<div class="avatar-circle" style="background:' + clr + ';">' + initials(o.adSoyad) + '</div>';
+                    fh += '<div class="flex-1 min-w-0">';
+                    fh += '<p class="text-[12px] font-semibold text-[#0f172a] truncate">' + o.adSoyad + '</p>';
+                    fh += '<span class="text-[10px] text-[#94a3b8]">' + o.adet + ' adet</span>';
+                    fh += '</div>';
+                    fh += '<div class="text-right">';
+                    fh += '<p class="text-[13px] font-bold text-[#0f172a]">' + abbr(o.tutar) + '</p>';
+                    fh += '</div></div>';
+                    if (i < data.firsatSahipleriBreakdown.length - 1) fh += '<div class="divider"></div>';
+                });
+                fsEl.innerHTML = fh;
+            } else fsEl.innerHTML = '<p class="text-[11px] text-[#94a3b8] text-center py-6">Veri Bulunamadı</p>';
 
             // Ürün dağılımı
             var prodEl = document.getElementById('productBars');
@@ -1224,12 +1261,12 @@
             ph += '<div class="px-3 py-2.5 rounded-lg ' + potClr + ' border">';
             ph += '<p class="text-[10px] font-bold ' + pctColor(potPct) + '">Tahmini hedef gerçekleşme</p>';
             ph += '<p class="text-[22px] font-extrabold ' + pctColor(potPct) + '">%' + fmtPct.format(potPct) + '</p>';
-            ph += '<div class="text-[9px] text-[#64748b] mt-1 space-y-0.5">';
-            ph += '<p><span class="inline-block w-2 h-2 rounded-full bg-emerald-500 mr-1"></span><b>Faturalanan:</b> ' + abbr(fatVal) + ' <span class="text-[#94a3b8]">(' + fatAdet + ' fatura · kesinleşmiş gelir)</span></p>';
-            ph += '<p><span class="inline-block w-2 h-2 rounded-full bg-cyan-500 mr-1"></span><b>Açık sipariş:</b> ' + abbr(acikSipTutar) + ' <span class="text-[#94a3b8]">(' + sipAdet + ' sipariş · fatura bekliyor)</span></p>';
-            ph += '<p><span class="inline-block w-2 h-2 rounded-full bg-violet-500 mr-1"></span><b>Teklif potansiyeli:</b> ' + abbr(teklifPotansiyel) + ' <span class="text-[#94a3b8]">(olasılık ağırlıklı)</span></p>';
+            ph += '<div class="mt-2 space-y-1.5">';
+            ph += '<div class="flex items-center justify-between"><span class="text-[11px] text-[#64748b]"><span class="inline-block w-2.5 h-2.5 rounded-full bg-emerald-500 mr-1.5"></span>Faturalanan <span class="text-[#94a3b8]">(' + fatAdet + ' fatura)</span></span><span class="text-[15px] font-bold text-emerald-700">' + abbr(fatVal) + '</span></div>';
+            ph += '<div class="flex items-center justify-between"><span class="text-[11px] text-[#64748b]"><span class="inline-block w-2.5 h-2.5 rounded-full bg-cyan-500 mr-1.5"></span>Açık sipariş <span class="text-[#94a3b8]">(' + sipAdet + ' sipariş)</span></span><span class="text-[15px] font-bold text-cyan-700">' + abbr(acikSipTutar) + '</span></div>';
+            ph += '<div class="flex items-center justify-between"><span class="text-[11px] text-[#64748b]"><span class="inline-block w-2.5 h-2.5 rounded-full bg-violet-500 mr-1.5"></span>Teklif potansiyeli <span class="text-[#94a3b8]">(ağırlıklı)</span></span><span class="text-[15px] font-bold text-violet-700">' + abbr(teklifPotansiyel) + '</span></div>';
             ph += '</div>';
-            ph += '<p class="text-[9px] text-[#64748b] mt-1 pt-1 border-t border-[#e2e8f0]"><b>Toplam:</b> ' + abbr(toplamPotansiyel) + ' / ' + abbr(hedef) + ' hedef</p>';
+            ph += '<div class="flex items-center justify-between mt-2 pt-2 border-t border-[#e2e8f0]"><span class="text-[11px] font-semibold text-[#475569]">Toplam</span><span class="text-[17px] font-extrabold text-[#0f172a]">' + abbr(toplamPotansiyel) + ' <span class="text-[11px] font-normal text-[#94a3b8]">/ ' + abbr(hedef) + '</span></span></div>';
             ph += '</div>';
             potArea.innerHTML = ph;
         }
@@ -1649,6 +1686,38 @@
             });
             el.innerHTML = h;
         } catch (e) { console.error('Owner error:', e); }
+    }
+
+    /* ══════════════════════════════════
+       FIRSAT SAHİPLERİ
+       ══════════════════════════════════ */
+    async function loadFirsatSahipleri() {
+        try {
+            var data = await fetch('/FirsatAnaliz/GetFirsatSahipleri?' + getFilterParams()).then(function(r) { return r.json(); });
+            var el = document.getElementById('firsatSahipleriList');
+            if (!data || !data.length) {
+                el.innerHTML = '<p class="text-[11px] text-[#94a3b8] text-center py-6">Veri Bulunamadı</p>';
+                return;
+            }
+
+            var h = '';
+            data.slice(0, 12).forEach(function(o, i) {
+                var clr = avatarColors[(i + 3) % avatarColors.length];
+                h += '<div class="flex items-center gap-3 py-2.5 px-2 rounded-lg hover:bg-[#f8fafc] transition-colors">';
+                h += '<span class="text-[11px] font-bold text-[#94a3b8] w-5 text-center">#' + (i + 1) + '</span>';
+                h += '<div class="avatar-circle" style="background:' + clr + ';">' + initials(o.adSoyad) + '</div>';
+                h += '<div class="flex-1 min-w-0">';
+                h += '<p class="text-[12px] font-semibold text-[#0f172a] truncate">' + o.adSoyad + '</p>';
+                h += '<span class="text-[10px] text-[#94a3b8]">' + o.toplam + ' adet</span>';
+                h += '</div>';
+                h += '<div class="text-right">';
+                h += '<p class="text-[13px] font-bold text-[#0f172a]">' + abbr(o.toplamTutar) + '</p>';
+                h += '</div>';
+                h += '</div>';
+                if (i < data.length - 1 && i < 11) h += '<div class="divider"></div>';
+            });
+            el.innerHTML = h;
+        } catch (e) { console.error('FirsatSahipleri error:', e); }
     }
 
     /* ══════════════════════════════════

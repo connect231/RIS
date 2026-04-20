@@ -46,6 +46,10 @@ public partial class MskDbContext : DbContext
     public virtual DbSet<TBLSOS_VARUNA_FIRSAT_ODATA> TBLSOS_VARUNA_FIRSAT_ODATAs { get; set; }
     public virtual DbSet<TBLSOS_FATURA_TAHAKKUK> TBLSOS_FATURA_TAHAKKUKs { get; set; }
 
+    // ── Account Representatives & Person ──
+    public virtual DbSet<TBL_VARUNA_ACCOUNT_REPRESENTATIVES> TBL_VARUNA_ACCOUNT_REPRESENTATIVESs { get; set; }
+    public virtual DbSet<TBL_VARUNA_PERSON> TBL_VARUNA_PERSONs { get; set; }
+
     protected override void OnConfiguring(DbContextOptionsBuilder optionsBuilder)
         => optionsBuilder.UseSqlServer("Name=ConnectionStrings:MsKConnection");
 
